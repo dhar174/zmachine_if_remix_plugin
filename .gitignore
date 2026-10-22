@@ -45,3 +45,5 @@ experiments/**/dist/
 # Mimosa hook state inside probe directories is local tooling state, never committed
 tests/**/.mimosa/
 experiments/**/.mimosa/
+experiments/vm-io/tools/
+experiments/vm-io/results/tmp-negative/

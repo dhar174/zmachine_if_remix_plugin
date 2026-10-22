@@ -60,7 +60,7 @@ const SEQUENCE = [
     { id: 'S26-examine-pedestal', input: { kind: 'line', text: 'examine pedestal' }, purpose: 'extension anchor marker (F11)' },
     { id: 'S27-put-key-pedestal', input: { kind: 'line', text: 'put brass key on pedestal' }, purpose: 'reach the terminal state through the authored path (F12): victory marker, score sequence, endgame prompt' },
     { id: 'S28-quit', input: { kind: 'line', text: 'quit' }, purpose: 'leave the endgame through the authored quit path (F12): the library endgame accepts QUIT with no confirmation and the VM should halt' },
-    { id: 'S29-confirm-quit', input: { kind: 'line', text: 'y' }, purpose: 'post-halt input delivery: must be a no-op with NO output in both candidates (guards against resume-past-quit; kept after the S06 review found ifvms re-processing the stale event)' },
+    { id: 'S29-confirm-quit', input: { kind: 'line', text: 'y' }, purpose: 'post-halt input delivery: must be a no-op with NO output in both candidates (guards against resume-past-quit; kept after the zirp-20261022 specialist review found ifvms re-processing the stale answered event)' },
     { id: 'S30-shutdown', purpose: 'adapter shutdown; observe final execution status (halted/error)' },
 ];
 

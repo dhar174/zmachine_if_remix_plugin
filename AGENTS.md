@@ -4,7 +4,7 @@
 
 A documentation-first design proposal (v0.2) for an AI-first, chat-driven remix engine for classic Z-machine interactive fiction: a real native VM plus a persistent, AI-created remix world governed by a user's initial directive and later Editor amendments.
 
-**The product runtime does not exist yet: no engine, no adapter, no package.json, no CI, and no deployment.** The only executable code in the repository is the G1-A feasibility probe (Issue #11): a purpose-built test fixture under `tests/fixtures/zmachine/` and a throwaway I/O probe harness under `experiments/vm-io/` — experimental evidence-gathering code, explicitly not a production adapter, and not to be promoted without separate review. Do not infer product runtime behavior, native/mobile compatibility, or deployment from anything here. Current status: gate G1 (technical feasibility probes) per `docs/ROADMAP.md`; implementation work must follow the roadmap's G0–G6 evidence-first stop gates (e.g., select the VM runtime only after Issue #12 checkpoint/restore evidence, not from feature names).
+**The product runtime does not exist yet: no engine, no adapter, no product build, no CI, and no deployment.** The only executable code in the repository is the G1-A feasibility probe (Issue #11): a purpose-built test fixture under `tests/fixtures/zmachine/` and a throwaway I/O probe harness under `experiments/vm-io/` (the repository's only `package.json` is the probe's dependency-free manifest) — experimental evidence-gathering code, explicitly not a production adapter, and not to be promoted without separate review. Do not infer product runtime behavior, native/mobile compatibility, or deployment from anything here. Current status: gate G1 (technical feasibility probes) per `docs/ROADMAP.md`; implementation work must follow the roadmap's G0–G6 evidence-first stop gates (e.g., select the VM runtime only after Issue #12 checkpoint/restore evidence, not from feature names).
 
 ## Directories
 
@@ -44,7 +44,7 @@ This is a public repository. Never commit user-uploaded story binaries, save sta
 
 ## Build / test commands
 
-None exist. `.gitignore` is leftover Next.js/Vercel template content — it is **not** evidence of a JavaScript stack. ADR-0001 keeps TypeScript as a *candidate* runtime language, explicitly undecided pending gate-G1 evidence. Do not scaffold a framework based on the gitignore.
+There is **no product build, test suite, or CI**. The only build/test commands are the G1-A probe's (see `tests/fixtures/zmachine/README.md` and `experiments/vm-io/README.md`): the fixture compiles with a pinned Inform 6 (`tools/inform6-6.44/inform6.exe -v5 +include_path=lib fixture.inf fixture.z5` from `tests/fixtures/zmachine/`), the probe runs via `node probe.js <ifvms|bocfel>`, and the suites run via `node --test` (from the repository root, or from `experiments/vm-io/` for the probe-only suite). The root `.gitignore` still carries leftover Next.js/Vercel template content — it is **not** evidence of a JavaScript product stack, and ADR-0001 keeps TypeScript as a *candidate* runtime language, explicitly undecided pending gate-G1 evidence. Do not scaffold a framework based on the gitignore or on the probe's Node harness.
 
 ## Git conventions
 
