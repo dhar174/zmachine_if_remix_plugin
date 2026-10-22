@@ -1,0 +1,23 @@
+{
+  "files": 15,
+  "bytes": 115348,
+  "internal_links_checked": 44,
+  "schema_meta_validation": "passed",
+  "valid_synthetic_examples": 1,
+  "rejected_malformed_examples": 12,
+  "source_spans_checked": 7,
+  "archived_body_preserved": true,
+  "planned_acceptance_cases": 42,
+  "runtime_tests_run": false,
+  "live_model_tests_run": false,
+  "ci_claimed": false,
+  "errors": [],
+  "remote_tree": "878456a52660345201af54c1d8905768fabb92d2",
+  "remote_document_blobs_matched": 15,
+  "pull_request": "https://github.com/dhar174/zmachine_if_remix_plugin/pull/1",
+  "published_commit": "ca8a115ec0a6f284f3189a4bb6ba2d02ee1fd73b",
+  "pull_request_draft": true,
+  "pull_request_merged": false,
+  "changed_files": 14,
+  "runtime_implementation_added": false
+}
