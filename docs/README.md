@@ -24,6 +24,13 @@ Within this proposal, policy semantics are defined in `architecture/world-policy
 
 No runtime behavior, native compatibility, mobile compatibility, test pass, or deployment may be inferred from the presence of these documents. Documentation validation is separate from product validation.
 
+## Engineering documentation
+
+Agent-assisted engineering work (Zcode specialist subagents) is configured separately from the product design docs above:
+
+- [agents/team-coordination.md](agents/team-coordination.md) — canonical coordination policy: roles, routing table, assignment and return contracts, shared invariants, platform loading behavior.
+- [agents/README.md](agents/README.md) — roster, installation into `~/.zcode/agents/`, invocation examples, and the fresh-session verification checklist.
+- `.zcode/agents/` (repository root) — versioned source templates for the specialist definitions; installed copies are not stored in the repository.
 ## Approved decision consolidation (Issue #10)
 
 - [Decision register: D01–D37 and exact approval sources](decisions/decision-register.md)
