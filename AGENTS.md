@@ -2,9 +2,9 @@
 
 ## What this repository is
 
-A documentation-only design proposal (v0.2) for an AI-first, chat-driven remix engine for classic Z-machine interactive fiction: a real native VM plus a persistent, AI-created remix world governed by a user's initial directive and later Editor amendments.
+A documentation-first design proposal (v0.2) for an AI-first, chat-driven remix engine for classic Z-machine interactive fiction: a real native VM plus a persistent, AI-created remix world governed by a user's initial directive and later Editor amendments.
 
-**There is no code, no package.json, no build, no test suite, no CI, and no runtime.** Do not infer runtime behavior, native/mobile compatibility, test passes, or deployment from these documents — the docs themselves forbid that inference. Current status: gate G0 (behavioral contract review) per `docs/ROADMAP.md`; implementation work must follow the roadmap's G0–G6 evidence-first stop gates (e.g., select the VM runtime after checkpoint/restore evidence, not from feature names).
+**The product runtime does not exist yet: no engine, no adapter, no package.json, no CI, and no deployment.** The only executable code in the repository is the G1-A feasibility probe (Issue #11): a purpose-built test fixture under `tests/fixtures/zmachine/` and a throwaway I/O probe harness under `experiments/vm-io/` — experimental evidence-gathering code, explicitly not a production adapter, and not to be promoted without separate review. Do not infer product runtime behavior, native/mobile compatibility, or deployment from anything here. Current status: gate G1 (technical feasibility probes) per `docs/ROADMAP.md`; implementation work must follow the roadmap's G0–G6 evidence-first stop gates (e.g., select the VM runtime only after Issue #12 checkpoint/restore evidence, not from feature names).
 
 ## Directories
 
@@ -16,6 +16,9 @@ A documentation-only design proposal (v0.2) for an AI-first, chat-driven remix e
 - `docs/examples/` — synthetic examples; illustrate the contracts, never override them.
 - `docs/quality/acceptance-matrix.md` — observable evidence required before claiming any feature works.
 - `docs/agents/` — engineering team coordination: the canonical policy (`team-coordination.md`), installation guide (`README.md`), and setup-verification records.
+- `docs/evidence/` — executed feasibility-probe evidence records (each states its own evidence layers and limitations); not design documents.
+- `tests/fixtures/zmachine/` — purpose-built, redistributable Z-machine probe fixture (original source, pinned compiler, digest manifest). Not a game and not user content.
+- `experiments/vm-io/` — G1-A native I/O probe harness (experimental, throwaway by design; see its README). Not a production adapter or a runtime-language decision.
 - `.zcode/agents/` — versioned source templates for the Zcode specialist subagents. Not an installed or discovered location; installed copies live at `~/.zcode/agents/` (see `docs/agents/README.md`).
 - `docs/design_draft_v0.1.md` — archived, superseded by v0.2. Do not promote its assumptions or its "Original/Hybrid/Extension" labels as input modes.
 - `validation/` — point-in-time integrity evidence, not live CI (see below).
