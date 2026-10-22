@@ -96,4 +96,4 @@ Mock proposals are useful deterministic tests but do not establish that the host
 - **Advanced, not yet exposed:** policy-controlled postgame/quests/puzzles and cross-world merge/import/link/sync/share (D14–D24, D29–D37) must not appear as working tools unless the server and host tests prove capabilities. Publishing a private file or contacting unrelated tools from story text is never permitted.
 - **Privacy:** exact-package cross-user sharing remains a deferred opt-in capability, independent of normal private story import. D38 shared package update/revocation is unresolved. G1 must prove actual user consent/approval mechanism, attachment import, model/tool invocation and intended host compatibility before release.
 
-See separate [G1 host probe](../superpowers/probes/g1-c-chat-host-approval-import.md). Proposals for new tool names, endpoint transport or model provider remain technical design questions, not approved deployments.
+See separate [G1 host probe](../superpowers/plans/2026-10-22-g1-c-chat-host-probe.md). Proposals for new tool names, endpoint transport or model provider remain technical design questions, not approved deployments.

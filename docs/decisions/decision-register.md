@@ -74,7 +74,7 @@
 
 **D38: Versioned shared-package updates and revocation** was presented with A/B/C options but not approved. It remains **open / deferred**, not implicitly Option B. Stop the sequential decision exercise at D37 pending any future explicit request.
 
-**G1 evidence decisions remain open:** interpreter/runtime and adapter; runtime language; hosted versus private service; real host tool/attachment support; trusted user-bound approval mechanism; portability/device compatibility. [G1 probe briefs](../superpowers/probes/) specify how to evaluate them rather than choosing from speculation.
+**G1 evidence decisions remain open:** interpreter/runtime and adapter; runtime language; hosted versus private service; real host tool/attachment support; trusted user-bound approval mechanism; portability/device compatibility. [G1 probe briefs](../superpowers/plans/) specify how to evaluate them rather than choosing from speculation.
 
 **Additional design specifics not approved:** numeric budgets; exact model/provider, prompt schemas, risk thresholds, code layout; uninterrupted real-time autonomy; arbitrary native NPC takeover; generalized retcons; automatic sharing or continuous sync. Explicit capability and review gates remain binding.
 

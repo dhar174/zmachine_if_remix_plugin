@@ -55,9 +55,9 @@ Universal source reconstruction, arbitrary generated runtime code, fully synchro
 G0 design choices D01–D37 have been approved conceptually and consolidated in the [decision register](decisions/decision-register.md). See the [contract reconciliation](decisions/contract-reconciliation.md) for their meaning, precedence, and scope. **D38 is pending**, and no new open-ended decision marathon is required before proceeding with review.
 
 The G1 feasibility probes are independently reviewable:
-- [#11: native fixture/I/O](superpowers/probes/g1-a-vm-fixture-io.md)
-- [#12: complete VM checkpoint](superpowers/probes/g1-b-checkpoint-recovery.md)
-- [#13: real chatbot host, user approval and private import](superpowers/probes/g1-c-chat-host-approval-import.md)
+- [#11: native fixture/I/O](superpowers/plans/2026-10-22-g1-a-native-io-probe.md)
+- [#12: complete VM checkpoint](superpowers/plans/2026-10-22-g1-b-checkpoint-probe.md)
+- [#13: real chatbot host, user approval and private import](superpowers/plans/2026-10-22-g1-c-chat-host-probe.md)
 
 **First playable G0–G6 vertical slice remains narrow:** real original VM execution, compiled initial directive and mode separation, guided Edit approval, controlled generated world entity/rule, one tested native/extension anchor, faithful transcript/AI narration, transactional saves and live model use. Choices D14–D26 set policy/extension behavior but do not automatically add full ending/quest/autonomy/puzzle/RPG implementations to this slice. D29–D37 (branch merge, cross-game identity and cross-user sharing) are expressly future initiatives requiring separate specs/issues/acceptance, not gate G6 release. D38 is not user-approved.
 
