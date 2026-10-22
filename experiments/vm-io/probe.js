@@ -27,17 +27,6 @@ const RESULTS_DIR = path.join(VM_IO_DIR, 'results');
 const REPO_ROOT = path.dirname(path.dirname(VM_IO_DIR));
 const STORY = path.join(REPO_ROOT, 'tests', 'fixtures', 'zmachine', 'fixture.z5');
 
-// Path containment: every file this tool touches must stay inside the
-// repository checkout (story) or the results directory (evidence output).
-function isInside(root, candidate) {
-    const rootResolved = path.resolve(root) + path.sep;
-    const candidateResolved = path.resolve(candidate) + path.sep;
-    return candidateResolved.startsWith(rootResolved);
-}
-if (!isInside(REPO_ROOT, STORY)) {
-    throw new Error('fixture path escaped the repository checkout: ' + STORY);
-}
-
 const MARKER_RE = /\[(?:F\d{2}|DIAG|MARKERS|LOC):[^\]]*\]/g;
 
 // The fixed experimental sequence.  Step 1 is the adapter start (the VM runs
@@ -85,7 +74,10 @@ function extractMarkers(text) {
     return text.match(MARKER_RE) || [];
 }
 
-async function runSequence(adapterName, outPath) {
+async function runSequence(adapterName) {
+    // The output file is selected statically from the fixed evidence map; no
+    // externally supplied value ever reaches a file path in this tool.
+    const outPath = adapterName === 'ifvms' ? EVIDENCE_FILES.ifvms : EVIDENCE_FILES.bocfel;
     const story = fs.readFileSync(STORY);
     const storySha256 = crypto.createHash('sha256').update(story).digest('hex');
 
@@ -98,9 +90,6 @@ async function runSequence(adapterName, outPath) {
         throw new Error('unknown adapter: ' + adapterName);
     }
 
-    if (!isInside(RESULTS_DIR, outPath)) {
-        throw new Error('evidence output path escaped the results directory: ' + outPath);
-    }
     const out = fs.createWriteStream(outPath, { encoding: 'utf8' });
     const write = (obj) => out.write(JSON.stringify(obj) + '\n');
 
@@ -185,19 +174,20 @@ async function runSequence(adapterName, outPath) {
 module.exports = { runSequence, SEQUENCE, STORY, extractMarkers };
 
 if (require.main === module) {
-    const adapterName = process.argv[2];
-    const outPath = EVIDENCE_FILES[adapterName];
-    if (!outPath) {
+    // Literal dispatch only: the adapter name from argv never reaches a file
+    // path or a dynamic member lookup.
+    if (process.argv[2] === 'ifvms') {
+        fs.mkdirSync(RESULTS_DIR, { recursive: true });
+        runSequence('ifvms')
+            .then(({ finalStatus }) => console.error('probe complete: ifvms final_status=' + finalStatus))
+            .catch((e) => { console.error('probe failed: ' + (e && e.message ? e.message : e)); process.exitCode = 1; });
+    } else if (process.argv[2] === 'bocfel') {
+        fs.mkdirSync(RESULTS_DIR, { recursive: true });
+        runSequence('bocfel')
+            .then(({ finalStatus }) => console.error('probe complete: bocfel final_status=' + finalStatus))
+            .catch((e) => { console.error('probe failed: ' + (e && e.message ? e.message : e)); process.exitCode = 1; });
+    } else {
         console.error('usage: node probe.js <ifvms|bocfel>');
         process.exit(1);
     }
-    fs.mkdirSync(RESULTS_DIR, { recursive: true });
-    runSequence(adapterName, outPath)
-        .then(({ finalStatus }) => {
-            console.error('probe complete: adapter=' + adapterName + ' final_status=' + finalStatus + ' out=' + outPath);
-        })
-        .catch((e) => {
-            console.error('probe failed: ' + (e && e.message ? e.message : e));
-            process.exitCode = 1;
-        });
 }
