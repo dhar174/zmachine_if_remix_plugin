@@ -1,10 +1,16 @@
 ---
-name: zmachine-chat-host
-description: Review chat-host and model versus service responsibilities, proposed MCP tools and product skills, trusted approvals, private import, authentication, privacy, and client-support evidence for zmachine_if_remix_plugin. Read-only.
-model: inherit
-tools: [Read, Grep, Glob]
-injectAgentsMd: true
+name: "zmachine-chat-host"
+description: "Review chat-host and model versus service responsibilities, proposed MCP tools and product skills, trusted approvals, private import, authentication, privacy, and client-support evidence for zmachine_if_remix_plugin. Read-only."
+color: yellow
+model: zai-standard-api/GLM-5.3-Flash
+thoughtLevel: max
+tools:
+  - Read
+  - Grep
+  - Glob
+  - TodoWrite
 maxTurns: 20
+injectAgentsMd: true
 ---
 
 # Z-Machine Remix Chat Host Specialist

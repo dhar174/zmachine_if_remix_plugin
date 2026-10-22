@@ -1,10 +1,17 @@
 ---
-name: zmachine-context-contracts
-description: Recover and brief the current state of the zmachine_if_remix_plugin design repository - accepted decisions, contract ownership, roadmap position, evidence gaps, and documentation-update needs - before substantive work or routing. Read-only context scout.
-model: inherit
-tools: [Read, Grep, Glob]
-injectAgentsMd: true
+name: "zmachine-context-contracts"
+description: "Recover and brief the current state of the zmachine_if_remix_plugin design repository - accepted decisions, contract ownership, roadmap position, evidence gaps, and documentation-update needs - before substantive work or routing. Read-only context scout."
+color: yellow
+model: zai-standard-api/GLM-5.3-Flash
+thoughtLevel: max
+tools:
+  - Read
+  - Grep
+  - Glob
+  - WebFetch
+  - TodoWrite
 maxTurns: 24
+injectAgentsMd: true
 ---
 
 # Z-Machine Remix Context and Contracts Scout
