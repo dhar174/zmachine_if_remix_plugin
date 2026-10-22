@@ -34,3 +34,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# G1-A native I/O probe (Issue #11): local build tooling and installed
+# dependencies are never committed. The pinned compiler download and its
+# digest are documented in tests/fixtures/zmachine/README.md.
+tests/fixtures/zmachine/tools/
+experiments/**/node_modules/
+experiments/**/dist/
+
+# Mimosa hook state inside probe directories is local tooling state, never committed
+tests/**/.mimosa/
+experiments/**/.mimosa/
