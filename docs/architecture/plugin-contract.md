@@ -84,3 +84,16 @@ Store credentials outside plugin text and story state. Retain only the content n
 The first integrated demonstration must run on the actual intended chatbot interface and include a natural-language native action, a permitted AI-created addition, an editor change, a rejected unauthorized change, and a restored session. Record tool receipts, active revisions, user-visible responses, and discrepancies.
 
 Mock proposals are useful deterministic tests but do not establish that the host model selects tools correctly, honors modes, or avoids spoilers. A successful engine test also does not establish that a plugin is installed or available on mobile.
+
+## 9. Consolidated user-approved host behavior and limits
+
+[Decision register D01–D37](../decisions/decision-register.md) and [contract reconciliation](../decisions/contract-reconciliation.md) refine the intended chatbot experience without claiming current plugin APIs support every item.
+
+- **Initial directive:** preview interpreted supported/unresolved clauses and obtain genuine user acceptance for an exact subset (D01, D09). A model copying user text or writing `approved:true` cannot serve as trusted confirmation.
+- **Play/Editor:** explicit persistent and one-turn modes (D04), with case-appropriate risk-based approval frequency (D10). A one-turn Editor request returns to its prior mode even when unsuccessful. Read-only inspection and hint queries do not advance game time (D26).
+- **AI player UX:** show one coherent inventory/progress read view, original transcript availability and optional policy-compliant enhancements (D12, D18–D19); expose why an action was rejected using policy/capability IDs, not private model deliberation. Distinguish reader cutscene facts from character knowledge (D17).
+- **Long sessions:** resume owner-authorized branch through the service in a new chat/model (D27). Multiple authorized conversations may prepare against the same session, but committed writes require current revision (D28); no automatic replay of stale game steps.
+- **Advanced, not yet exposed:** policy-controlled postgame/quests/puzzles and cross-world merge/import/link/sync/share (D14–D24, D29–D37) must not appear as working tools unless the server and host tests prove capabilities. Publishing a private file or contacting unrelated tools from story text is never permitted.
+- **Privacy:** exact-package cross-user sharing remains a deferred opt-in capability, independent of normal private story import. D38 shared package update/revocation is unresolved. G1 must prove actual user consent/approval mechanism, attachment import, model/tool invocation and intended host compatibility before release.
+
+See separate [G1 host probe](../superpowers/plans/2026-10-22-g1-c-chat-host-probe.md). Proposals for new tool names, endpoint transport or model provider remain technical design questions, not approved deployments.

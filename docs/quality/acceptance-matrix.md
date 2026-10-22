@@ -73,3 +73,9 @@ A hard engine invariant requires zero failures in the declared deterministic tes
 A passing schema sample is not a passed policy algorithm. A saved memory array is not a passed VM checkpoint. A desktop emulator is not a passed Android trial. A no-op tool response is not proof that the user-visible edit was performed.
 
 For this documentation change, report only document/link/schema checks actually run. Runtime, CI, interpreter, model, and device results remain untested.
+
+## Supplemental coverage after Issue #10 decision review
+
+User-approved Decisions D01–D37 are [listed here](../decisions/decision-register.md). The [S01–S24 supplements](decision-acceptance-supplement.md) outline additional planned tests for prestart clauses, exact original transcript, policy-driven timing, actor-vs-reader knowledge, native terminal outcomes, quest/puzzle behavior, cross-chat conflicts, and **future** cross-world provenance/privacy.
+
+The original A01–A42 numbering is unchanged, and the new scenarios are **not executed or passed**. In particular, S17–S23 describe deferred capabilities that must not become release-blocking G0–G6 commitments without separately authorized scope. D38 is unapproved and has no acceptance criterion.
