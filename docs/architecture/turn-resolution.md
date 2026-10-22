@@ -153,3 +153,19 @@ Restoring or undoing creates a new monotonic session generation/head referencing
 For “go north, open the door, take the key,” execute separate subturns with an explicit stopping policy, normally stop on ambiguity or failure. A blocked first action must not cause the later actions to execute in the wrong room.
 
 The [acceptance matrix](../quality/acceptance-matrix.md) supplies observable tests for these cases.
+
+## 8. Approved refinements to the resolver (D01–D37)
+
+The [decision register](../decisions/decision-register.md) and [contract reconciliation](../decisions/contract-reconciliation.md) refine v0.2; no new command/tool is implemented by this text.
+
+1. **Load-first policy (D01, D09):** collect the directive before intentional VM startup, preview supported and unresolved clauses, approve a specific coherent supported subset, and apply it only at a verified safe initialization boundary. Never hide already-executed native startup effects.
+2. **Authenticated Editor transitions (D02, D04, D10):** support persistent /play, /edit and one-turn /edit returning to the preceding mode. Protected changes need human-legible scoped supersession and real bound approval, while low-impact reversible edits may use a valid narrowly scoped lease. A new native capability cannot be manufactured by the model.
+3. **Interpretation, characters and narration (D05–D06, D11–D13, D17–D18):** native rejection differs from nonexistence; preserve exact native transcript and original mechanics. AI adds authorized complementary dialogue, room interactions and reader cutscenes only without fabricating native flags, unique items, secret answers or actor knowledge. Character-visible, reader-visible and Editor-inspection contexts are separate.
+4. **Time and control flow (D07, D16, D25):** native pauses in extension scenes by default; offscreen overlay actions occur only on eligible committed gameplay turns. Compound requests are bounded **sequential** subturns with individual receipts and revalidation; stop on meaningful surprise, invalid assumption, missing capability, failure or authorization need, leaving pending steps unexecuted.
+5. **Help and challenges (D19–D24, D26):** original scores/quests remain native-owned; generated quest commitments, achievements, puzzles, alternate solution rules and engine RNG require typed committed events. Hint disclosure is policy-bounded read-only aid and never auto-solves an original puzzle.
+6. **Terminals/history (D08, D14–D15):** record true native ending/death and stop the VM; if permitted and implemented, an overlay epilogue/aftermath can continue. General retcons require verified causal rewrite and remain deferred.
+7. **Cross-chat consistency (D27–D28):** all writes use current revision/policy, short atomic commits and idempotent receipts; another conversation's change invalidates stale proposals. Persisted state is authoritative, not chat reconstruction.
+8. **Future multiworld features (D29–D37):** merged branches, source/destination transfer, memory sync and sharing require separately reviewed complete-effect and privacy checks. They are **not accepted commands** in the initial engine; return CAPABILITY_MISSING or equivalent explicit limitation until implemented.
+9. **D38 remains unapproved.** Do not infer shared-package update/revocation rules.
+
+Test planning: [A01–A42](../quality/acceptance-matrix.md) remain existing acceptance cases; [S01–S24](../quality/decision-acceptance-supplement.md) supplement new approved scenarios without claiming test results.

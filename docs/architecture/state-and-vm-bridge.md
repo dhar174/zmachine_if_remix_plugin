@@ -95,3 +95,17 @@ Session exports include schema/runtime/adapter versions and story digest. Exclud
 Wrong story hash, incompatible runtime, corrupt checkpoint, unsupported pending input, and migration failure must leave the active session unchanged. Migration uses a new tested revision/copy, never in-place blind reinterpretation.
 
 Opening text can execute before the first prompt. Initial world changes requiring pre-intro control are unsupported until a pre-start hook is verified. Buffered output does not reverse hidden effects.
+
+## 10. State ownership refinements after D01–D37
+
+See the [approved decisions](../decisions/decision-register.md) and [reconciliation](../decisions/contract-reconciliation.md). These are data-model requirements, not claims that the VM/adapter already exposes the required hooks.
+
+**Presentation versus authoritative native data (D11–D13, D18–D19).** Unified inventory and progress are read projections across native and remix entities. One field has exactly one writer unless a tested bridge declares atomic synchronization. Store original output verbatim with input-kind/scene/revision metadata, alongside clearly attributable user-visible AI prose. No overlay flashlight/narration can set an unmapped original puzzle flag or native score.
+
+**Actor knowledge, goals and autonomy (D16–D17, D20–D26).** Distinguish verified objective event, character observation, speech claim, belief, reader disclosure, relationships and quest commitment. A policy-authorized offscreen NPC uses bounded committed-time events with explicit actor and witnesses, never omniscience or idle wall-clock updates. Quest lead/offer/active/accepted statuses, deadlines, generated puzzle outcomes and deterministic/recorded RNG belong in versioned overlay state only when implemented. The original game owns its authored timers/RNG/progression. Native clock remains paused in overlay scenes by default (D07).
+
+**Native terminal states (D14–D15).** A true original VM ending or death is part of its checkpoint and immutable causal event history. Any policy-authorized continuing epilogue/aftermath is overlay-owned with native execution halted, not a retroactive rewrite. A suspected dead-end is not automatically a terminal state.
+
+**Concurrency and portability (D27–D28).** Combined checkpoints, runtime/story hashes, branch/generation IDs, policy, event receipts and source-provenance must survive a change of chat/model. Unauthorized or stale clients cannot mutate a branch; enforce revision/CAS at commit and keep authorizations outside restorable game state. Do not silently re-run a candidate after a competing commit.
+
+**Future cross-world identity (D29–D37).** Branch merging preserves independently executed native histories; cross-game imports create fresh destination remix IDs with source provenance and dependency closure. Copies are independent by default; explicit moves and linked identities require separate validated capabilities. Synchronized facts retain distinct originating event time, destination receipt time, objective-evidence versus belief labels, and source branch/generation. A source rollback flags dependencies but does not delete already committed destination history. Suspend/unlink halts future sync; private data deletion follows separate authenticated retention requirements. Sharing across owners is opt-in and redacted. None of these features should be assumed available for the first single-story release; D38 remains unapproved.

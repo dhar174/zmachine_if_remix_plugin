@@ -23,3 +23,14 @@ Within this proposal, policy semantics are defined in `architecture/world-policy
 [References](REFERENCES.md) distinguish external technical facts from our proposed design. [v0.1](design_draft_v0.1.md) remains archived. Its private audit attachment is not distributed here.
 
 No runtime behavior, native compatibility, mobile compatibility, test pass, or deployment may be inferred from the presence of these documents. Documentation validation is separate from product validation.
+
+## Approved decision consolidation (Issue #10)
+
+- [Decision register: D01–D37 and exact approval sources](decisions/decision-register.md)
+- [Contract reconciliation and unresolved scope/technology gates](decisions/contract-reconciliation.md)
+- [Supplemental acceptance matrix S01–S24 (planned)](quality/decision-acceptance-supplement.md)
+- [G1-A interpreter I/O probe brief](superpowers/plans/2026-10-22-g1-a-native-io-probe.md)
+- [G1-B checkpoint/recovery probe brief](superpowers/plans/2026-10-22-g1-b-checkpoint-probe.md)
+- [G1-C actual chatbot host/approval/import brief](superpowers/plans/2026-10-22-g1-c-chat-host-probe.md)
+
+The older v0.1 draft remains historical. The v0.2 schema is a proposal and does **not** cover all newly approved future quest, identity, sharing or time policies; do not silently use absent schema fields as runtime support. D38 is not approved; the G1 runtime, language, hosting, security-approval and device details remain evidence-dependent.

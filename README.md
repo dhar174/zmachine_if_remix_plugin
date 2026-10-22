@@ -1,5 +1,7 @@
 # Z-Machine IF Remix Plugin
 
+**Design status (2026-10-22):** [Issue #10 Decisions D01–D37](docs/decisions/decision-register.md) were approved conceptually and are consolidated for documentation review. The engine, native bridges, cross-chat hosting, and advanced multiverse systems are **not implemented or verified** by this approval. [Reconciliation](docs/decisions/contract-reconciliation.md) · [G1 feasibility probes](docs/ROADMAP.md). Decision D38 remains unapproved.
+
 **An AI-first, chat-driven way to play and deliberately remix classic interactive fiction.**
 
 The original game remains the default authority for its fiction and mechanics. A user's initial remix prompt defines permitted changes, protected content, and where spontaneous generation is allowed. Later editor instructions can revise that agreement. Ordinary play remains in-character: an attempted action is not permission to rewrite reality.

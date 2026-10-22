@@ -1,6 +1,6 @@
 # ADR-0001: Chat-first interface and explicit authorial authority
 
-**Status:** user requirements recorded; technical realization proposed for review.  
+**Status:** user requirements and Decisions D01–D37 approved conceptually; detailed runtime/host realization awaits G1 evidence. D38 not approved.  
 **Date:** 2026-10-21.  
 **Scope:** documentation only.
 
@@ -23,7 +23,7 @@ This records the user's requirements. It does not claim that the user has alread
 5. Require complete candidate checkpoints and durable receipts before claiming successful changes.
 6. Use chat skills and narrow MCP operations; keep UI optional except a minimal trusted consent surface where the host requires it.
 
-## Decisions still needing evidence or approval
+## G1 technology decisions and remaining contract evidence
 
 | Decision | Recommended starting point | What must settle it |
 | --- | --- | --- |
@@ -31,13 +31,16 @@ This records the user's requirements. It does not claim that the user has alread
 | Runtime language | Keep TypeScript as a candidate, not a requirement | Selected VM integration and MCP operational needs |
 | Deployment | Compare a private/tunnel service with an authenticated hosted service | Actual host availability, import path, privacy, recovery and operational costs |
 | User authorization transport | Use tested host consent or a small authenticated diff approval component | Proof that approval is bound to actual user action and exact change |
-| Partial/ambiguous prompt handling | Keep unresolved bundle uncommitted unless user approves a supported subset | Review of desired UX and source-provenance guarantees |
-| Clock bridge | Pause native state in extension scenes initially | User-visible acceptance and later synchronized-time design |
-| Retcons | Defer general retrospective rewriting; support explicit present-time edits first | Dependency representation and tested consistency restoration |
-| Semantic constraints | Structural/adapter enforcement where possible; explicit semantic evaluation and conservative blocking for high-impact uncertainty | Evaluation cases and user-approved trade-offs |
+
 
 ## Consequences
 
 The design trades a little edit-preview friction for consistency and inspectability. It preserves large creative freedom in the overlay without claiming that an LLM can safely patch every native mechanic. Model/provider replacement should not destroy authoritative state because state lives in the engine.
 
 Review this record together with the [design](../superpowers/specs/2026-10-21-chat-first-remix-design.md). Implementation planning and runtime work remain a separate next stage. No branch merge is implied by writing this proposal.
+
+## Decision register and normative scope of approval
+
+Charles approved **D01–D37, each as Option B**, with full reasoning and source links in the [decision register](decision-register.md). The [contract reconciliation](contract-reconciliation.md) clarifies scope and resolves v0.2 wording that might otherwise conflict with these approvals. In particular: guided partial initial-argument acceptance (D01); natural-language scoped supersession (D02); risk-based confirmation (D10); paused-native **default** clock with future proven alternatives (D07); retcons (D08) **approved as future architecture, not v1 functionality**; risk-sensitive semantic fidelity review (D06); and cross-game/cross-user features (D29–D37) deferred.
+
+D38 (publisher package updates/revocation) was discussed but **not approved** and must not be inferred. Runtime, language, hosting, exact approval mechanism, file import and client compatibility remain G1 evidence gates. This ADR records architectural acceptance but does not approve implementation plans, source changes, release or model spend.
