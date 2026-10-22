@@ -47,7 +47,10 @@ function integrate(adapterName, skipReason) {
         ({ steps } = await runFor(adapterName));
         byId = Object.fromEntries(steps.map((s) => [s.id, s]));
         assert.ok(steps.length >= 29, 'all sequence steps executed');
-        assert.strictEqual(byId['S29-confirm-quit'].status_after, 'halted', 'VM reaches a clean halt after the authored quit path');
+        assert.strictEqual(byId['S28-quit'].output_delta, '', 'endgame QUIT halts without confirmation output');
+        assert.strictEqual(byId['S28-quit'].status_after, 'halted', 'VM halts on the endgame QUIT answer');
+        assert.strictEqual(byId['S29-confirm-quit'].output_delta, '', 'post-halt delivery is a no-op: no resume-past-quit output');
+        assert.strictEqual(byId['S29-confirm-quit'].status_after, 'halted', 'status remains halted after the refused post-halt input');
     });
 
     // A10 precursor: startup code executes before the first input prompt.

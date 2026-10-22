@@ -20,10 +20,18 @@
 //
 // Conceptual probe states mapped to tested signals:
 //   waiting_for_line_input       -- stdout ends with the library's ">" prompt
-//   waiting_for_character_input  -- protocol correlation: a character-input
-//                                   menu marker was seen and no key delivered
-//   halted                       -- process exited cleanly
-//   error                        -- nonzero exit, stderr output, or watchdog
+//                                   (a prompt-text heuristic after ANSI
+//                                   stripping: output that coincidentally
+//                                   ended in ">" would misclassify; not
+//                                   observed with this fixture)
+//   waiting_for_character_input  -- protocol correlation: the fixture's
+//                                   character-input menu marker was seen and
+//                                   no key delivered
+//   halted                       -- process exited cleanly (exit code 0)
+//   error                        -- spawn failure or nonzero exit; stderr is
+//                                   recorded but NOT classified on its own,
+//                                   and a watchdog timeout leaves the run in
+//                                   its current classified state
 //   running                      -- not observable between steps; each send()
 //                                   runs to the next prompt or exit
 //
@@ -144,14 +152,23 @@ function createBocfelAdapter(storyPath, options) {
         });
     }
 
-    // Read stdout until one of: a fresh ">" prompt appears after `mark`,
-    // the process exits, or the watchdog fires.  Resolves with whether the
-    // turn reached a terminal condition (prompt/exit) rather than timing out.
+    // Read stdout until one of: a fresh ">" prompt appears after `mark`, the
+    // fixture's character-menu marker appears with no prompt after it (the
+    // protocol-correlated character boundary), the process exits, or the
+    // watchdog fires.  Resolves with whether the turn reached a terminal
+    // condition (prompt/menu/exit) rather than timing out.
     function waitForTurnEnd(mark, timeoutMs) {
         const deadline = Date.now() + (timeoutMs || DEFAULT_STEP_TIMEOUT_MS);
         return new Promise((resolve) => {
             const poll = setInterval(() => {
                 if (exited) { clearInterval(poll); return resolve(true); }
+                const since = stdoutBuf.slice(mark);
+                const menuIdx = since.indexOf('[F07:menu-open]');
+                if (menuIdx >= 0 && !since.slice(menuIdx).includes('>')) {
+                    menuPending = true;
+                    clearInterval(poll);
+                    return resolve(true);
+                }
                 // A new prompt: the '>' the library prints before reading a
                 // line.  Require buffer growth past `mark` so the prompt of
                 // the PREVIOUS turn is not mistaken for the next one, and
@@ -212,7 +229,7 @@ function createBocfelAdapter(storyPath, options) {
         // Same input model as the ifvms adapter.  On the wire both kinds are
         // one newline-terminated line; the kind is recorded for the evidence
         // trail and the boundary classification comes from protocol
-        // correlation with the fixture's markers.
+        // correlation with the fixture's markers (see waitForTurnEnd).
         async send(input) {
             if (exited) return settle();
             const mark = stdoutBuf.length;
@@ -221,10 +238,6 @@ function createBocfelAdapter(storyPath, options) {
                 child.stdin.write(String(input.key) + '\n');
             } else if (input.kind === 'line') {
                 child.stdin.write(String(input.text) + '\n');
-                // Protocol correlation: if the output produced by this input
-                // opens the fixture's character menu, the NEXT boundary is a
-                // character prompt even though the wire format is identical.
-                menuPending = /\[F07:menu-open\]/.test(stdoutBuf.slice(mark));
             } else {
                 errorText = 'unsupported input kind: ' + input.kind;
                 return settle();

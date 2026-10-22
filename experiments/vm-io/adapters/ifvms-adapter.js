@@ -34,14 +34,31 @@ function createIfvmsAdapter(storyBytes /*, options */) {
 
     function classify() {
         if (state.errors.length) return 'error';
-        if (state.halted || vm.quit) return 'halted';
-        const tail = state.requestLog[state.requestLog.length - 1];
+        const tail = state.requestLog.length ? state.requestLog[state.requestLog.length - 1] : null;
+        // A fresh unanswered request means the VM is live and waiting, even if
+        // a stale halted flag was set earlier -- the halted state must not
+        // mask a pending input boundary.
+        if (state.halted || vm.quit) {
+            if (tail && tail.answeredWith === null) {
+                return tail.request === 'char' ? 'waiting_for_character_input' : 'waiting_for_line_input';
+            }
+            return 'halted';
+        }
         if (!tail) return 'running';
         return tail.request === 'char' ? 'waiting_for_character_input' : 'waiting_for_line_input';
     }
 
     function lastRequest() {
         return state.requestLog.length ? state.requestLog[state.requestLog.length - 1] : null;
+    }
+
+    // The most recent request that has been answered (boundary evidence for
+    // the input just delivered; the plain tail is the NEXT pending request).
+    function lastAnsweredRequest() {
+        for (let i = state.requestLog.length - 1; i >= 0; i--) {
+            if (state.requestLog[i].answeredWith !== null) return state.requestLog[i];
+        }
+        return null;
     }
 
     function settle() {
@@ -54,6 +71,7 @@ function createIfvmsAdapter(storyBytes /*, options */) {
             output,
             gridOutput: state.gridOutput,
             lastRequest,
+            lastAnsweredRequest,
             requestLog: state.requestLog.slice(),
             errors: state.errors.slice(),
             unexpectedGlk: state.unexpected.slice(),
@@ -84,6 +102,15 @@ function createIfvmsAdapter(storyBytes /*, options */) {
         // A kind that does not match the VM's requested boundary is answered
         // anyway and recorded as a mismatch in the boundary log.
         send(input) {
+            if (state.halted || vm.quit) {
+                // A halted VM must never be driven again: ZVM's resume()
+                // re-processes the stale answered event and would resume past
+                // the @quit opcode (observed artifact; see
+                // docs/evidence/g1-native-io.md).  The refused input is
+                // recorded and produces no output.
+                state.unexpected.push({ call: 'send-after-halt', detail: input.kind });
+                return settle();
+            }
             Glk._answerPending(input);
             try {
                 vm.resume();
