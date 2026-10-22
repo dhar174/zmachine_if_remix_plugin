@@ -54,7 +54,7 @@ function integrate(adapterName, skipReason) {
     });
 
     // A10 precursor: startup code executes before the first input prompt.
-    test(adapterName + ' A10: startup side effect executes before the first prompt', async () => {
+    test(adapterName + ' A10 (precursor): startup side effect executes before the first prompt', async () => {
         await runFor(adapterName);
         const s01 = byId['S01-startup'];
         assert.strictEqual(s01.status_after, 'waiting_for_line_input');
@@ -66,7 +66,7 @@ function integrate(adapterName, skipReason) {
 
     // A13 precursor: successful authored commands produce real state and
     // transcript changes.
-    test(adapterName + ' A13: ordinary commands change state and transcript', async () => {
+    test(adapterName + ' A13 (precursor): ordinary commands change state and transcript', async () => {
         await runFor(adapterName);
         assert.ok(byId['S03-look'].output_delta.includes('[LOC:chamber]'));
         assert.ok(byId['S04-inventory-empty'].output_delta.includes('nothing'), 'inventory empty before taking');
@@ -77,7 +77,7 @@ function integrate(adapterName, skipReason) {
 
     // A14 precursor: a recognized failed action consumes a turn and runs
     // timers.
-    test(adapterName + ' A14: failed action advances the turn and fires the scheduled event', async () => {
+    test(adapterName + ' A14 (precursor): failed action advances the turn and fires the scheduled event', async () => {
         await runFor(adapterName);
         const s05 = byId['S05-take-panel'];
         assert.ok(/hardly portable|fixed in place/.test(s05.output_delta), 'the action failed in fiction');
@@ -94,7 +94,7 @@ function integrate(adapterName, skipReason) {
     });
 
     // A16 precursor: character prompts require the character-input path.
-    test(adapterName + ' A16: character menu uses a distinct character-input boundary', async () => {
+    test(adapterName + ' A16 (precursor): character menu uses a distinct character-input boundary', async () => {
         await runFor(adapterName);
         const s21 = byId['S21-menu'];
         assert.strictEqual(s21.status_after, 'waiting_for_character_input', 'menu is a character boundary');
@@ -108,7 +108,7 @@ function integrate(adapterName, skipReason) {
     // identity; disambiguation and internal object numbers are observable.
     // BLUE is resolved through EXAMINE (F09 marker), RED through the INSPECT
     // meta verb (DIAG marker); both carry internal object numbers.
-    test(adapterName + ' A19: duplicate names are distinguishable identities', async () => {
+    test(adapterName + ' A19 (precursor): duplicate names are distinguishable identities', async () => {
         await runFor(adapterName);
         const s09 = byId['S09-examine-token'];
         assert.ok(/Which do you mean/.test(s09.output_delta), 'parser disambiguation prompt observed');
@@ -120,7 +120,7 @@ function integrate(adapterName, skipReason) {
 
     // A23 precursor: read-only inspection is distinct from issuing a native
     // command (meta MARKERS/INSPECT never run the turn daemon).
-    test(adapterName + ' A23: diagnostic inspection does not advance time', async () => {
+    test(adapterName + ' A23 (precursor): diagnostic inspection does not advance time', async () => {
         await runFor(adapterName);
         assert.ok(!/\[F06:turn=\d+\]/.test(byId['S02-markers'].output_delta), 'MARKERS ran no daemon');
         assert.ok(!/\[F06:turn=\d+\]/.test(byId['S11-inspect-token'].output_delta), 'INSPECT ran no daemon');

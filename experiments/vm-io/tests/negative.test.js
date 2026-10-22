@@ -171,10 +171,12 @@ if (bocfelAvailable) {
         await a.shutdown();
     });
 
-    test('bocfel: inconsistent header file length is bounded and classified', { timeout: 60000 }, async () => {
+    test('bocfel: inconsistent header file length is rejected', { timeout: 60000 }, async () => {
+        // Observed (pinned): bocfel validates the header length field and
+        // exits 1 on the tampered fixture.
         const a = createBocfelAdapter(writeTampered('badlength.z5'));
         const r = await a.start();
-        assert.ok(r.status === 'error' || r.status === 'halted', 'recorded status: ' + r.status);
+        assert.strictEqual(r.status, 'error');
         await a.shutdown();
     });
 

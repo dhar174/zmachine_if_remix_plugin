@@ -70,7 +70,7 @@ Harness: `node probe.js ifvms` / `node probe.js bocfel` run the identical 30-ste
   - Parser rejection of `xyzzy frobnicate` consumes **no turn** in either interpreter (daemon marker absent) — D05 precursor evidence that rejection is not failure-in-fiction.
   - Runaway recursion terminates in both (ifvms: classified error from the preallocated stack; Bocfel: nonzero exit).
 
-Test suite: `node --test` (repository root) — **39 tests, 39 passed, 0 failed, 0 skipped** on this machine (Node v24.13.0, Windows x64), covering fixture integrity (digest + byte-identical rebuild), boundary classification and wrong-boundary behavior, the full acceptance-mapping sequence per candidate, and the negative cases. Bocfel suites skip with an explicit reason when the interpreter binary is not resolvable (documented platform limitation; no test is ever reported as passing without having run).
+Test suite: `node --test` **from the repository root** on this machine (Node v24.13.0, Windows x64, Bocfel resolvable) — **42 tests, 42 passed, 0 failed, 0 skipped**: 3 fixture-integrity tests (digest manifest, v5 header check, byte-identical recompilation), 6 boundary tests (ifvms shim level), 9 + 9 per-candidate integration tests (the acceptance-mapping sequence), and 15 negative tests. From `experiments/vm-io/` alone the suite is 39 tests (no fixture-integrity tests). When the Bocfel binary is not resolvable, the Bocfel suites skip with an explicit reason and the counts change accordingly; no test is ever reported as passing without having run.
 
 ## 5. Compatibility and limitations
 

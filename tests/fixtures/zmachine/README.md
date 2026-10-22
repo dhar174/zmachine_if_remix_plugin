@@ -34,7 +34,7 @@ pinned version (below) and recorded by SHA-256.
 Probe assertions use the stable bracketed markers (`[Fxx:...]`), never prose.
 Markers are printed to the main output stream in execution order.
 
-| ID | Behavior | Marker / observable | Acceptance |
+| ID | Behavior | Marker / observable | Acceptance (precursor only) |
 | --- | --- | --- | --- |
 | F01 | Startup side effect before first input | `[F01:startup=7]` printed by `Initialise` before the banner; the value 7 is a real state change re-printed by `MARKERS` | A10, S06, D09 |
 | F02 | Recognizable initial room and LOOK | `[LOC:chamber]` in the Probe Chamber description | A13 |
@@ -76,6 +76,8 @@ The intended full playthrough: `take key` → `north` → (F09 examinations) →
 | --- | --- | --- | --- |
 | Inform 6 compiler (win32) | 6.44 (11 Sep 2025) | https://github.com/DavidKinder/Inform6/releases/download/v6.44/inform644_win32.zip | `70900ea74795e8b7cccc39f7666cf9e26112dfda71845c99b569f79fd1f8ebc3` (zip) |
 | Inform 6 Library | 6.12.8 (26 Dec 2025), GitLab tag `6.12.8`, target commit `7affc7d422e17a20ea4dfd6f319a5c18339cc94a` | https://gitlab.com/DavidGriffith/inform6lib/-/raw/6.12.8/<file> | see `fixture.sha256` |
+
+Provenance note: the library's own `lib/README.txt` at tag 6.12.8 is stale upstream text still saying "6.12.7" — the authoritative version markers are `lib/version.h` (`LibRelease "6.12.8"`) and the header banners ("Release 6.12.8 -- Serial number 251226"), which also match the compiler banner in recorded runs ("Inform v6.44 Library v6.12.8").
 
 Compiler license: Inform 6 is published under the original Inform licence or
 the Artistic License 2.0, at the user's choice (`licence.txt` in the compiler
