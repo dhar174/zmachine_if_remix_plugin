@@ -1,0 +1,77 @@
+{
+  "README.md": {
+    "bytes": 4786,
+    "git_blob_sha": "d2970e7402f7a4c9f782d3dbb689323ed25d26ca",
+    "sha256": "2c54b9c943772de367950f6caca16971a1ab5fb4ca8751ef58e75b0e2bfcbb0b"
+  },
+  "docs/README.md": {
+    "bytes": 2396,
+    "git_blob_sha": "85f9ca0aa3518b73bf2da7c7fcc8cfe9ded7f32b",
+    "sha256": "44d1f0061c9724056f26e5ca317d2edd71b24237edf36550075ee93505ef4a95"
+  },
+  "docs/REFERENCES.md": {
+    "bytes": 3622,
+    "git_blob_sha": "ae3b0049829ad0d1ddc2150c13fd06714a67a60e",
+    "sha256": "38442c5b3ff37565707b7cb8ee2d8025cfc73b94eb2d7a5cc3c8113fed607e61"
+  },
+  "docs/ROADMAP.md": {
+    "bytes": 4921,
+    "git_blob_sha": "bf5d7d6361bce5ca6552496e8bb7f021944c48e3",
+    "sha256": "a6eb9c91191ea3ca03dc3e3f48f5645ba1ad619324eb1a39f55638c6b54586e5"
+  },
+  "docs/architecture/plugin-contract.md": {
+    "bytes": 9689,
+    "git_blob_sha": "7c100ada324b9f7080fad56a6e94cabd32c50a3d",
+    "sha256": "4c49c912a3f5f75a89cb83eaf730072599fb61f0983856dc3b9806995ac833d7"
+  },
+  "docs/architecture/state-and-vm-bridge.md": {
+    "bytes": 9760,
+    "git_blob_sha": "36672b9d612cf50302caad2969524bd10817ab7a",
+    "sha256": "b5bd3c02efc047246d34e51f07053e40fe4f5f2a3fc23dbf325ddfc28a1d4145"
+  },
+  "docs/architecture/turn-resolution.md": {
+    "bytes": 15180,
+    "git_blob_sha": "6088cc0cc85e67b8841904b2f7334d8196442d4e",
+    "sha256": "edc40c635a27b12e73133a3537b770685771a18c8813a1b6d25f2c1a352e250c"
+  },
+  "docs/architecture/world-policy.md": {
+    "bytes": 10459,
+    "git_blob_sha": "fa2e6568c481a8cd6b87de716b3591e4ebf5396c",
+    "sha256": "4b0742628343e4116c18f38e67f1ae263ac3487aa3aad13dce21f75a80e77b0e"
+  },
+  "docs/contracts/remix-directive.schema.json": {
+    "bytes": 4766,
+    "git_blob_sha": "c6576c3b8fd01597a5c4f67037b88d34edec2d9b",
+    "sha256": "20b1f11aac196e6cf6aaeb5badd3ae2b0b1a4ebdd2b0d3a93320312d90514255"
+  },
+  "docs/decisions/0001-chat-first-authority.md": {
+    "bytes": 3821,
+    "git_blob_sha": "56e55e277ccf3b217bc1f95db65fa00c6fde2dac",
+    "sha256": "47499b77da5e530341c22eb0c565255b48fe8ab2bf40d5b85b985198dc7e5c70"
+  },
+  "docs/design_draft_v0.1.md": {
+    "bytes": 19057,
+    "git_blob_sha": "47ac21a066fa09066faf076108868545a0a08287",
+    "sha256": "fa5455792b7726b8881b6a091881378e9f41b9afb376f7fd94f076db8999ff16"
+  },
+  "docs/examples/initial-policy.json": {
+    "bytes": 2578,
+    "git_blob_sha": "86c53252ea3fb6063fae015c899310d301043f3d",
+    "sha256": "b381e82143f16a17a2528248886c04ad9f96d9608defac48fe600cc651a0d28b"
+  },
+  "docs/examples/session-walkthrough.md": {
+    "bytes": 5494,
+    "git_blob_sha": "64bfb26eb2a0eaf365667f91adab3a943731f9dd",
+    "sha256": "a1aa8ab17d6f08ec78ad271beb41833cf8cfa1b7bd0117b74739b28a24cac5f1"
+  },
+  "docs/quality/acceptance-matrix.md": {
+    "bytes": 7409,
+    "git_blob_sha": "f488cb6bd19f276872bf1650fec97a0bdd6c707e",
+    "sha256": "da93bbdc5f2c406caa20abeffc658db56abd45eacde69ed05f70eea909c891bb"
+  },
+  "docs/superpowers/specs/2026-10-21-chat-first-remix-design.md": {
+    "bytes": 11410,
+    "git_blob_sha": "db7ccf01cdd2a9e5f1756d86203837865700ef2b",
+    "sha256": "94e89665e17031d8f3f71b3e5c7e421104371326433ffcba50eac0c898cce13b"
+  }
+}
