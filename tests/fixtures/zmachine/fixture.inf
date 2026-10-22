@@ -102,12 +102,7 @@ Object Vault "Records Vault"
 Object BrassKey "brass key" Chamber
     with name 'brass' 'key',
         initial "A small brass key lies here.",
-        description "[F03:item=brass-key] A small brass key. The fixture expects it to be carried to the vault.",
-        after [;
-            ! after fires for the noun (inp1); Unlock is UNLOCK DOOR WITH KEY,
-            ! whose noun is the key, so the unlock marker is announced here.
-            Unlock: print "[F10:door-unlocked]^";
-        ];
+        description "[F03:item=brass-key] A small brass key. The fixture expects it to be carried to the vault.";
 
 ! F05: a recognized noun whose TAKE is a real action that fails and, like any
 ! non-meta action, consumes a turn (observable via the F06 daemon markers).
@@ -147,21 +142,29 @@ Object VaultDoor "vault door"
         found_in Gallery Vault,
         with_key BrassKey,
         after [;
-            ! after fires for the noun; OPEN VAULT DOOR has the door as noun.
+            ! after fires for the noun; in UNLOCK VAULT DOOR WITH BRASS KEY the
+            ! DOOR is the noun (the key is the second), and OPEN VAULT DOOR has
+            ! the door as noun -- so both gate markers live here.
             Open: print "[F10:door-opened]^";
+            Unlock: print "[F10:door-unlocked]^";
         ],
     has static door lockable openable locked;
 
 ! F11: the designated extension anchor.  A stable, named, fixed object at a
 ! fixed location, reserved as the boundary for future native/remix bridge
 ! testing (D07/D13 precursor).  F12 binds the terminal state to it.
+!
+! Library 6.12.8 has no "receive" property: PutOnSub/InsertSub run the
+! receiver's `after` property with the fake action ##Receive (the
+! receive_action global distinguishes PutOn from Insert).  An object property
+! literally named "receive" would compile as an ignored individual property.
 Object Pedestal "basalt pedestal" Vault
     with name 'basalt' 'pedestal' 'anchor',
         initial "A basalt pedestal stands in the middle of the vault.",
         description "[F11:anchor=pedestal] A plain basalt pedestal. This object is the fixture's designated extension anchor for future bridge testing.",
-        receive [;
-            PutOn, Insert:
-                if (noun == BrassKey) {
+        after [;
+            Receive:
+                if (noun == BrassKey && receive_action == ##PutOn) {
                     print "[F12:terminal=victory] The key settles into a groove on the pedestal. The fixture's terminal state is reached.^";
                     deadflag = 2;
                     rtrue;
