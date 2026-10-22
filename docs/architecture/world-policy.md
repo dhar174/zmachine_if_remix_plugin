@@ -1,6 +1,6 @@
 # World policy and directive compilation
 
-**Proposed contract v0.2.** This document defines meaning; the [JSON schema](../contracts/remix-directive.schema.json) defines structural shape only. See the [example](../examples/initial-policy.json).
+**v0.2 policy shape remains a draft schema. Approved user semantics D01–D37 are reconciled below; this file is not proof of implementation.** This document defines meaning; the [JSON schema](../contracts/remix-directive.schema.json) defines structural shape only. See the [example](../examples/initial-policy.json).
 
 ## 1. What the initial prompt compiles into
 
@@ -111,3 +111,19 @@ Policy revisions are restored with the world during a branch restore, but author
 The synthetic [initial-policy.json](../examples/initial-policy.json) allows location and character generation in an approved exterior remix region, allows adaptive dialogue under a personality invariant, and preserves authored puzzle behavior. It does not grant a native topology bridge or imply that the illustrative region already exists in any real story. A fixture supplies its identity and membership for testing.
 
 An initial “give me a key” clause would appear in the separate world patch, not as a perpetual policy entry. This separation is mandatory even when both parts originate in the same prompt.
+
+## 10. Approved policy addenda and schema compatibility
+
+See [Issue #10 decision register](../decisions/decision-register.md) for all 37 exact approvals. This section refines the v0.2 policy *meaning*; a subsequent reviewed schema version must be specified before any new field is passed to engine tools. Unknown fields must continue to be rejected.
+
+**D01/D02:** Guided partial acceptance must identify the exact supported initial directive subset and separately list unresolved/unsupported clauses. Propose a human-readable interpretation; no silent activation. Scope-aware supersession keeps internal rule IDs for audit but presents human-readable affected protections and obtains exact user approval. Broad later wording does not automatically override a protected specific rule.
+
+**D03/D06/D10:** Content generation is policy-controlled by where, what and trigger, with original-preservation default. Semantic fidelity is assessed using appropriate evidence, risk and consequence; ambiguous high-impact changes block for clarification/approval. Editor approval thresholds vary by actual effect impact and active trusted lease, not arbitrary model labels. An invariant and an authorized permission still require real engine capabilities.
+
+**D07/D09/D11–D13:** The initial policy must be collected prior to intentionally running native startup; actual pre-start effects are supported only where a tested adapter says so. Native clock pauses in extension scenes *by default*. Policy may later select verified alternative synchronization, but may not request an unimplemented clock. Native character, inventory and topology effects remain native-owned; permitted remix dialogue/items/exits do not imply native writes.
+
+**D14–D26:** These introduce prospective policy dimensions not yet described by the v0.2 JSON schema: postgame/aftermath, eligible-turn offscreen autonomy, reader narrative perspective/secret disclosure, transcript presentation, native-vs-remix score views, quest status/deadlines, generated puzzle alternate methods, resolution mode/engine RNG, sequence limits, and hints with progressive spoiler tiers. Keep these as requirements for **future versioned extensions**, not silently accepted ad-hoc JSON keys. Original quest flags, puzzle gates, randomness and clues remain authoritative absent verified explicit overrides. Player promises differ from incidental lead discovery; no hint automatically performs an action.
+
+**D27–D37:** Same-owner cross-chat session continuity and revision-aware writes are core engine safeguards. Selective branch merging, cross-game transfers, linked identity, cross-world synchronization, causal retcons, unlinking and cross-user sharing are **deferred capabilities** with separate approval, privacy and dependency boundaries. Independent imported identity copies and manual sync are future defaults; sharing is private and opt-in. D38 has no approved semantics.
+
+Consult the [contract reconciliation](../decisions/contract-reconciliation.md) and [supplemental cases](../quality/decision-acceptance-supplement.md) before proposing schema revisions. Protect the fidelity/authorization defaults of schema 0.2.0 during future extensions.

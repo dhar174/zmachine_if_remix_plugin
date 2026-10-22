@@ -1,7 +1,7 @@
 # Chat-first remix engine: design v0.2
 
 **Date:** 2026-10-21  
-**Status:** proposed architecture for review; documentation only  
+**Status:** original v0.2 proposal, now reconciled with approved user decisions D01–D37; proposed technical mechanisms and future features remain subject to capability/evidence review  
 **Repository baseline inspected:** `f4e019743f4026b4ceb82668164b7c36759b2b68`  
 **Supersedes:** browser-first and optional-AI product choices in [v0.1](../../design_draft_v0.1.md), not its historical observations.
 
@@ -118,4 +118,18 @@ This change writes design documents, a proposed policy schema, examples, and acc
 
 The first integrated demo must include real model-driven play and editing, a normal native turn, one persistent generated extension, an explicit allowed editor change, and verified combined restore. Deterministic component tests precede that demo but are not substitutes for it.
 
-Review the policy semantics and algorithm before turning [roadmap gates](../../ROADMAP.md) into implementation tasks. Runtime selection, trusted approval transport, and native capability coverage remain explicit decision gates, with recommendations in [ADR-0001](../../decisions/0001-chat-first-authority.md).
+Decisions D01–D37 have now been [consolidated](../../decisions/decision-register.md), and the contract reconciliation is [documented](../../decisions/contract-reconciliation.md). Review these updates before implementing [roadmap gates](../../ROADMAP.md). Runtime selection, trusted approval transport, and native capability coverage remain explicit decision gates, with recommendations in [ADR-0001](../../decisions/0001-chat-first-authority.md).
+
+## 11. Accepted behavioral refinements and delivery partition (D01–D37)
+
+**User-approved intent, not executable features.** [Decision register](../../decisions/decision-register.md) and [reconciliation](../../decisions/contract-reconciliation.md) apply wherever this historical v0.2 text is less specific. Technical feasibility and host details remain open.
+
+The first game load compiles a proposed initial directive *before* intentionally running the native VM (D09). The model previews understood clauses and possible interpretations, and the user can approve only a named coherent supported subset while others remain unresolved and inactive (D01). An initial “give me a key” is a one-time edit, not an invariant. Future changes can selectively override protected policy with a human-readable diff and explicit authorization (D02). The user never needs to manipulate internal rule IDs. Generation scopes specify regions, content types and triggers (D03); uncertain characterization/plot effects get risk-sensitive review (D06).
+
+Play and Editor retain explicit persistent controls plus a one-turn Editor override returning to the previous mode (D04). Routine reversible authorized edits do not require repeated confirmations, but consequential/protected effects require a scoped preview and exact user-bound approval (D10). The AI distinguishes parser limitations, unknown facts and confirmed canonical impossibility (D05). Supported compound Play instructions resolve into bounded, independently committed steps, pausing for choices and unexpected events (D25); hints reveal only authorized tiers and do not execute solutions (D26).
+
+Native scripts remain authoritative for native dialogue consequences, objects, scoring, puzzles and topology. An authorized remix layer may add compatible interactions and show unified inventories and progress, but native effects require tested story-specific capabilities (D11–D13, D19). Original transcript text remains exactly accessible even if the user authorizes stylistic AI enhancement (D18). Reader-visible and player-character knowledge remain distinct, including authorized offscreen cutscenes (D17). Native time pauses in an extension by default; synchronized clocks need proof (D07). Turn-based offscreen NPC activity and quest consequences require scoped time/event policies (D16, D20–D22). Generated puzzles, alternative solutions, difficulty and RNG must produce verifiable committed mechanics (D23–D24).
+
+Native endings/death remain true; authorized remix aftermath or epilogues, where implemented, cannot pretend native code continued (D14–D15). Historical retcons are an approved future goal, not a working v1 primitive (D08). Sessions, combined saves and branches exist independently of chatbot memory, and concurrent clients must revalidate revisions at atomic commits (D27–D28). This is still a **single-player, single-story initial release**.
+
+D29–D37 (branch merging, cross-game imports, linked identities, synchronization and cross-user sharing) are approved **future architectures** only. They do not expand G0–G6 implementation acceptance. D38 is unapproved. Extra acceptance scenarios are tracked in the [decision supplement](../../quality/decision-acceptance-supplement.md); no runtime tests have been executed merely by adding these docs.
