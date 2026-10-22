@@ -15,6 +15,8 @@ A documentation-only design proposal (v0.2) for an AI-first, chat-driven remix e
 - `docs/decisions/` — ADRs. ADR-0001 records user requirements plus decisions still requiring evidence (runtime, language, deployment, approval transport).
 - `docs/examples/` — synthetic examples; illustrate the contracts, never override them.
 - `docs/quality/acceptance-matrix.md` — observable evidence required before claiming any feature works.
+- `docs/agents/` — engineering team coordination: the canonical policy (`team-coordination.md`), installation guide (`README.md`), and setup-verification records.
+- `.zcode/agents/` — versioned source templates for the Zcode specialist subagents. Not an installed or discovered location; installed copies live at `~/.zcode/agents/` (see `docs/agents/README.md`).
 - `docs/design_draft_v0.1.md` — archived, superseded by v0.2. Do not promote its assumptions or its "Original/Hybrid/Extension" labels as input modes.
 - `validation/` — point-in-time integrity evidence, not live CI (see below).
 - `state/` — currently empty.
@@ -44,3 +46,12 @@ None exist. `.gitignore` is leftover Next.js/Vercel template content — it is *
 ## Git conventions
 
 PRs target `main`; work on feature branches. No formal commit convention is established yet — history shows both `docs:`-prefixed and plain imperative subjects.
+
+## Engineering team coordination (agent-assisted work)
+
+This repository uses a coordinator-plus-specialist pattern for agent-assisted engineering work. The canonical policy — roles, routing table, assignment and return contracts, shared invariants, platform behavior — is `docs/agents/team-coordination.md`; read it before dispatching specialists or acting as one.
+
+- The primary session is the **engineering coordinator and the only repository writer**. Specialists investigate, propose, and review read-only (`Read`, `Grep`, `Glob`); they do not edit files, run commands, or dispatch other agents.
+- Specialist recommendations are not owner approval. Decisions D01–D37 (Issue #10) are settled direction; D38 is unresolved; runtime, language, deployment, approval transport, and budgets remain evidence gates (ADR-0001, roadmap G1).
+- These engineering agents are development assistants only — separate from in-game characters, the product's AI components, and the proposed runtime turn/transaction coordinator described in the design docs (when those docs say "coordinator," they mean the product component, not the primary session).
+- If you are a specialist subagent: follow your assignment and the return contract in `docs/agents/team-coordination.md` §6; report findings instead of making changes; stay inside your assigned scope.
