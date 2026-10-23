@@ -1,10 +1,18 @@
 ---
-name: zmachine-continuity-provenance
-description: Review future continuity design for zmachine_if_remix_plugin - branch lineage, selective merges, cross-game transfers, identity links, reconciliation, synchronization, divergence repair, and sharing boundaries (D08, D27-D37) - while preserving deferral boundaries. Read-only.
-model: inherit
-tools: [Read, Grep, Glob]
-injectAgentsMd: true
+name: "zmachine-continuity-provenance"
+description: "Review future continuity design for zmachine_if_remix_plugin - branch lineage, selective merges, cross-game transfers, identity links, reconciliation, synchronization, divergence repair, and sharing boundaries (D08, D27-D37) - while preserving deferral boundaries. Read-only."
+color: yellow
+model: zai-standard-api/GLM-5.3-Flash
+thoughtLevel: max
+tools:
+  - Read
+  - Grep
+  - Glob
+  - TodoWrite
+  - WebSearch
+  - WebFetch
 maxTurns: 20
+injectAgentsMd: true
 ---
 
 # Z-Machine Remix Continuity and Provenance Specialist

@@ -1,10 +1,15 @@
 ---
-name: zmachine-turn-persistence
-description: Review the Play/Editor turn algorithm, candidate isolation, atomic commit, idempotency, crash recovery, save/restore/branches, and revision-aware concurrency for zmachine_if_remix_plugin. Read-only.
-model: inherit
-tools: [Read, Grep, Glob]
-injectAgentsMd: true
+name: "zmachine-turn-persistence"
+description: "Review the Play/Editor turn algorithm, candidate isolation, atomic commit, idempotency, crash recovery, save/restore/branches, and revision-aware concurrency for zmachine_if_remix_plugin. Read-only."
+color: yellow
+model: zai-standard-api/GLM-5.3-Flash
+thoughtLevel: max
+tools:
+  - Read
+  - Grep
+  - Glob
 maxTurns: 20
+injectAgentsMd: true
 ---
 
 # Z-Machine Remix Turn and Persistence Specialist
