@@ -1,0 +1,46 @@
+# G1-A probe test smoke (Issue #11): runs the committed fixture-integrity and
+# vm-io harness suites on a clean checkout. This verifies the probe
+# experiments only — it is NOT product CI: the product runtime, adapter, and
+# deployment do not exist yet (see docs/ROADMAP.md evidence gates).
+#
+# Zero npm dependencies, so there is no install step. The Bocfel interpreter
+# is not installed on hosted runners; its integration and negative suites skip
+# with an explicit reason, while the launch-resolution/availability tests run
+# everywhere.
+name: probe-test-smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  node-test:
+    name: node --test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The fixture digest manifest pins the exact committed (LF) bytes; on a
+      # Windows runner an autocrlf checkout would rewrite text files to CRLF
+      # and fail the digest test. Force an LF (blob-faithful) checkout.
+      - name: Normalize checkout to LF bytes
+        run: |
+          git config core.autocrlf false
+          git checkout-index -f -a
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Fixture integrity suite
+        run: node --test
+        working-directory: tests/fixtures/zmachine
+
+      - name: vm-io harness suite
+        run: node --test
+        working-directory: experiments/vm-io

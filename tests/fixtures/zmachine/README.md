@@ -101,6 +101,34 @@ compilations produced SHA-256-identical `fixture.z5`). The integrity test in
 digest and, when the pinned compiler is present locally, recompiles and
 compares bytes again.
 
+Windows note: the manifest pins the committed LF bytes. With
+`core.autocrlf=true`, git rewrites text files to CRLF on checkout and the
+digest test fails even though `git diff` shows no change; set
+`core.autocrlf=false` for this clone (the CI workflow normalizes the same way
+before running the suites).
+
+## Negative-test stories (`negative/`)
+
+Two additional purpose-built stories support the bounded-termination negative
+tests. They are **not** part of the F01–F12 fixture sequence; they carry the
+same redistribution grant as the main fixture and are pinned by the same
+`fixture.sha256` manifest.
+
+| Story | Purpose | Behavior |
+| --- | --- | --- |
+| `negative/loopstory` | Runaway recursion | Drives unbounded recursive calls: ifvms.js exhausts its preallocated stack (`RangeError`, classified as an error); Bocfel exits nonzero. |
+| `negative/spinloop` | Nonrecursive infinite loop | A `while(1)` loop with no recursion and no input request — it never reaches an input boundary, so no test-runner timeout can bound it. The ifvms case is preempted by a killable worker's parent deadline (`worker.terminate()`); the Bocfel case is bounded by the adapter's per-step watchdog. |
+
+`spinloop.inf` pins `Serial "261022"` so its recompilation is byte-identical
+with the pinned toolchain, using the same procedure as the main fixture:
+
+```
+tools/inform6-6.44/inform6.exe -v5 negative/spinloop.inf negative/spinloop.z5
+```
+
+`loopstory` predates the Serial pin and is pinned by digest alone (no
+byte-identical rebuild guarantee).
+
 ## Fixture design notes
 
 - The F06 daemon is an **object daemon** (parentless object with a `daemon`

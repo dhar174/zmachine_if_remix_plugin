@@ -15,7 +15,7 @@ c7c9a3eb65d1e82d0a3b4a2ca07faa50fb0eb999e5f4d06efc87b5219deb3dbb *lib/COPYING
 # fixture). Same redistribution grant as the main fixture. spinloop.inf pins
 # Serial "261022" so its recompilation is byte-identical; loopstory predates
 # the Serial pin and is pinned by digest alone.
-d4e20ed5c471bdd27f6fa270ceb69d6d6e0ebdd3bef08214b59984e23ef94cb0 *negative/loopstory.inf
+66b8e4ead4fd66730243371bc4ae8fef64299c26cfa679e0b8fdfaac1ffd5297 *negative/loopstory.inf
 12821c347ae0c69b32c4e6c63edfe7ebbd7d698e18d586312415efaaed899557 *negative/loopstory.z5
 9bd08bb3f4987f5a76369ea9a5396fb79819dc6b248a7e0cbc1e6ce500db8fdc *negative/spinloop.inf
 3c061aadbd396168bbf45990de2d56ca221e28abbb2b64da85a3ccf644cfcf52 *negative/spinloop.z5
