@@ -9,14 +9,17 @@
 //      drops the interpreter, and a FRESH CHILD PROCESS (lib/runner.js)
 //      restores from the checkpoint file alone and applies the identical
 //      input suffix.
+// Every capture is taken in SEEDED RNG mode: unseeded capture is refused
+// (E_RNG) and unseeded envelopes are rejected at validation, because host
+// Math.random state can be neither captured nor reconstructed across
+// processes (state-and-vm-bridge section 8) -- so equality is exact, with no
+// normalization and no allowlists beyond the declared undoDepth rule.
 // Comparisons (see docs/evidence/g1-vm-recovery.md for the rules):
 //   - full output/grid output equality after every suffix step (never only
-//     fixture markers), normalized for unseeded-RNG draws, which are host
-//     entropy per process and must NOT be equal;
+//     fixture markers);
 //   - status sequence and event/marker ordering equality;
 //   - machine-state fingerprint equality at the end (ram/stack/globals
-//     digests, pc, frames, seed, request log), except fields fingerprintDiff
-//     allowlists for declared reasons;
+//     digests, pc, frames, seed, request log);
 //   - no-republish: the restored instance's transcript at the first suffix
 //     step equals the reference's, proving neither a replayed opening nor
 //     lost text.
@@ -29,57 +32,50 @@ const assert = require('node:assert');
 const {
     createInstance, line, key, drive, capture, writeEnvelope,
     runReference, spawnRestore, awaitExit,
-    machineFingerprint, fingerprintDiff, normalizeRngDraws,
+    machineFingerprint, fingerprintDiff,
 } = require('./helpers.js');
 const { extractMarkers } = require('../../vm-io/probe.js');
 
 const REPS = [1, 2];
 
 // The victory path: chamber -> gallery -> through the vault door -> pedestal.
+// Every capture prefix seeds first: unseeded capture is refused (E_RNG) and
+// unseeded restore is rejected, because host Math.random state can be neither
+// captured nor reconstructed across processes (bridge section 8).
+const SEED = line('seed 42');
 const VICTORY = [
-    line('look'), line('take brass key'), line('north'),
+    SEED, line('look'), line('take brass key'), line('north'),
     line('unlock vault door with brass key'), line('open vault door'), line('north'),
     line('put brass key on pedestal'),
 ];
 
 const CASES = [
     {
-        name: 'initial line prompt (before any input)',
-        prefix: [],
-        suffix: [line('look'), line('inventory')],
-    },
-    {
-        name: 'later line prompt after movement, a turn-consuming failed action, and the daemon chime',
-        prefix: [line('look'), line('take stone panel'), line('take brass key'), line('north')],
+        name: 'line prompt after movement, a turn-consuming failed action, and the daemon chime',
+        prefix: [line('look'), SEED, line('take stone panel'), line('take brass key'), line('north')],
         suffix: [line('inventory'), line('south'), line('seed 7'), line('roll')],
         expectTranscriptContains: ['[F06:event=chime]'],
     },
     {
         name: 'parser-disambiguation line prompt with unresolved input',
-        prefix: [line('north'), line('examine token')],
+        prefix: [line('north'), SEED, line('examine token')],
         suffix: [line('blue'), line('inspect token')],
     },
     {
         name: 'read_char menu before the choice is consumed',
-        prefix: [line('menu')],
+        prefix: [SEED, line('menu')],
         suffix: [key('b'), line('inventory')],
     },
     {
         name: 'boundary immediately after a menu answer (no duplicate delivery)',
-        prefix: [line('menu'), key('b')],
+        prefix: [SEED, line('menu'), key('b')],
         suffix: [line('inventory'), line('look')],
         expectTranscriptContainsOnce: ['[F07:menu-choice=beta]'],
     },
     {
         name: 'seeded RNG across draws and reseeding',
-        prefix: [line('seed 42'), line('roll')],
+        prefix: [SEED, line('roll')],
         suffix: [line('roll'), line('roll'), line('seed 7'), line('roll')],
-    },
-    {
-        name: 'unseeded RNG mode continuation (draws are per-process entropy)',
-        prefix: [line('look')],
-        suffix: [line('roll'), line('look')],
-        rngMode: 'unseeded',
     },
     {
         name: 'endgame prompt (deadflag=2, RESTART/RESTORE/QUIT pending)',
@@ -138,36 +134,24 @@ test('round trips at every supported boundary match the uninterrupted reference'
                         assert.ok(env.payload.publishedOutput.output.length > 200, 'checkpoint carries published output');
                     }
 
-                    // 3. Comparisons.
+                    // 3. Comparisons.  Every case is seeded, so equality is
+                    // exact: no normalization, no allowlists beyond the
+                    // declared undoDepth rule inside fingerprintDiff.
                     for (let k = 0; k < c.suffix.length; k++) {
                         const rs = child.steps[k];
                         const rr = ref.postSteps[k];
                         assert.strictEqual(rs.status, rr.status, `step ${k} status`);
                         assert.strictEqual(rs.errors.length, 0, `step ${k} child errors`);
                         assert.deepStrictEqual(rs.unexpectedGlk, [], `step ${k} no unexpected Glk calls in the restored continuation`);
-                        const cmp = (s) => (c.rngMode === 'unseeded' ? normalizeRngDraws(s) : s);
-                        assert.strictEqual(cmp(rs.delta), cmp(rr.delta), `step ${k} output delta`);
-                        assert.strictEqual(cmp(rs.output), cmp(rr.output), `step ${k} full transcript (no republish, no loss)`);
-                        assert.strictEqual(cmp(rs.gridOutput), cmp(rr.gridOutput), `step ${k} grid/status transcript`);
+                        assert.strictEqual(rs.delta, rr.delta, `step ${k} output delta`);
+                        assert.strictEqual(rs.output, rr.output, `step ${k} full transcript (no republish, no loss)`);
+                        assert.strictEqual(rs.gridOutput, rr.gridOutput, `step ${k} grid/status transcript`);
                         assert.deepStrictEqual(
-                            extractMarkers(cmp(rs.delta)), extractMarkers(cmp(rr.delta)), `step ${k} marker ordering`);
+                            extractMarkers(rs.delta), extractMarkers(rr.delta), `step ${k} marker ordering`);
                     }
 
                     const diffs = fingerprintDiff(ref.fingerprint, child.fingerprint);
-                    const allowed = c.rngMode === 'unseeded' ? ['output'] : [];
-                    const unexpected = diffs.filter((d) => !allowed.includes(d));
-                    assert.deepStrictEqual(unexpected, [], 'final machine-state fingerprint differences');
-                    if (c.rngMode === 'unseeded') {
-                        assert.strictEqual(child.fingerprint.rngSeed, 0, 'unseeded mode keeps seed 0');
-                        // Both runs must have produced structurally valid draws.
-                        const rolls = (s) => extractMarkers(s.delta).filter((m) => m.startsWith('[F08:roll='));
-                        for (const s of child.steps) {
-                            for (const m of rolls(s)) {
-                                const n = Number(m.slice('[F08:roll='.length, -1));
-                                assert.ok(n >= 1 && n <= 6, 'unseeded draw in range: ' + m);
-                            }
-                        }
-                    }
+                    assert.deepStrictEqual(diffs, [], 'final machine-state fingerprint differences');
                     if (c.expectFinalStatus) {
                         assert.strictEqual(child.fingerprint.halted, true, 'final halted state');
                         assert.strictEqual(child.fingerprint.quit, true, 'final quit flag');
@@ -220,12 +204,12 @@ test('restored halted execution refuses new input without output or state change
 });
 
 test('in-memory undo is declared-unsupported: restore_undo after restore is safe and empty', { timeout: 120000 }, async () => {
-    const ref = runReference([line('look'), line('take brass key')], [line('undo')]);
+    const ref = runReference([line('look'), SEED, line('take brass key')], [line('undo')]);
     assert.ok(ref.fingerprint.undoDepth >= 0, 'reference undo depth observed');
 
     const src = createInstance();
     src.start();
-    drive(src, [line('look'), line('take brass key')]);
+    drive(src, [line('look'), SEED, line('take brass key')]);
     const env = capture(src);
     const envPath = writeEnvelope(env, 'roundtrip-undo.json');
     const child = spawnRestore(envPath);
@@ -241,6 +225,46 @@ test('in-memory undo is declared-unsupported: restore_undo after restore is safe
         await awaitExit(child, 10000).catch(() => {});
     }
 });
+
+test('unseeded capture is refused at the source, and the smallest supported boundary is the seeded prompt (E_RNG)', { timeout: 120000 }, async () => {
+    const { CheckpointError } = require('../lib/checkpoint-format.js');
+
+    // The opening prompt is necessarily unseeded (no input accepted yet):
+    // capturing there must fail explicitly rather than mint a checkpoint
+    // whose draws a restored process could never reproduce.
+    assert.throws(
+        () => capture(createUnseededInstance()),
+        (e) => e instanceof CheckpointError && e.code === 'E_RNG',
+        'capture at an unseeded boundary must throw E_RNG');
+
+    // Once the game is seeded, the very next boundary is capturable.
+    const seeded = createUnseededInstance();
+    seeded.send(SEED);
+    const env = capture(seeded);
+    assert.strictEqual(env.payload.rng.mode, 'seeded');
+    assert.strictEqual(env.payload.rng.seed, -42);
+
+    // And a child restores it cleanly (exit 0 path exercised via finish()).
+    const envPath = writeEnvelope(env, 'roundtrip-seed-gate.json');
+    const child = spawnRestore(envPath);
+    try {
+        await child.run([line('roll')]);
+        assert.ok(child.ready, 'seeded checkpoint restores: ' + (child.readyError || ''));
+        assert.strictEqual(child.steps[0].errors.length, 0, 'seeded continuation is error-free');
+        const code = await child.finish();
+        assert.strictEqual(code, 0, 'clean seeded run exits 0');
+    } finally {
+        child.child.kill();
+        await awaitExit(child, 10000).catch(() => {});
+    }
+});
+
+// A fresh instance driven to the FIRST prompt only (unseeded state).
+function createUnseededInstance() {
+    const adapter = createInstance();
+    adapter.start();
+    return adapter;
+}
 
 function sanitize(name) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);

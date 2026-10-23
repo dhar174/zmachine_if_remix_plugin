@@ -42,10 +42,13 @@ explicit supplement sections above, at a boundary where a request is pending
 (or halted).
 
 **Restore** (always into a fresh interpreter): full envelope validation
-*before* any ZVM exists (format/version/identity/structure/digest/boundary/
-size; stable `E_*` codes); a fresh adapter runs its normal startup so
-windows/origram/stack exist, then `vm.restore_file(quetzal, 1)` re-verifies
-story identity (release/serial/checksum) and rebuilds memory/stacks/pc; the
+*before* any ZVM exists (format/version/identity/boundary/structure/size,
+**deep validation of the nested `io`/windows/`readData` state restore
+consumes, cross-section transcript↔window consistency after the digest
+verifies**, and **rejection of unseeded RNG payloads — `E_RNG`**); a fresh
+adapter runs its normal startup so windows/origram/stack exist, then
+`vm.restore_file(quetzal, 1)` re-verifies story identity
+(release/serial/checksum) and rebuilds memory/stacks/pc; the
 interpreter-owned header block `[0x00..0x40)` is written back verbatim
 (`update_header()` recomputes screen-size fields in a window-set-dependent
 way and must not stand in for the source values); `io`, RNG seed (re-applied
@@ -53,6 +56,15 @@ way and must not stand in for the source values); `io`, RNG seed (re-applied
 issued against the restored `read_data` buffer), and the published
 transcript are then applied, and the output-delta watermark is synced so no
 prefix text is ever republished.
+
+**RNG policy:** checkpointable boundaries require the game to be in **seeded
+(predictable) mode**. Unseeded capture is refused at the source (`E_RNG`)
+and unseeded envelopes are rejected at validation: draws in that mode come
+from host `Math.random`, whose state can be neither captured nor
+reconstructed across processes, and restoring one would silently switch the
+RNG semantics — forbidden by state-and-vm-bridge §8 and Issue #12's
+fail-explicitly rule. Seeded continuation is exact (identical draws and
+seed across process death).
 
 Three rules the harness learned the hard way (documented in code comments
 and `docs/evidence/g1-vm-recovery.md`):
@@ -69,7 +81,15 @@ the checkpoint file plus the pinned fixture path only — no closure,
 singleton, or shared buffer survives the process boundary. Protocol:
 `{"ready":true,...}` on stdout, then one JSON request per stdin line
 (`input`, `op:fingerprint`, `op:serialize`, `op:exit`). All argv is static;
-no environment value reaches an argv element or a file path.
+no environment value reaches an argv element or a file path. **Exit codes:
+0 clean; 2 checkpoint rejected; 3 output limit exceeded; 4 candidate
+execution failed** (an adapter step reporting `error`, or a thrown
+exception — the failure evidence is still emitted, so the transcript of a
+failed run survives, but exit-code callers can never mistake a failed
+candidate for a clean run; EOF after a failure also exits 4). The
+`--selftest step-error | throw` flag is test scaffolding that
+deterministically drives the two failure-accounting paths (real pinned
+stories cannot be driven to a VM error on demand).
 
 ## Tests
 
@@ -80,28 +100,35 @@ no environment value reaches an argv element or a file path.
   compared against an uninterrupted reference run: full output/grid/markers
   equality after every suffix step (never marker-only), machine-state
   fingerprint equality (ram/stack/globals digests, pc, frames, seed, request
-  log), no-republish, pending-request reconstruction. Cases: initial prompt;
-  post-movement/failed-action/daemon-chime prompt; parser disambiguation;
-  read_char menu pending; boundary after a menu answer (no duplicate
-  delivery); seeded RNG across draws and reseeding; unseeded RNG (draws are
-  per-process entropy and are normalized — everything around them must
-  match); endgame prompt → halt; restored-halt input refusal; declared-
-  unsupported undo safety.
+  log), no-republish, pending-request reconstruction. All captures are
+  **seeded** (unseeded capture is refused with `E_RNG` — covered as its own
+  case). Cases: post-movement/failed-action/daemon-chime prompt; parser
+  disambiguation; read_char menu pending; boundary after a menu answer (no
+  duplicate delivery); seeded RNG across draws and reseeding (exact draws +
+  seed); endgame prompt → halt; the unseeded capture gate; restored-halt
+  input refusal; declared-unsupported undo safety.
 - `tests/isolation.test.js` — candidate discard (two sequential candidates;
   baseline checkpoint byte-identical, transcript unchanged, continuation
   equal to a never-candidated control) (A15); kills during bootstrap, at the
   boundary, during the serialization phase, and pre-publication; unbounded
   spinloop child preempted by a parent deadline and reaped; output limit;
-  seven hostile-checkpoint variants rejected in children (A34).
+  twelve hostile-checkpoint variants rejected in children — nested-state
+  malformations (empty io, missing main window, empty char readData,
+  transcript/window disagreement) and an honest unseeded envelope (`E_RNG`)
+  alongside the identity/digest/boundary/corrupt-quetzal cases (A34); and
+  the runner's failure accounting (exit 4 for returned errors and thrown
+  exceptions, via the selftest modes).
 
 ## Declared unsupported (with source evidence, not silent)
 
 Timed input (`read_data.time` stored but never used; Flags1 timed-input bit
 clear), sound and graphics (no-op / absent opcodes), Glk file streams
 (glksim records them as unexpected), interpreter number/version header
-fields (never written), and in-memory undo history (dropped on restore,
-matching upstream ifvms autosave semantics — `@restore_undo` after restore
-is safe and empty; tested).
+fields (never written), **unseeded RNG checkpoints (rejected with `E_RNG`
+at capture and at validation — host `Math.random` state is not
+reconstructable across processes)**, and in-memory undo history (dropped on
+restore, matching upstream ifvms autosave semantics — `@restore_undo` after
+restore is safe and empty; tested).
 
 The full state-inventory classification, the Bocfel 2.6 checkpoint-route
 investigation, acceptance mapping (A15/A16/A28/A29/A31/A34), and the

@@ -71,19 +71,19 @@ function stackFingerprint(vm) {
 
 // Fields that may legitimately differ between a reference run and a restored
 // run.  Everything else must match exactly.
-//   rngSeed        -- only in unseeded RNG mode (fresh host entropy per process)
 //   undoDepth      -- undo history is a DECLARED-unsupported checkpoint family
 //                     (dropped on restore, upstream autosave semantics), so the
 //                     depth legitimately differs after restore and stays
 //                     offset by the dropped entries; @restore_undo behavior
 //                     after restore is asserted separately in the tests.
+// (rngSeed no longer appears: unseeded checkpoints are rejected outright, so
+// every compared pair of runs is seeded and the seed must match exactly.)
 //
 // DOCUMENTATION-ONLY MAP: fingerprintDiff() below enforces the undoDepth rule
-// directly, and the round-trip tests enforce the unseeded-rng-only rule via
-// their per-case allowlist.  This map records the intended contract for
-// readers; if it drifts from the enforcement sites, the enforcement sites win.
+// directly, and the round-trip tests enforce the rest via exact equality.  This
+// map records the intended contract for readers; if it drifts from the
+// enforcement sites, the enforcement sites win.
 const CONDITIONAL_FIELDS = {
-    rngSeed: 'unseeded-rng-only',
     undoDepth: 'declared-unsupported',
 };
 

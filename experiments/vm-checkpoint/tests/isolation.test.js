@@ -35,7 +35,7 @@ const {
     machineFingerprint, fingerprintDiff, FIXTURE, SPINLOOP, RESULTS_DIR,
 } = require('./helpers.js');
 
-const BASE_PREFIX = [line('look'), line('take brass key'), line('north')];
+const BASE_PREFIX = [line('look'), line('seed 42'), line('take brass key'), line('north')];
 const CANDIDATE_MUTATIONS = [line('seed 7'), line('roll'), line('south'), line('inventory')];
 const BASELINE_SUFFIX = [line('inventory'), line('seed 42'), line('roll'), line('look')];
 const STORE = path.join(RESULTS_DIR, 'publication-store.txt');
@@ -313,6 +313,43 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
         e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
         variants['corrupt-quetzal'] = JSON.stringify(e);
     }
+    // Honest unseeded envelope (digest recomputed): must be rejected by
+    // policy, not accepted with silently switched RNG semantics (E_RNG).
+    {
+        const e = JSON.parse(baseline.envelopeJson);
+        e.payload.rng = { seed: 0, mode: 'unseeded' };
+        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        variants['unseeded-rng'] = JSON.stringify(e);
+    }
+    // Nested-state malformations that pass shallow shape checks (PR #37
+    // review): empty io table, missing main window, empty char readData,
+    // transcript/window disagreement.  All previously restored and then
+    // faulted or silently misbehaved mid-continuation.
+    {
+        const e = JSON.parse(baseline.envelopeJson);
+        e.payload.io = {};
+        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        variants['io-empty'] = JSON.stringify(e);
+    }
+    {
+        const e = JSON.parse(baseline.envelopeJson);
+        e.payload.windows.main = null;
+        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        variants['windows-main-null'] = JSON.stringify(e);
+    }
+    {
+        const e = JSON.parse(baseline.envelopeJson);
+        e.boundary = { kind: 'char' };
+        e.payload.readData = {};
+        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        variants['char-readdata-empty'] = JSON.stringify(e);
+    }
+    {
+        const e = JSON.parse(baseline.envelopeJson);
+        e.payload.publishedOutput.output += 'EXTRA';
+        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        variants['transcript-inconsistent'] = JSON.stringify(e);
+    }
 
     const expectedCodes = {
         'not-json': 'E_FORMAT',
@@ -321,6 +358,11 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
         'wrong-story': 'E_STORY',
         'wrong-runtime': 'E_RUNTIME',
         'bad-boundary': 'E_BOUNDARY',
+        'unseeded-rng': 'E_RNG',
+        'io-empty': 'E_STRUCTURE',
+        'windows-main-null': 'E_STRUCTURE',
+        'char-readdata-empty': 'E_STRUCTURE',
+        'transcript-inconsistent': 'E_STRUCTURE',
         'corrupt-quetzal': null, // VM-layer failure surfaces as a plain error
     };
 
@@ -343,6 +385,65 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
     } finally {
         // A leaked child would keep this test process's pipes open and hang
         // the suite; every spawned child is killed no matter what happened.
+        for (const child of childProcesses) {
+            try { child.child.kill(); await awaitExit(child, 5000); } catch { /* already gone */ }
+        }
+        fs.rmSync(STORE, { force: true });
+    }
+});
+
+test('a candidate whose execution fails exits nonzero, with failure evidence (returned errors and thrown exceptions)', { timeout: 120000 }, async () => {
+    setUpStore();
+    const baseline = makeBaseline();
+    const envPath = writeEnvelope(baseline.envelope, 'iso-runner-failure.json');
+    const childProcesses = [];
+    try {
+        // (a) Returned adapter error: a step reporting status 'error' marks
+        // the run failed; the evidence is still emitted; exit code 4.
+        {
+            const child = spawnRestore(envPath, { selftest: 'step-error' });
+            childProcesses.push(child);
+            const boot = await child.nextMessage(30000);
+            assert.strictEqual(boot.ready, true, 'selftest child restores before failing');
+            child.child.stdin.write(JSON.stringify({ input: line('look') }) + '\n');
+            const step = await child.nextMessage(30000);
+            assert.strictEqual(step.step.status, 'error', 'failing step evidence emitted');
+            child.child.stdin.write(JSON.stringify({ op: 'exit' }) + '\n');
+            const code = await awaitExit(child, 10000);
+            assert.strictEqual(code, 4, 'returned-error candidate exits 4');
+        }
+        assertBaselineUnchanged(baseline, 'returned-error candidate failure');
+
+        // (b) Thrown exception while handling a request: caught, evidence
+        // emitted with failed:true, exit code 4.
+        {
+            const child = spawnRestore(envPath, { selftest: 'throw' });
+            childProcesses.push(child);
+            const boot = await child.nextMessage(30000);
+            assert.strictEqual(boot.ready, true, 'selftest child restores before throwing');
+            child.child.stdin.write(JSON.stringify({ input: line('look') }) + '\n');
+            const err = await child.nextMessage(30000);
+            assert.ok(err.error && err.error.includes('selftest'), 'exception evidence emitted: ' + JSON.stringify(err));
+            assert.strictEqual(err.failed, true, 'failure flag set on the emitted error');
+            child.child.stdin.write(JSON.stringify({ op: 'exit' }) + '\n');
+            const code = await awaitExit(child, 10000);
+            assert.strictEqual(code, 4, 'throwing candidate exits 4');
+        }
+        assertBaselineUnchanged(baseline, 'throwing candidate failure');
+
+        // (c) EOF (stdin closed) after a failure also exits nonzero, not 0.
+        {
+            const child = spawnRestore(envPath, { selftest: 'step-error' });
+            childProcesses.push(child);
+            await child.nextMessage(30000);
+            child.child.stdin.write(JSON.stringify({ input: line('look') }) + '\n');
+            await child.nextMessage(30000);
+            child.child.stdin.end(); // EOF
+            const code = await awaitExit(child, 10000);
+            assert.strictEqual(code, 4, 'EOF after failure exits 4');
+        }
+        assertBaselineUnchanged(baseline, 'EOF-after-failure');
+    } finally {
         for (const child of childProcesses) {
             try { child.child.kill(); await awaitExit(child, 5000); } catch { /* already gone */ }
         }

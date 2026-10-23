@@ -14,7 +14,7 @@ const {
 const { restoreCheckpoint } = require('../lib/checkpoint-core.js');
 const { validateEnvelope, canonicalPayloadString, sha256Hex, CheckpointError } = require('../lib/checkpoint-format.js');
 
-const PREFIX = ['look', 'take brass key'];
+const PREFIX = ['look', 'seed 42', 'take brass key'];
 const EXPECTED = { storySha256: STORY_SHA256, storySize: STORY.length, runtimeRevision: REVISION };
 
 function capturedEnvelope() {
@@ -69,11 +69,77 @@ test('payload tampering is caught by the integrity digest', () => {
     const tampered2 = JSON.parse(JSON.stringify(env));
     tampered2.payload.quetzalB64 = tampered2.payload.quetzalB64.slice(0, -4) + 'AAAA';
     expectCode(() => validateEnvelope(tampered2, EXPECTED), 'E_DIGEST');
-    // And a recomputed digest cannot hide an inconsistent mode/seed pair.
+});
+
+test('unseeded checkpoints are rejected, not silently accepted (E_RNG)', () => {
+    // A fully honest envelope whose game is in unseeded mode: the digest is
+    // recomputed, so only the policy check can refuse it.  Host Math.random
+    // state can be neither captured nor reconstructed (bridge section 8), and
+    // Issue #12 requires unsupported modes to fail explicitly.
+    const env = capturedEnvelope();
+    const unseeded = JSON.parse(JSON.stringify(env));
+    unseeded.payload.rng = { seed: 0, mode: 'unseeded' };
+    unseeded.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(unseeded.payload));
+    expectCode(() => validateEnvelope(unseeded, EXPECTED), 'E_RNG');
+    // An envelope claiming seeded mode with seed 0 is equally unsupported.
+    const zeroSeed = JSON.parse(JSON.stringify(env));
+    zeroSeed.payload.rng = { seed: 0, mode: 'seeded' };
+    zeroSeed.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(zeroSeed.payload));
+    expectCode(() => validateEnvelope(zeroSeed, EXPECTED), 'E_RNG');
+});
+
+test('malformed nested recovery state is rejected before any interpreter exists (A34)', () => {
+    const env = capturedEnvelope();
+
+    // io: {} passes a shallow object check but faults the continuation only
+    // when the next input arrives (streams[2] access).
+    const ioEmpty = JSON.parse(JSON.stringify(env));
+    ioEmpty.payload.io = {};
+    ioEmpty.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(ioEmpty.payload));
+    expectCode(() => validateEnvelope(ioEmpty, EXPECTED), 'E_STRUCTURE');
+
+    // A stream table of the wrong shape.
+    const ioStreams = JSON.parse(JSON.stringify(env));
+    ioStreams.payload.io.streams = [0, 1, [], [], {}];
+    ioStreams.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(ioStreams.payload));
+    expectCode(() => validateEnvelope(ioStreams, EXPECTED), 'E_STRUCTURE');
+
+    // windows.main: null loses the captured transcript prefix silently.
+    const noMain = JSON.parse(JSON.stringify(env));
+    noMain.payload.windows.main = null;
+    noMain.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(noMain.payload));
+    expectCode(() => validateEnvelope(noMain, EXPECTED), 'E_STRUCTURE');
+
+    // A malformed window entry (missing text).
+    const badWindow = JSON.parse(JSON.stringify(env));
+    delete badWindow.payload.windows.upper.text;
+    badWindow.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badWindow.payload));
+    expectCode(() => validateEnvelope(badWindow, EXPECTED), 'E_STRUCTURE');
+
+    // Transcript/window disagreement: sections describe different states.
     const inconsistent = JSON.parse(JSON.stringify(env));
-    inconsistent.payload.rng.seed = 42; // mode still says 'unseeded'
+    inconsistent.payload.publishedOutput.output += 'EXTRA';
     inconsistent.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(inconsistent.payload));
     expectCode(() => validateEnvelope(inconsistent, EXPECTED), 'E_STRUCTURE');
+
+    // Character readData without the store variable.
+    const charEmpty = JSON.parse(JSON.stringify(env));
+    charEmpty.boundary = { kind: 'char' };
+    charEmpty.payload.readData = {};
+    charEmpty.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(charEmpty.payload));
+    expectCode(() => validateEnvelope(charEmpty, EXPECTED), 'E_STRUCTURE');
+
+    // Line readData with an out-of-range store variable.
+    const badStorer = JSON.parse(JSON.stringify(env));
+    badStorer.payload.readData.storer = 999;
+    badStorer.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badStorer.payload));
+    expectCode(() => validateEnvelope(badStorer, EXPECTED), 'E_STRUCTURE');
+
+    // Boundary maxlen out of range.
+    const badMaxlen = JSON.parse(JSON.stringify(env));
+    badMaxlen.boundary.maxlen = 999;
+    badMaxlen.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badMaxlen.payload));
+    expectCode(() => validateEnvelope(badMaxlen, EXPECTED), 'E_BOUNDARY');
 });
 
 test('truncated and oversized payloads are rejected', () => {
@@ -101,7 +167,7 @@ test('halted checkpoints must carry quit=true and no readData', () => {
     // Drive to the endgame and quit to obtain a genuine halted envelope.
     const src = createInstance();
     src.start();
-    const path = ['look', 'take brass key', 'north', 'unlock vault door with brass key', 'open vault door', 'north', 'put brass key on pedestal', 'quit'];
+    const path = ['look', 'seed 42', 'take brass key', 'north', 'unlock vault door with brass key', 'open vault door', 'north', 'put brass key on pedestal', 'quit'];
     let settled = null;
     for (const t of path) settled = src.send({ kind: 'line', text: t });
     assert.strictEqual(settled.status, 'halted', 'endgame quit must halt');

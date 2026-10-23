@@ -37,7 +37,6 @@ const FORMAT = 'zirp-g1b-checkpoint';
 const SCHEMA_VERSION = 1;
 const SUPPORTED_BOUNDARIES = ['line', 'char', 'halted'];
 const RUNTIME_NAME = 'ifvms.js ZVM';
-
 // Generous size caps: a checkpoint for the 88,576-byte fixture is ~250 KB of
 // JSON (UMem is ~47 KB raw -> ~63 KB base64; output/transcript small).  Caps
 // exist so a hostile or corrupt envelope is rejected before parsing deep
@@ -113,6 +112,9 @@ function validateEnvelope(envelope, expected) {
     if (b.kind === 'line' && !Number.isInteger(b.maxlen)) {
         throw new CheckpointError('E_BOUNDARY', 'line boundary requires the pending request maxlen');
     }
+    if (b.kind === 'line' && (b.maxlen < 0 || b.maxlen > 255)) {
+        throw new CheckpointError('E_BOUNDARY', 'line boundary maxlen out of range: ' + b.maxlen);
+    }
 
     const p = envelope.payload;
     if (!isPlainObject(p)) throw new CheckpointError('E_STRUCTURE', 'payload section missing');
@@ -127,11 +129,22 @@ function validateEnvelope(envelope, expected) {
     if (!isPlainObject(p.rng) || !isInt32(p.rng.seed) || (p.rng.mode !== 'seeded' && p.rng.mode !== 'unseeded')) {
         throw new CheckpointError('E_STRUCTURE', 'rng section invalid');
     }
-    if ((p.rng.mode === 'seeded') !== (p.rng.seed !== 0)) {
-        throw new CheckpointError('E_STRUCTURE', 'rng mode contradicts seed value');
+    // Unseeded recovery is UNSUPPORTED and must fail, not silently switch
+    // semantics: seed 0 means draws come from the restoring process's
+    // Math.random (the interpreter's only host-entropy point), whose state
+    // the envelope neither captures, injects, nor records -- violating the
+    // "captured, injected, or recorded" requirement in
+    // docs/architecture/state-and-vm-bridge.md §8 and Issue #12's "unsupported
+    // modes must fail explicitly".  Checkpointable boundaries therefore
+    // require the game to be in seeded (predictable) mode.
+    if (p.rng.mode !== 'seeded' || p.rng.seed === 0) {
+        throw new CheckpointError('E_RNG',
+            'unseeded checkpoints are rejected: host randomness cannot be reconstructed across processes (bridge §8); put the game in seeded mode (e.g. the fixture SEED command) before checkpointing');
     }
     if (!isPlainObject(p.io)) throw new CheckpointError('E_STRUCTURE', 'io section missing');
+    validateIo(p.io);
     if (!isPlainObject(p.windows)) throw new CheckpointError('E_STRUCTURE', 'windows section missing');
+    validateWindows(p.windows);
     if (!isPlainObject(p.publishedOutput)
         || typeof p.publishedOutput.output !== 'string'
         || typeof p.publishedOutput.gridOutput !== 'string'
@@ -155,11 +168,21 @@ function validateEnvelope(envelope, expected) {
     } else {
         const rd = p.readData;
         if (!isPlainObject(rd)) throw new CheckpointError('E_STRUCTURE', 'non-halted checkpoint requires readData');
+        // The store variable is what the resumed read writes its result to:
+        // it is required for BOTH boundary kinds and must be a Z-machine
+        // variable number.
+        if (!Number.isInteger(rd.storer) || rd.storer < 0 || rd.storer > 255) {
+            throw new CheckpointError('E_STRUCTURE', 'readData.storer (store variable) required, 0..255');
+        }
+        for (const opt of ['routine', 'time']) {
+            if (rd[opt] !== undefined && (!Number.isInteger(rd[opt]) || rd[opt] < 0)) {
+                throw new CheckpointError('E_STRUCTURE', 'readData.' + opt + ' must be a non-negative integer');
+            }
+        }
         if (b.kind === 'line') {
             if (!isArrayOfInts(rd.buffer, CAPS.readDataBufferEntries)) throw new CheckpointError('E_STRUCTURE', 'line readData.buffer invalid');
             if (!Number.isInteger(rd.bufaddr) || rd.bufaddr < 0 || rd.bufaddr > 0xFFFFFF) throw new CheckpointError('E_STRUCTURE', 'line readData.bufaddr invalid');
             if (!Number.isInteger(rd.parseaddr) || rd.parseaddr < 0 || rd.parseaddr > 0xFFFFFF) throw new CheckpointError('E_STRUCTURE', 'line readData.parseaddr invalid');
-            if (rd.storer !== undefined && !Number.isInteger(rd.storer)) throw new CheckpointError('E_STRUCTURE', 'line readData.storer invalid');
         } else if (rd.buffer !== undefined) {
             throw new CheckpointError('E_STRUCTURE', 'char readData must not carry a line buffer');
         }
@@ -174,8 +197,78 @@ function validateEnvelope(envelope, expected) {
         throw new CheckpointError('E_DIGEST', 'payload digest mismatch: envelope says ' + integ.payloadSha256 + ', payload hashes to ' + actual);
     }
 
+    // Cross-section consistency, checked only AFTER the payload digest
+    // verifies (there is no point interpreting sections a tampered envelope
+    // may have rewritten): the shim's published buffer-window text IS the
+    // transcript (and the grid window's text is the grid transcript), so a
+    // disagreement means the envelope's sections describe different states
+    // and continuation would lose or republish text.
+    if (p.publishedOutput.output !== p.windows.main.text) {
+        throw new CheckpointError('E_STRUCTURE', 'published transcript disagrees with the main window text');
+    }
+    if (p.windows.upper ? p.publishedOutput.gridOutput !== p.windows.upper.text : p.publishedOutput.gridOutput !== '') {
+        throw new CheckpointError('E_STRUCTURE', 'published grid transcript disagrees with the upper window text');
+    }
+
     if (!isPlainObject(envelope.capabilities)) throw new CheckpointError('E_STRUCTURE', 'capabilities section missing');
     return true;
+}
+
+// Deep validation of the nested io state restore consumes: a missing or
+// malformed stream entry or window-selector field faults the continuation
+// only when the next input arrives, so it must be rejected here, before any
+// interpreter is constructed (review finding on PR #37: `io: {}` passed
+// validation and then threw on `streams[2]` mid-turn).
+function validateIo(io) {
+    const int = (name, lo, hi) => {
+        if (!Number.isInteger(io[name]) || io[name] < lo || io[name] > hi) {
+            throw new CheckpointError('E_STRUCTURE', 'io.' + name + ' must be an integer in [' + lo + ', ' + hi + ']');
+        }
+    };
+    for (const name of ['reverse', 'bold', 'italic', 'mono', 'transcript']) int(name, 0, 255);
+    int('bg', -1, 255);
+    int('fg', -1, 255);
+    int('currentwin', 0, 1);
+    int('height', 0, 255);
+    int('glkheight', 0, 255);
+    int('maxheight', 0, 255);
+    int('seenheight', 0, 255);
+    int('width', 0, 255);
+    int('row', 0, 1023);
+    int('col', 0, 1023);
+    const s = io.streams;
+    if (!Array.isArray(s) || s.length !== 5) {
+        throw new CheckpointError('E_STRUCTURE', 'io.streams must be the 5-slot stream table');
+    }
+    if (s[0] !== 0 && s[0] !== 1) throw new CheckpointError('E_STRUCTURE', 'io.streams[0] (input stream 1 flag) must be 0 or 1');
+    if (s[1] !== 0 && s[1] !== 1) throw new CheckpointError('E_STRUCTURE', 'io.streams[1] (screen stream flag) must be 0 or 1');
+    if (!isPlainObject(s[2])) throw new CheckpointError('E_STRUCTURE', 'io.streams[2] (transcript) must be an object');
+    if (!Array.isArray(s[3])) throw new CheckpointError('E_STRUCTURE', 'io.streams[3] (command log) must be an array');
+    if (!isPlainObject(s[4])) throw new CheckpointError('E_STRUCTURE', 'io.streams[4] (memory-stream state) must be an object');
+}
+
+// Window entries: the main window is required (continuation output targets
+// it, and the transcript consistency check reads it); upper/status may be
+// null for versions/States that never opened them, but when present each
+// must be well-formed (review finding: `windows.main: null` passed and the
+// continuation silently lost the captured transcript prefix).
+function validateWindows(windows) {
+    const one = (name, entry) => {
+        if (entry === null) return;
+        if (!isPlainObject(entry)
+            || typeof entry.text !== 'string' || entry.text.length > CAPS.outputChars
+            || !Number.isInteger(entry.cursorX) || entry.cursorX < 0 || entry.cursorX > 1023
+            || !Number.isInteger(entry.cursorY) || entry.cursorY < 0 || entry.cursorY > 1023
+            || !Number.isInteger(entry.rock) || entry.rock < 0 || entry.rock > 0x7FFFFFFF) {
+            throw new CheckpointError('E_STRUCTURE', 'windows.' + name + ' must be null or {text, cursorX, cursorY, rock}');
+        }
+    };
+    if (windows.main === null || windows.main === undefined) {
+        throw new CheckpointError('E_STRUCTURE', 'windows.main is required (the transcript consistency check and restored output depend on it)');
+    }
+    one('main', windows.main);
+    one('upper', windows.upper === undefined ? null : windows.upper);
+    one('status', windows.status === undefined ? null : windows.status);
 }
 
 module.exports = {

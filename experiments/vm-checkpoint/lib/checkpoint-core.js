@@ -53,6 +53,17 @@ function captureCheckpoint(adapter, context) {
         kind = tail.request === 'char' ? 'char' : 'line';
     }
 
+    // Unseeded capture is refused at the source, not just at restore: with
+    // seed 0 the interpreter draws from this process's Math.random, whose
+    // state a checkpoint can neither capture nor reconstruct -- restoring
+    // would silently switch the RNG semantics to the restoring process's
+    // entropy (state-and-vm-bridge §8; Issue #12 requires unsupported modes
+    // to fail explicitly).  Seeded mode is the supported deterministic path.
+    if (vm.xorshift_seed === 0) {
+        throw new CheckpointError('E_RNG',
+            'cannot checkpoint an unseeded interpreter: draws come from host Math.random whose state is not reconstructable; put the game in seeded mode first (e.g. the fixture SEED command)');
+    }
+
     // Upstream primitive: full Quetzal (IFhd + UMem + Stks) at the current pc.
     const quetzal = Buffer.from(vm.save_file(vm.pc, 1));
 
@@ -72,7 +83,7 @@ function captureCheckpoint(adapter, context) {
         headerBlockB64: headerBlock.toString('base64'),
         rng: {
             seed: vm.xorshift_seed | 0,
-            mode: vm.xorshift_seed === 0 ? 'unseeded' : 'seeded',
+            mode: 'seeded', // unseeded capture is refused above (E_RNG)
         },
         io: cloneJson(vm.io),
         readData: kind === 'halted' ? null : cloneJson(vm.read_data),
@@ -136,7 +147,7 @@ function capabilityStatement() {
             callFramesAndStacks: 'serialized (Quetzal Stks, in-use region)',
             storyIdentity: 'serialized (Quetzal IFhd release/serial/checksum) + envelope story digest',
             interpreterHeaderFields: 'serialized (header block [0x00..0x40) written back verbatim after restore_file; update_header() recomputation is window-set-dependent and must not stand in for the source values)',
-            rng: 'serialized (xorshift seed; mode derived: seed 0 = unseeded Math.random path)',
+            rng: 'seeded mode only (xorshift seed serialized and re-applied after restore_file); unseeded capture and restore are REJECTED with E_RNG -- host Math.random state can be neither captured nor reconstructed (bridge section 8), and Issue #12 requires unsupported modes to fail explicitly',
             ioStreamsAndFlags: 'serialized (plain-data clone)',
             pendingInput: 'serialized (read_data + re-issued Glk request)',
             windowTextAndCursor: 'serialized (main/upper/status window objects)',
@@ -150,7 +161,7 @@ function capabilityStatement() {
             graphics: 'unsupported (no picture opcode support in vendored ZVM)',
             glkFileStreams: 'unsupported (glksim records them as unexpected)',
         },
-        unsupported: ['timed-input', 'sound', 'graphics', 'glk-file-streams', 'undo-history', 'interpreter-number-version'],
+        unsupported: ['timed-input', 'sound', 'graphics', 'glk-file-streams', 'undo-history', 'interpreter-number-version', 'unseeded-rng'],
         schemaVersion: SCHEMA_VERSION,
     };
 }

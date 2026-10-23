@@ -72,6 +72,7 @@ function spawnRestore(envelopePath, opts = {}) {
     if (opts.outputLimit) args.push('--output-limit', String(opts.outputLimit));
     if (opts.stallSerializeMs) args.push('--stall-serialize-ms', String(opts.stallSerializeMs));
     if (opts.out) args.push('--out', opts.out);
+    if (opts.selftest) args.push('--selftest', opts.selftest);
     const child = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
 
     const result = { ready: false, readyError: null, fingerprint: null, steps: [], exitCode: null, stderr: '' };
