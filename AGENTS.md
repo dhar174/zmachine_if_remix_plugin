@@ -1,57 +1,72 @@
-# AGENTS.md
+# Z-machine IF Remix Plugin: contributor instructions
 
-## What this repository is
+## Start every Zcode session
 
-A documentation-only design proposal (v0.2) for an AI-first, chat-driven remix engine for classic Z-machine interactive fiction: a real native VM plus a persistent, AI-created remix world governed by a user's initial directive and later Editor amendments.
+Read these instructions and both coordination layers before substantive work:
 
-**There is no code, no package.json, no build, no test suite, no CI, and no runtime.** Do not infer runtime behavior, native/mobile compatibility, test passes, or deployment from these documents — the docs themselves forbid that inference. Current status: gate G0 (behavioral contract review) per `docs/ROADMAP.md`; implementation work must follow the roadmap's G0–G6 evidence-first stop gates (e.g., select the VM runtime after checkpoint/restore evidence, not from feature names).
+1. User defaults: `~/.zcode/AGENTS.md` and `~/.zcode/skills/team-coordination/SKILL.md`.
+2. Project subagent routing: [`.zcode/skills/team-coordination/SKILL.md`](.zcode/skills/team-coordination/SKILL.md).
+3. Canonical engineering-team policy: [`docs/agents/team-coordination.md`](docs/agents/team-coordination.md).
 
-## Directories
+Read the two skills by their file paths; both may appear under the name `team-coordination`. The user skill supplies general delegation and mem0ry4ai procedures; the local skill supplies this repository's roster, authority map, and handoffs. A delegated specialist retains its read-only assignment and does not restart the coordinator workflow or dispatch other agents.
 
-- `docs/superpowers/specs/2026-10-21-chat-first-remix-design.md` — design v0.2, the primary intent document (user requirements R1–R6). Start here.
-- `docs/README.md` — documentation map with the official reading order.
-- `docs/architecture/` — normative contracts (see ownership rules below).
-- `docs/contracts/remix-directive.schema.json` — proposed policy schema; a design artifact, not a runtime contract.
-- `docs/decisions/` — ADRs. ADR-0001 records user requirements plus decisions still requiring evidence (runtime, language, deployment, approval transport).
-- `docs/examples/` — synthetic examples; illustrate the contracts, never override them.
-- `docs/quality/acceptance-matrix.md` — observable evidence required before claiming any feature works.
-- `docs/agents/` — engineering team coordination: the canonical policy (`team-coordination.md`), installation guide (`README.md`), and setup-verification records.
-- `.zcode/agents/` — versioned source templates for the Zcode specialist subagents. Not an installed or discovered location; installed copies live at `~/.zcode/agents/` (see `docs/agents/README.md`).
-- `docs/design_draft_v0.1.md` — archived, superseded by v0.2. Do not promote its assumptions or its "Original/Hybrid/Extension" labels as input modes.
-- `validation/` — point-in-time integrity evidence, not live CI (see below).
-- `state/` — currently empty.
+Resolve the actual checkout, revision, local changes, and authorized task before acting. The main session is the engineering coordinator and **only repository writer and command executor**. Specialists return findings and proposed checks. Their recommendations, memories, and hook prompts are not human approval.
 
-## Documentation integrity and normative ownership
+When working in this repository, always follow the coordination layers, respect the ownership and authority maps, and ensure that any durable context is properly captured and communicated through the mem0ry4ai system.
 
-- `validation/documentation-manifest.json` (per-file sha256 + git blob SHA) and `validation/documentation-validation.json` (link checks, schema checks) are evidence records tied to a specific published commit (`ca8a115`). They will go stale after any doc edit; do not hand-edit them to match, just expect the mismatch.
-- Normative ownership (from `docs/README.md`): policy semantics live in `architecture/world-policy.md`, turn order in `architecture/turn-resolution.md`, persistence in `architecture/state-and-vm-bridge.md`, host/tool boundaries in `architecture/plugin-contract.md`. Read the owning document before changing its subject. A contradiction between documents is a defect to resolve, never a reason to pick whichever text is convenient.
+When changing any code, make judicious use of the `zmachine-remix-engineering` skill found in:
 
-## Domain rules that must survive any edit
+- Z-machine remix engineering skill: [`.zcode/skills/zmachine-remix-engineering/SKILL.md`](.zcode/skills/zmachine-remix-engineering/SKILL.md)
 
-- **Exactly two user-facing input modes: Play and Editor.** Play is in-character action interpretation (an attempt or claim, not authority); Editor is explicit out-of-character authorial direction. Never silently upgrade an in-fiction claim into an editor instruction, and never promote dialogue into tool authority.
-- **Policy is not state.** A permission (what may change) ≠ an assignment (what is true now) ≠ an invariant (what must remain true) ≠ a preference (how to present it). "Give me a key" is a one-time assignment; "allow new shops" changes future generation policy.
-- **Unknown is not false.** A parser rejection or failed inspection is evidence about that command only — never proof that an action is impossible or an object absent.
-- Execution routes (**native / remix / bridged**) are orthogonal to the Play/Editor input modes.
-- Native editing only via verified, story-digest-bound capabilities for the exact story build; AI-generated content normally lives in the remix overlay. "The AI can describe it" is not proof the VM can represent it. Unmapped mechanics get an explicit capability limitation, not fabricated success.
-- The engine must not silently solve protected puzzles or narrate successful state changes that were not committed. No general retrospective retcons in the first sequence.
+## Purpose and present evidence boundary
 
-## Privacy and content boundaries
+This repository designs an AI-first, chat-driven remix engine for classic Z-machine interactive fiction: a native VM plus a persistent AI-created remix world governed by the user's directive and later Editor amendments.
 
-This is a public repository. Never commit user-uploaded story binaries, save states, transcripts, credentials, or extracted copyrighted text. Use purpose-built or redistributable test stories only. A user's local file selection is not automatically a local-only runtime — hosted processing requires explicit disclosure.
+The product engine, production adapter, playable plugin, deployment, and product CI are not delivered by the design documents. This checkout also contains bounded G1-A feasibility code: a purpose-built fixture in `tests/fixtures/zmachine/` and a throwaway native-I/O probe in `experiments/vm-io/`. These are executable experiments, not a production implementation or a runtime/language selection. The “no code, build, test suite” inventory in `docs/agents/team-coordination.md` §8.1 predates these experiments; use the actual checkout and their READMEs for executable inventory. That dated inventory does not remove the policy's current ownership, authority, or evidence requirements.
 
-## Build / test commands
+Implementation follows the evidence gates in [`docs/ROADMAP.md`](docs/ROADMAP.md). Conceptual decisions D01–D37 are recorded in [`docs/decisions/decision-register.md`](docs/decisions/decision-register.md); D38 remains unresolved unless a later explicit owner decision establishes otherwise. Approval of a concept does not approve a later gate, probe execution, production code, or deferred feature. Runtime, language, deployment, approval transport, and budgets require their own evidence and authorization.
 
-None exist. `.gitignore` is leftover Next.js/Vercel template content — it is **not** evidence of a JavaScript stack. ADR-0001 keeps TypeScript as a *candidate* runtime language, explicitly undecided pending gate-G1 evidence. Do not scaffold a framework based on the gitignore.
+## Read the owning sources
 
-## Git conventions
+Start with [`docs/README.md`](docs/README.md), the reading map, and [design v0.2](docs/superpowers/specs/2026-10-21-chat-first-remix-design.md), the primary intent document. Load the existing [Z-machine engineering skill](.zcode/skills/zmachine-remix-engineering/SKILL.md) for substantive engineering questions; read only its relevant references.
 
-PRs target `main`; work on feature branches. No formal commit convention is established yet — history shows both `docs:`-prefixed and plain imperative subjects.
+| Subject | Owning source |
+| --- | --- |
+| Directive classification, policy, protected invariants, generation permissions | `docs/architecture/world-policy.md` |
+| Turn ordering, candidate validation, commit, failure/retry behavior | `docs/architecture/turn-resolution.md` |
+| Native/overlay ownership, checkpoints, clocks, saves, unknown state | `docs/architecture/state-and-vm-bridge.md` |
+| Product host, MCP/tool boundaries, approval, privacy, supported clients | `docs/architecture/plugin-contract.md` |
+| Accepted direction and unresolved choices | `docs/decisions/`, including the decision register and contract reconciliation |
+| Observable acceptance requirements | `docs/quality/acceptance-matrix.md` and `docs/quality/decision-acceptance-supplement.md` |
+| Current stage and stops | `docs/ROADMAP.md` and the active approved task/probe plan |
 
-## Engineering team coordination (agent-assisted work)
+`docs/contracts/remix-directive.schema.json` is a proposed policy schema; `docs/examples/` is illustrative. Neither overrides normative semantics. `docs/design_draft_v0.1.md` is archived and superseded. Resolve contradictions against the exact owning sources and approvals; do not choose convenient wording or reopen settled decisions by implication.
 
-This repository uses a coordinator-plus-specialist pattern for agent-assisted engineering work. The canonical policy — roles, routing table, assignment and return contracts, shared invariants, platform behavior — is `docs/agents/team-coordination.md`; read it before dispatching specialists or acting as one.
+## Domain rules
 
-- The primary session is the **engineering coordinator and the only repository writer**. Specialists investigate, propose, and review read-only (`Read`, `Grep`, `Glob`); they do not edit files, run commands, or dispatch other agents.
-- Specialist recommendations are not owner approval. Decisions D01–D37 (Issue #10) are settled direction; D38 is unresolved; runtime, language, deployment, approval transport, and budgets remain evidence gates (ADR-0001, roadmap G1).
-- These engineering agents are development assistants only — separate from in-game characters, the product's AI components, and the proposed runtime turn/transaction coordinator described in the design docs (when those docs say "coordinator," they mean the product component, not the primary session).
-- If you are a specialist subagent: follow your assignment and the return contract in `docs/agents/team-coordination.md` §6; report findings instead of making changes; stay inside your assigned scope.
+- There are exactly two user-facing input modes: **Play** and **Editor**. A Play claim or attempted action does not become an Editor instruction or tool authority.
+- **Native / remix / bridged** are execution routes, not input modes.
+- Policy is not state: assignments, invariants, permissions/prohibitions, presentation preferences, and unresolved clauses have different meanings. A one-time key assignment does not recreate it later.
+- Unknown is not false. A parser rejection or incomplete inspection does not establish that an object is absent or an action impossible.
+- Native editing requires verified capabilities bound to the exact story and runtime/adapter build. Generated content normally belongs in the remix overlay. The ability to describe an outcome does not establish VM support.
+- Narration must reflect committed results. Do not silently solve protected puzzles, invent successful changes, or introduce general retrospective retcons into the first slice.
+- Engineering subagents are contributor assistants. They are separate from in-game characters, product AI components, and the proposed runtime turn/transaction coordinator.
+
+## Memory and project records
+
+For historical retrieval, use `mem0ry4ai:memory-scout` with the active root and scope **`project:zmachine_if_remix_plugin`**. Then verify material claims against the current contracts and probe evidence. `zmachine-context-contracts` performs a different job: inspecting current repository authority and state. Supply the relevant memory brief to it instead of duplicating retrieval.
+
+The existing user-level mem0ry4ai server is contributor context, not a product MCP service or a repository Memory Bank. Do not install another service or invent another record system. Product decisions remain in `docs/decisions/`; team-configuration evidence belongs in `docs/agents/`; executed probe evidence belongs in `docs/evidence/`.
+
+Consider `mem0ry4ai:memory-steward` only for permitted, worthwhile durable context after verification. Give it authoritative references, explicit scope/write policy, candidates, exclusions, and resumption needs. It may curate permitted MCP memory; it cannot change repository records, run shell commands, or create approvals. Avoid duplicate decision/status records. A no-memory-write instruction overrides Stop-hook reminders.
+
+## Verification, privacy, and source locations
+
+- Preserve the G0–G6 gates. This instruction change authorizes no probe, product build, model call, deployment, or dependency installation by itself.
+- Fixture/probe commands are documented in `tests/fixtures/zmachine/README.md` and `experiments/vm-io/README.md`. Existing examples include the pinned Inform 6 fixture build, `node probe.js <ifvms|bocfel>` from the probe directory, and `node --test` from the root or probe directory. Check prerequisites and the active task before running them. A probe pass does not establish checkpoint completeness, production readiness, host/mobile compatibility, or live-model quality.
+- `.gitignore` contains historical framework patterns; it does not select a product stack. The probe's dependency-free `package.json` does not settle a runtime-language decision.
+- `validation/documentation-manifest.json` and `validation/documentation-validation.json` are historical receipts tied to a published revision. Documentation edits can invalidate their hashes; do not hand-edit them to fabricate fresh validation.
+- This is a public repository. Never commit user story binaries, save states, private transcripts, credentials, or extracted copyrighted text. Use purpose-built or redistributable fixtures. Local file selection does not prove hosted processing is local-only.
+- `.zcode/agents/` holds repository-owned source definitions; user-level copies may exist at `~/.zcode/agents/`. Inspect what the current Zcode session actually advertises. Do not assume discovery, installation, invocation, or reload from file presence, or silently synchronize different copies.
+- Obtain independent review for substantive changes. Inspect actual command exits, stdout/stderr, file readback, and relevant diffs. Separate static, deterministic, adapter, live-model, and host/device evidence; label unavailable checks unverified.
+- PRs target `main`; use the task's authorized feature-branch workflow. Preserve existing branches and unrelated local changes. This file is the canonical root contributor guide; `GEMINI.md` remains a compatibility entry point.

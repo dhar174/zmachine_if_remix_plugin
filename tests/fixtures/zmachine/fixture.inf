@@ -1,0 +1,241 @@
+! ==============================================================================
+! G1A IO PROBE FIXTURE  --  zmachine_if_remix_plugin Issue #11 (G1-A)
+! ------------------------------------------------------------------------------
+! An original, purpose-built, redistributable Z-machine v5 story designed to
+! expose interpreter I/O and state behavior for the G1-A native I/O probe.
+! This is a diagnostic fixture, not a production game.
+!
+! Rights: original work authored for the zmachine_if_remix_plugin project.
+! Redistribution permitted; see README.md for the full statement.
+!
+! Fixture behaviors (full mapping table in README.md):
+!   F01  startup side effect before the first input prompt
+!   F02  recognizable initial room and LOOK
+!   F03  INVENTORY and one movable item
+!   F04  valid movement between rooms
+!   F05  recognized-but-failed action that consumes a turn
+!   F06  turn counter and scheduled event
+!   F07  genuine character-input menu (read_char, never line input)
+!   F08  controlled random outcome, incl. deterministic seeding
+!   F09  two distinct objects with identical display names
+!   F10  locked progression gate (protected puzzle)
+!   F11  designated extension anchor for future bridge testing
+!   F12  cleanly observable terminal state
+!
+! Probe assertions must use the stable "[Fxx:...]" markers printed below,
+! never prose.  The markers are diagnostic output, not story content.
+!
+! Build (see README.md):
+!   inform6 -v5 +include_path=lib fixture.inf -o fixture.z5
+! ==============================================================================
+
+Constant Story    "G1A IO Probe Fixture";
+Constant Headline "^An original purpose-built diagnostic story for the zmachine_if_remix_plugin G1-A probe. Bracketed [Fxx:...] lines are probe evidence, not prose.^";
+Release 1;
+Serial "261022";
+
+Include "Parser";
+Include "VerbLib";
+
+! ------------------------------------------------------------------ globals
+
+! F01: this value is changed by Initialise(), i.e. by story code that runs
+! before the first input prompt.  The nonzero value printed later (by the
+! MARKERS command) proves the startup side effect persisted in state.
+Global startup_counter = 0;
+
+! ------------------------------------------------------------------ daemon
+
+! F06: runs at the end of every non-meta turn (library: AdvanceWorldClock ->
+! RunTimersAndDaemons).  Prints the post-increment turn counter so the probe
+! can measure turn advancement by marker deltas, and a scheduled event that
+! fires exactly once, on turn 3.
+!
+! This is deliberately an OBJECT daemon (a parentless object with a daemon
+! property), not a StartDaemon(<routine>) call: the library 6.12.8
+! routine-daemon path decodes the entry as an object number and performs a
+! property lookup on a packed routine address (undefined get_prop_addr
+! behavior; crashes the vendored ZVM).  The object form is well-defined under
+! any conformant interpreter.
+Object TurnDaemonObj
+    with daemon [;
+        print "[F06:turn=", turns, "]^";
+        if (turns == 3) {
+            print "[F06:event=chime] A distant chime sounds.^";
+        }
+    ];
+
+! --------------------------------------------------------------- Initialise
+
+[ Initialise;
+    ! F01: executes before the first prompt; the value 7 is distinctive so
+    ! that probe evidence cannot be confused with an uninitialized zero.
+    startup_counter = 7;
+    location = Chamber;
+    print "[F01:startup=", startup_counter, "]^";
+    StartDaemon(TurnDaemonObj);
+    "G1A fixture initialised. Type MARKERS for internal state, MENU for the character-input test.";
+];
+
+! -------------------------------------------------------------------- rooms
+
+Object Chamber "Probe Chamber"
+    with description "[LOC:chamber] You are in the Probe Chamber, a bare stone room. A heavy stone panel is set into the east wall. A doorway leads north.",
+    n_to Gallery,
+    has light;
+
+Object Gallery "Token Gallery"
+    with description "[LOC:gallery] You are in the Token Gallery. Small tokens lie scattered here. A doorway leads south, and a reinforced vault door is set into the north wall.",
+    s_to Chamber,
+    n_to VaultDoor,
+    has light;
+
+Object Vault "Records Vault"
+    with description "[LOC:vault] You are inside the Records Vault. A basalt pedestal stands in the middle.",
+    s_to VaultDoor,
+    has light;
+
+! -------------------------------------------------------------------- items
+
+! F03: the one movable item; also the key that opens the F10 gate.
+! (The library treats everything without static/scenery as takeable.)
+Object BrassKey "brass key" Chamber
+    with name 'brass' 'key',
+        initial "A small brass key lies here.",
+        description "[F03:item=brass-key] A small brass key. The fixture expects it to be carried to the vault.";
+
+! F05: a recognized noun whose TAKE is a real action that fails and, like any
+! non-meta action, consumes a turn (observable via the F06 daemon markers).
+Object StonePanel "stone panel" Chamber
+    with name 'stone' 'panel',
+        description "A heavy stone panel, firmly part of the east wall.",
+    has scenery;
+
+! F09: two distinct objects with IDENTICAL display names.  They are only
+! distinguishable by their 'name' adjectives (red/blue) and by internal object
+! number, which the INSPECT meta verb prints.  The parser's disambiguation
+! prompt is itself part of the expected evidence.
+Object TokenRed "brass token" Gallery
+    with name 'brass' 'token' 'red',
+        initial "One brass token lies here.",
+        description [ n;
+            n = self;
+            print "[F09:token-id=RED object#", n, "] A brass token stamped with a red dot.^";
+        ];
+
+Object TokenBlue "brass token" Gallery
+    with name 'brass' 'token' 'blue',
+        initial "One brass token lies here.",
+        description [ n;
+            n = self;
+            print "[F09:token-id=BLUE object#", n, "] A brass token stamped with a blue dot.^";
+        ];
+
+! F10: the locked progression gate.  Unlocking requires the F03 key; going
+! north while it is closed is refused by the library.  The probe documents
+! each step explicitly; nothing about this puzzle is solved silently.
+Object VaultDoor "vault door"
+    with name 'vault' 'door' 'reinforced',
+        description "A reinforced vault door set into the wall. It is firmly locked.",
+        door_to Vault,
+        door_dir [; if (location == Gallery) return n_to; return s_to; ],
+        found_in Gallery Vault,
+        with_key BrassKey,
+        after [;
+            ! after fires for the noun; in UNLOCK VAULT DOOR WITH BRASS KEY the
+            ! DOOR is the noun (the key is the second), and OPEN VAULT DOOR has
+            ! the door as noun -- so both gate markers live here.
+            Open: print "[F10:door-opened]^";
+            Unlock: print "[F10:door-unlocked]^";
+        ],
+    has static door lockable openable locked;
+
+! F11: the designated extension anchor.  A stable, named, fixed object at a
+! fixed location, reserved as the boundary for future native/remix bridge
+! testing (D07/D13 precursor).  F12 binds the terminal state to it.
+!
+! Library 6.12.8 has no "receive" property: PutOnSub/InsertSub run the
+! receiver's `after` property with the fake action ##Receive (the
+! receive_action global distinguishes PutOn from Insert).  An object property
+! literally named "receive" would compile as an ignored individual property.
+Object Pedestal "basalt pedestal" Vault
+    with name 'basalt' 'pedestal' 'anchor',
+        initial "A basalt pedestal stands in the middle of the vault.",
+        description "[F11:anchor=pedestal] A plain basalt pedestal. This object is the fixture's designated extension anchor for future bridge testing.",
+        after [;
+            Receive:
+                if (noun == BrassKey && receive_action == ##PutOn) {
+                    print "[F12:terminal=victory] The key settles into a groove on the pedestal. The fixture's terminal state is reached.^";
+                    deadflag = 2;
+                    rtrue;
+                }
+                print "The pedestal rejects it.^";
+                rtrue;
+        ],
+    has static supporter;
+
+! -------------------------------------------------------- diagnostic actions
+
+! F07: genuine character-input menu.  Uses the v5 read_char opcode (VAR:246)
+! via inline assembly.  This is a real character-input boundary: no line
+! parsing, no dictionary lookup.  A line of text fed to this prompt must NOT
+! resolve to a menu choice, and a single key here must NOT be treated as a
+! command line.
+[ MenuSub key;
+    print "[F07:menu-open] Press a single key: a = alpha, b = beta, q = quit menu.^";
+    @read_char key;
+    print "[F07:menu-key=", key, "]^";
+    switch (key) {
+        'a', 'A': print "[F07:menu-choice=alpha]^";
+        'b', 'B': print "[F07:menu-choice=beta]^";
+        'q', 'Q': print "[F07:menu-choice=quit]^";
+        default:  print "[F07:menu-choice=other]^";
+    }
+];
+
+! F08: controlled random outcome.  ROLL draws 1..6 from the interpreter's RNG;
+! SEED <n> uses the Z-spec predictable mode (random with negative argument)
+! so the probe can test within-interpreter determinism.  Cross-interpreter
+! sequence agreement is NOT required by the standard.
+[ RollSub r;
+    r = random(6);
+    print "[F08:roll=", r, "]^";
+];
+
+[ SeedSub;
+    if (parsed_number <= 0) {
+        print "[F08:seed=invalid] Provide a positive number, e.g. SEED 42.^";
+        rtrue;
+    }
+    random(-parsed_number);
+    print "[F08:seed=", parsed_number, "]^";
+];
+
+! Meta verbs: the library skips the entire turn sequence for meta actions, so
+! these diagnostics never advance game time or run daemons.
+
+! Prints internal state for probe assertions, including the F01 startup side
+! effect that Initialise() committed before the first prompt.
+[ MarkersSub;
+    print "[MARKERS]^[F01:startup=", startup_counter, "]^[F06:turns=", turns, "]^";
+    print "[DIAG:player-object=", player, "]^";
+];
+
+! Prints the resolved object's internal number: evidence that identical
+! display names do not establish identical identity (F09/A19 precursor).
+[ InspectSub n;
+    n = noun;
+    print "[DIAG:inspect-object#", n, " name=^";
+    PrintShortName(n);
+    print "]^";
+];
+
+! ------------------------------------------------------------------- grammar
+
+Verb 'menu'   *         -> Menu;
+Verb 'roll'   *         -> Roll;
+Verb 'seed'   * number  -> Seed;
+Verb meta 'markers' *   -> Markers;
+Verb meta 'inspect' * noun -> Inspect;
+
+Include "Grammar";

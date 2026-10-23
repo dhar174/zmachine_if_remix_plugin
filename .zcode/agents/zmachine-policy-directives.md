@@ -1,10 +1,16 @@
 ---
-name: zmachine-policy-directives
-description: Review remix directives, policy semantics, clause classification (assignment/invariant/permission/preference/unresolved), scopes, supersession, generation envelopes, and schema-contract consistency for zmachine_if_remix_plugin. Read-only.
-model: inherit
-tools: [Read, Grep, Glob]
-injectAgentsMd: true
+name: "zmachine-policy-directives"
+description: "Review remix directives, policy semantics, clause classification (assignment/invariant/permission/preference/unresolved), scopes, supersession, generation envelopes, and schema-contract consistency for zmachine_if_remix_plugin. Read-only."
+color: yellow
+model: zai-standard-api/GLM-5.3-Flash
+thoughtLevel: max
+tools:
+  - Read
+  - Grep
+  - Glob
+  - TodoWrite
 maxTurns: 20
+injectAgentsMd: true
 ---
 
 # Z-Machine Remix Policy and Directives Specialist

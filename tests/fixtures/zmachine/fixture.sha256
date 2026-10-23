@@ -1,0 +1,21 @@
+57a7dff45ce9069f6959d8dda049357e153370060e82017b5d172e4d9236b4e2 *fixture.inf
+96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b *fixture.z5
+906314b6c37eee13bd9c0e9588d42fc0a84f6ddcd3ddf213de611942b5fe7425 *lib/parser.h
+e03f17ecbe37107a6031d4cd6a846660241539abb1f527068c26f7199bd3b1e2 *lib/verblib.h
+da44069b0d682ea7517fb7190b33435a0ca6dd54960c0450cab0494b4864cad9 *lib/grammar.h
+977d94b35640eba4adbd29abf69f65a065674fd80369a9c4e2f73451f089e6c2 *lib/english.h
+7a3a28008e477b020a4540364c920dce42d98c47d55e59d33614aa4dd0bb06d5 *lib/version.h
+38e3b6b33483421006287982b7f1e63f1e3f3da6dbea5093a675262bf44f3124 *lib/infglk.h
+a956db582b5a59b81a191eea211f429652c119be07b96e6038e7cb710833c225 *lib/linklpa.h
+c2a7ff448e62f0e7f47bfeb1c057bbc01870ef68d702417ff4df0dcbd49c68fe *lib/ARTISTIC
+c7c9a3eb65d1e82d0a3b4a2ca07faa50fb0eb999e5f4d06efc87b5219deb3dbb *lib/COPYING
+504534fa7ba2ba4fb05410b1d4f646e6f43b7fd94b81966d7528ffa48467acfa *lib/ChangeLog
+
+# Negative-test stories (bounded-termination testing; not part of the F01-F12
+# fixture). Same redistribution grant as the main fixture. spinloop.inf pins
+# Serial "261022" so its recompilation is byte-identical; loopstory predates
+# the Serial pin and is pinned by digest alone.
+66b8e4ead4fd66730243371bc4ae8fef64299c26cfa679e0b8fdfaac1ffd5297 *negative/loopstory.inf
+12821c347ae0c69b32c4e6c63edfe7ebbd7d698e18d586312415efaaed899557 *negative/loopstory.z5
+9bd08bb3f4987f5a76369ea9a5396fb79819dc6b248a7e0cbc1e6ce500db8fdc *negative/spinloop.inf
+3c061aadbd396168bbf45990de2d56ca221e28abbb2b64da85a3ccf644cfcf52 *negative/spinloop.z5

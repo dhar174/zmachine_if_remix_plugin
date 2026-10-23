@@ -1,0 +1,10 @@
+{
+    "name": "zmachine-vm-io-probe",
+    "private": true,
+    "description": "G1-A native I/O probe harness for zmachine_if_remix_plugin Issue #11. Experimental probe code, not a production adapter.",
+    "scripts": {
+        "test": "node --test",
+        "probe:ifvms": "node probe.js ifvms",
+        "probe:bocfel": "node probe.js bocfel"
+    }
+}

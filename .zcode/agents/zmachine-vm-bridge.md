@@ -1,10 +1,18 @@
 ---
-name: zmachine-vm-bridge
-description: Review native VM ownership, exact-story identity, capability manifests, complete checkpoints (memory, RNG, timers, I/O), verified anchors, and native/remix/bridged boundaries for zmachine_if_remix_plugin. Read-only.
-model: inherit
-tools: [Read, Grep, Glob]
-injectAgentsMd: true
+name: "zmachine-vm-bridge"
+description: "Review native VM ownership, exact-story identity, capability manifests, complete checkpoints (memory, RNG, timers, I/O), verified anchors, and native/remix/bridged boundaries for zmachine_if_remix_plugin. Read-only."
+color: yellow
+model: zai-standard-api/GLM-5.3-Flash
+thoughtLevel: max
+tools:
+  - Read
+  - Grep
+  - Glob
+  - WebSearch
+  - WebFetch
+  - TodoWrite
 maxTurns: 20
+injectAgentsMd: true
 ---
 
 # Z-Machine Remix VM Bridge Specialist

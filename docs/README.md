@@ -31,6 +31,15 @@ Agent-assisted engineering work (Zcode specialist subagents) is configured separ
 - [agents/team-coordination.md](agents/team-coordination.md) — canonical coordination policy: roles, routing table, assignment and return contracts, shared invariants, platform loading behavior.
 - [agents/README.md](agents/README.md) — roster, installation into `~/.zcode/agents/`, invocation examples, and the fresh-session verification checklist.
 - `.zcode/agents/` (repository root) — versioned source templates for the specialist definitions; installed copies are not stored in the repository.
+
+## Evidence records
+
+Feasibility-probe evidence (executed experiments, not design documents — each record states its own evidence layers and limitations):
+
+- [evidence/g1-native-io.md](evidence/g1-native-io.md) — G1-A native fixture and interpreter I/O probe (Issue #11): fixture identity and reproducibility, interpreter comparison, measured results, and the conditional G1-B handoff.
+
+Probe implementation lives outside `docs/`: fixtures under `tests/fixtures/zmachine/`, the experimental harness under `experiments/vm-io/`. Probe code is not a production adapter and must not be promoted without separate review.
+
 ## Approved decision consolidation (Issue #10)
 
 - [Decision register: D01–D37 and exact approval sources](decisions/decision-register.md)

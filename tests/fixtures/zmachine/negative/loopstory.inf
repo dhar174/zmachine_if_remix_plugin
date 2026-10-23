@@ -1,0 +1,21 @@
+! ==============================================================================
+! LOOPSTORY -- minimal purpose-built story for bounded-termination testing
+! (G1-A negative tests, Issue #11).  NOT part of the F01-F12 fixture.
+! ------------------------------------------------------------------------------
+! Original content authored for this project; same redistribution grant as the
+! main fixture (see ../README.md): copy, modify, and redistribute freely.
+!
+! Main prints a start marker and then recurses without returning.  A
+! conformant interpreter must terminate this with a classified error (stack
+! exhaustion) rather than hanging the host; the interpreter's actual behavior
+! is the evidence under test.
+! ==============================================================================
+
+[ Main;
+    print "LOOPSTORY-START^";
+    Runaway();
+];
+
+[ Runaway;
+    Runaway();
+];

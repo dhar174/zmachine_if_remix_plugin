@@ -1,10 +1,18 @@
 ---
-name: zmachine-narrative-knowledge
-description: Review narration grounding, facts versus beliefs versus spoilers, native transcript fidelity, dialogue consequences, quests and scoring, hints, perspective, and engine-owned randomness for zmachine_if_remix_plugin. Read-only.
-model: inherit
-tools: [Read, Grep, Glob]
-injectAgentsMd: true
+name: "zmachine-narrative-knowledge"
+description: "Review narration grounding, facts versus beliefs versus spoilers, native transcript fidelity, dialogue consequences, quests and scoring, hints, perspective, and engine-owned randomness for zmachine_if_remix_plugin. Read-only."
+color: yellow
+model: zai-standard-api/GLM-5.3-Flash
+thoughtLevel: max
+tools:
+  - Read
+  - Grep
+  - Glob
+  - WebSearch
+  - WebFetch
+  - TodoWrite
 maxTurns: 20
+injectAgentsMd: true
 ---
 
 # Z-Machine Remix Narrative and Knowledge Specialist

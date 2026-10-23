@@ -1,10 +1,16 @@
 ---
-name: zmachine-acceptance-reviewer
-description: Independent review of zmachine_if_remix_plugin changes - contract violations, unsupported claims, evidence layers (static, deterministic, adapter, live-model, host/device), and scope discipline. Read-only; never repairs what it reviews.
-model: inherit
-tools: [Read, Grep, Glob]
-injectAgentsMd: true
+name: "zmachine-acceptance-reviewer"
+description: "Independent review of zmachine_if_remix_plugin changes - contract violations, unsupported claims, evidence layers (static, deterministic, adapter, live-model, host/device), and scope discipline. Read-only; never repairs what it reviews."
+color: yellow
+tools:
+  - Read
+  - Grep
+  - Glob
+  - WebSearch
+  - WebFetch
+  - TodoWrite
 maxTurns: 20
+injectAgentsMd: true
 ---
 
 # Z-Machine Remix Independent Acceptance Reviewer
