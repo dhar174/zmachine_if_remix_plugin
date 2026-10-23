@@ -10,9 +10,10 @@
 // Envelope v1 layout (see docs/evidence/g1-vm-recovery.md for the full
 // state-inventory classification this implements):
 //   format / version            -- magic + schema version
-//   identity                    -- exact story digest/size, runtime + adapter
-//                                  revision, schema version (restore refuses a
-//                                  mismatch before constructing anything)
+//   identity                    -- exact story digest/size, runtime name +
+//                                  pinned runtime revision, adapter name,
+//                                  schema version (restore refuses a mismatch
+//                                  before constructing anything)
 //   boundary                    -- input-boundary kind: 'line' | 'char' |
 //                                  'halted', plus the pending line-request
 //                                  maxlen when kind is 'line'

@@ -87,13 +87,18 @@ test('discarded candidates leave the baseline completely unchanged (A15)', { tim
         // Candidate 1: mutate time, RNG, inventory, location, output; discard.
         {
             const child = spawnRestore(envPath);
-            await child.run(CANDIDATE_MUTATIONS);
-            assert.ok(child.ready, 'candidate 1 restored: ' + (child.readyError || ''));
-            assert.ok(child.fingerprint.output.length > baseline.fingerprint.output.length,
-                'candidate actually produced new output');
-            assert.ok(child.steps.some((s) => s.delta.includes('[F08:roll=')), 'candidate consumed RNG draws');
-            await child.finish();
-            assert.strictEqual(child.exitCode, 0, 'candidate exited cleanly before discard');
+            try {
+                await child.run(CANDIDATE_MUTATIONS);
+                assert.ok(child.ready, 'candidate 1 restored: ' + (child.readyError || ''));
+                assert.ok(child.fingerprint.output.length > baseline.fingerprint.output.length,
+                    'candidate actually produced new output');
+                assert.ok(child.steps.some((s) => s.delta.includes('[F08:roll=')), 'candidate consumed RNG draws');
+                await child.finish();
+                assert.strictEqual(child.exitCode, 0, 'candidate exited cleanly before discard');
+            } finally {
+                child.child.kill();
+                await awaitExit(child, 10000).catch(() => { assert.fail('candidate 1 child leaked (did not exit)'); });
+            }
         }
         assertBaselineUnchanged(baseline, 'candidate 1 discard');
 
@@ -102,10 +107,15 @@ test('discarded candidates leave the baseline completely unchanged (A15)', { tim
         // detection).
         {
             const child = spawnRestore(envPath);
-            await child.run([line('north'), line('examine token'), line('take brass key')]);
-            assert.ok(child.ready, 'candidate 2 restored');
-            await child.finish();
-            assert.strictEqual(child.exitCode, 0, 'candidate 2 exited cleanly');
+            try {
+                await child.run([line('north'), line('examine token'), line('take brass key')]);
+                assert.ok(child.ready, 'candidate 2 restored');
+                await child.finish();
+                assert.strictEqual(child.exitCode, 0, 'candidate 2 exited cleanly');
+            } finally {
+                child.child.kill();
+                await awaitExit(child, 10000).catch(() => { assert.fail('candidate 2 child leaked (did not exit)'); });
+            }
         }
         assertBaselineUnchanged(baseline, 'candidate 2 discard');
 
@@ -126,6 +136,7 @@ test('killing a candidate during bootstrap, at the boundary, during serializatio
     setUpStore();
     const baseline = makeBaseline();
     const envPath = writeEnvelope(baseline.envelope, 'iso-kill.json');
+    const childProcesses = [];
 
     try {
         // (a) Kill during bootstrap/startup: terminate while the child is
@@ -133,6 +144,7 @@ test('killing a candidate during bootstrap, at the boundary, during serializatio
         // ready signal).
         {
             const child = spawnRestore(envPath);
+            childProcesses.push(child);
             child.child.kill();
             const code = await awaitExit(child, 10000);
             assert.notStrictEqual(code, 0, 'bootstrap-killed child exits nonzero');
@@ -142,6 +154,7 @@ test('killing a candidate during bootstrap, at the boundary, during serializatio
         // (b) Kill while idle at the restored boundary.
         {
             const child = spawnRestore(envPath);
+            childProcesses.push(child);
             const boot = await child.nextMessage(30000);
             assert.strictEqual(boot.ready, true, 'child reached the boundary before the kill');
             child.child.kill();
@@ -157,6 +170,7 @@ test('killing a candidate during bootstrap, at the boundary, during serializatio
             const outPath = path.join(RESULTS_DIR, 'iso-serialize-target.json');
             fs.rmSync(outPath, { force: true });
             const child = spawnRestore(envPath, { stallSerializeMs: 30000, out: outPath });
+            childProcesses.push(child);
             await child.nextMessage(30000); // ready
             child.child.stdin.write(JSON.stringify({ op: 'serialize' }) + '\n');
             await new Promise((r) => setTimeout(r, 500)); // let it enter the stall
@@ -168,11 +182,12 @@ test('killing a candidate during bootstrap, at the boundary, during serializatio
         }
         assertBaselineUnchanged(baseline, 'serialization kill');
 
-        // (d) Kill after mutations but before the parent reads the candidate
-        // transcript (simulated pre-publication kill): the candidate's output
-        // is never received, so nothing can be published.
+        // (d) Kill after a mutation was dispatched but before the parent
+        // reads the candidate transcript (simulated pre-publication kill;
+        // timing-based kill ~120 ms after dispatch).
         {
             const child = spawnRestore(envPath);
+            childProcesses.push(child);
             const boot = await child.nextMessage(30000);
             assert.strictEqual(boot.ready, true);
             child.child.stdin.write(JSON.stringify({ input: line('seed 9') }) + '\n');
@@ -183,6 +198,11 @@ test('killing a candidate during bootstrap, at the boundary, during serializatio
         }
         assertBaselineUnchanged(baseline, 'pre-publication kill');
     } finally {
+        // Sweep any child that a failed assertion left alive: a live child's
+        // open pipes would hang this test-file process.
+        for (const child of childProcesses) {
+            try { child.child.kill(); await awaitExit(child, 5000); } catch { /* already gone */ }
+        }
         fs.rmSync(STORE, { force: true });
     }
 });
@@ -200,14 +220,20 @@ test('an unbounded candidate is preempted by a parent-enforced deadline and reap
         child.stdout.setEncoding('utf8');
         child.stdout.on('data', (c) => { stdout += c; });
         const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })));
-        await new Promise((r) => setTimeout(r, 2000));
-        assert.strictEqual(stdout.includes('"ready":true'), false, 'spinloop never reaches a ready boundary');
-        child.kill();
-        const { code } = await Promise.race([
-            exited,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('spinloop child leaked: did not exit after kill')), 10000)),
-        ]);
-        assert.notStrictEqual(code, 0, 'deadline-killed spinloop exits nonzero');
+        try {
+            await new Promise((r) => setTimeout(r, 2000));
+            assert.strictEqual(stdout.includes('"ready":true'), false, 'spinloop never reaches a ready boundary');
+            child.kill();
+            const { code } = await Promise.race([
+                exited,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('spinloop child leaked: did not exit after kill')), 10000)),
+            ]);
+            assert.notStrictEqual(code, 0, 'deadline-killed spinloop exits nonzero');
+        } finally {
+            // Guarantee reaping even if an assertion fired before the kill.
+            try { child.kill(); } catch { /* already gone */ }
+            await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))]);
+        }
         assertBaselineUnchanged(baseline, 'unbounded-execution kill');
     } finally {
         fs.rmSync(STORE, { force: true });
@@ -218,8 +244,10 @@ test('the candidate output limit stops a chatty candidate nonzero', { timeout: 1
     setUpStore();
     const baseline = makeBaseline();
     const envPath = writeEnvelope(baseline.envelope, 'iso-limit.json');
+    const childProcesses = [];
     try {
         const child = spawnRestore(envPath, { outputLimit: 400 });
+        childProcesses.push(child);
         const boot = await child.nextMessage(30000);
         assert.strictEqual(boot.ready, true);
         // Repeated room descriptions exceed the cap quickly.
@@ -234,6 +262,9 @@ test('the candidate output limit stops a chatty candidate nonzero', { timeout: 1
         assert.strictEqual(exited, 3, 'output-limit exit code 3');
         assertBaselineUnchanged(baseline, 'output-limit stop');
     } finally {
+        for (const child of childProcesses) {
+            try { child.child.kill(); await awaitExit(child, 5000); } catch { /* already gone */ }
+        }
         fs.rmSync(STORE, { force: true });
     }
 });

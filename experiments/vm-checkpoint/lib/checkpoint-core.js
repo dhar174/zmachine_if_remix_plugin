@@ -86,7 +86,6 @@ function captureCheckpoint(adapter, context) {
         requestLog: cloneJson(kind === 'halted' ? state.requestLog : state.requestLog.slice(0, -1)),
         vmFlags: {
             quit: !!vm.quit,
-            glkBlockingCall: vm.glk_blocking_call || null,
         },
         undo: {
             preserved: false,

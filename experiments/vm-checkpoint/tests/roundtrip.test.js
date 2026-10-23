@@ -96,6 +96,7 @@ test('round trips at every supported boundary match the uninterrupted reference'
             await t.test(`[${c.name}] repetition ${rep}`, { timeout: 180000 }, async () => {
                 // 1. Uninterrupted reference.
                 const ref = runReference(c.prefix, c.suffix);
+                assert.deepStrictEqual(ref.fingerprint.errors, [], 'reference run must be error-free');
                 for (const needle of c.expectTranscriptContains || []) {
                     assert.ok(ref.fingerprint.output.includes(needle), 'reference transcript must contain ' + needle);
                 }
@@ -143,6 +144,7 @@ test('round trips at every supported boundary match the uninterrupted reference'
                         const rr = ref.postSteps[k];
                         assert.strictEqual(rs.status, rr.status, `step ${k} status`);
                         assert.strictEqual(rs.errors.length, 0, `step ${k} child errors`);
+                        assert.deepStrictEqual(rs.unexpectedGlk, [], `step ${k} no unexpected Glk calls in the restored continuation`);
                         const cmp = (s) => (c.rngMode === 'unseeded' ? normalizeRngDraws(s) : s);
                         assert.strictEqual(cmp(rs.delta), cmp(rr.delta), `step ${k} output delta`);
                         assert.strictEqual(cmp(rs.output), cmp(rr.output), `step ${k} full transcript (no republish, no loss)`);

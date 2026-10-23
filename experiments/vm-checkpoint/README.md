@@ -28,8 +28,9 @@ wider trees). Evidence and scratch files land in gitignored `results/`.
 ## Design (envelope v1)
 
 A checkpoint is a versioned, **data-only** JSON envelope
-(`lib/checkpoint-format.js`): identity (story digest/size, runtime + adapter
-revision, schema version), boundary kind (`line`/`char`/`halted`), payload
+(`lib/checkpoint-format.js`): identity (story digest/size, runtime name +
+pinned runtime revision, adapter name, schema version), boundary kind
+(`line`/`char`/`halted`), payload
 (Quetzal `IFhd`+`UMem`+`Stks` from the upstream `vm.save_file(pc, 1)`
 primitive, plus the RNG seed/mode, the plain-data `io` object, the pending
 `read_data`, window text/cursor state, published transcript, request log),

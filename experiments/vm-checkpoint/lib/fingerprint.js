@@ -77,6 +77,11 @@ function stackFingerprint(vm) {
 //                     depth legitimately differs after restore and stays
 //                     offset by the dropped entries; @restore_undo behavior
 //                     after restore is asserted separately in the tests.
+//
+// DOCUMENTATION-ONLY MAP: fingerprintDiff() below enforces the undoDepth rule
+// directly, and the round-trip tests enforce the unseeded-rng-only rule via
+// their per-case allowlist.  This map records the intended contract for
+// readers; if it drifts from the enforcement sites, the enforcement sites win.
 const CONDITIONAL_FIELDS = {
     rngSeed: 'unseeded-rng-only',
     undoDepth: 'declared-unsupported',
