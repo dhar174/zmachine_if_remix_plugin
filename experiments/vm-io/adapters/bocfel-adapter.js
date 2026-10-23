@@ -28,10 +28,12 @@
 //                                   character-input menu marker was seen and
 //                                   no key delivered
 //   halted                       -- process exited cleanly (exit code 0)
-//   error                        -- spawn failure or nonzero exit; stderr is
-//                                   recorded but NOT classified on its own,
-//                                   and a watchdog timeout leaves the run in
-//                                   its current classified state
+//   error                        -- spawn failure, nonzero exit, or watchdog
+//                                   timeout: a timed-out turn is classified as
+//                                   an error and the child process is
+//                                   terminated (see terminateChild), so the
+//                                   stale pre-turn prompt can never be
+//                                   mistaken for a fresh input boundary
 //   running                      -- not observable between steps; each send()
 //                                   runs to the next prompt or exit
 //
@@ -81,8 +83,19 @@ function resolveBocfelLaunch(storyPath) {
     };
 }
 
+// Availability is aligned with the launch configuration that would actually
+// be selected, instead of only ever testing wsl.exe:
+//   - BOCFEL_COMMAND set: the operator explicitly configured the interpreter
+//     (a local configuration knob with the same trust model as EDITOR; it is
+//     never fed story content, network input, or argv data), so it is treated
+//     as present.  Deliberately NOT executed here; the real launch surfaces
+//     any misconfiguration as a recorded adapter error state.
+//   - native Windows build present at the documented tools path: treated as
+//     present, for the same reason.
+//   - default: the WSL2 invocation must exit 0 and mention Bocfel.
 function probeBocfelAvailable() {
-    // A cheap launch test: --version must exit 0 and mention Bocfel.
+    if (process.env.BOCFEL_COMMAND) return true;
+    if (fs.existsSync(path.join(__dirname, '..', 'tools', 'bocfel', 'bocfel.exe'))) return true;
     try {
         const r = spawnSync('wsl.exe', ['-e', 'sh', '-c', 'exec "$HOME/.local/bin/bocfel" -v'], { encoding: 'utf8', timeout: 30000 });
         return r.status === 0 && /Bocfel/.test(r.stdout || '');
@@ -93,7 +106,6 @@ function probeBocfelAvailable() {
 
 const PROMPT = '>';
 const DEFAULT_STEP_TIMEOUT_MS = 10000;
-
 // ANSI escape sequences (CSI, charset selection, OSC) that terminfo-based
 // output may interleave into stdout; stripped only for prompt detection,
 // never from the recorded evidence.  A fresh RegExp per call avoids the
@@ -109,6 +121,7 @@ function endsWithPrompt(buf) {
 function createBocfelAdapter(storyPath, options) {
     options = options || {};
     let launch = options.launch;
+    const stepTimeoutMs = options.stepTimeoutMs || DEFAULT_STEP_TIMEOUT_MS;
     if (!launch) {
         if (!probeBocfelAvailable()) {
             throw new Error(
@@ -152,13 +165,31 @@ function createBocfelAdapter(storyPath, options) {
         });
     }
 
+    // Terminate the interpreter child.  kill() is a plain process terminate
+    // (no shell involved).  On the WSL2 path this terminates wsl.exe itself;
+    // a Linux-side bocfel grandchild may linger until the WSL session is torn
+    // down, which is recorded as a platform limitation rather than handled.
+    function terminateChild() {
+        if (!child || exited) return;
+        try { child.kill(); } catch { /* already gone */ }
+        const escalate = setTimeout(() => {
+            if (!exited) { try { child.kill('SIGKILL'); } catch { /* already gone */ } }
+        }, 2000);
+        if (typeof escalate.unref === 'function') escalate.unref();
+        child.once('exit', () => clearTimeout(escalate));
+    }
+
     // Read stdout until one of: a fresh ">" prompt appears after `mark`, the
     // fixture's character-menu marker appears with no prompt after it (the
     // protocol-correlated character boundary), the process exits, or the
     // watchdog fires.  Resolves with whether the turn reached a terminal
-    // condition (prompt/menu/exit) rather than timing out.
+    // condition (prompt/menu/exit) rather than timing out; on timeout the
+    // run is classified as an error and the child is terminated, so the
+    // caller can never mistake the stale pre-turn prompt for a fresh
+    // boundary.
     function waitForTurnEnd(mark, timeoutMs) {
-        const deadline = Date.now() + (timeoutMs || DEFAULT_STEP_TIMEOUT_MS);
+        const limit = timeoutMs || stepTimeoutMs;
+        const deadline = Date.now() + limit;
         return new Promise((resolve) => {
             const poll = setInterval(() => {
                 if (exited) { clearInterval(poll); return resolve(true); }
@@ -177,7 +208,12 @@ function createBocfelAdapter(storyPath, options) {
                     clearInterval(poll);
                     return resolve(true);
                 }
-                if (Date.now() > deadline) { clearInterval(poll); return resolve(false); }
+                if (Date.now() > deadline) {
+                    clearInterval(poll);
+                    errorText = errorText || ('watchdog: no line-input boundary, character-input marker, or exit within ' + limit + 'ms; child terminated');
+                    terminateChild();
+                    return resolve(false);
+                }
             }, 150);
         });
     }
@@ -198,6 +234,7 @@ function createBocfelAdapter(storyPath, options) {
             status: classify(),
             delta,
             output,
+            exited,
             exitCode,
             stderr: stderrBuf,
             error: errorText,
@@ -218,8 +255,13 @@ function createBocfelAdapter(storyPath, options) {
             if (started) throw new Error('adapter already started');
             started = true;
             startChild();
-            await waitForTurnEnd(0, DEFAULT_STEP_TIMEOUT_MS);
-            if (!exited && !stdoutBuf.endsWith(PROMPT)) {
+            const ready = await waitForTurnEnd(0, stepTimeoutMs);
+            if (!ready) {
+                // Watchdog already classified the run as an error and
+                // terminated the child; settle() reports it.
+                return settle();
+            }
+            if (!exited && !endsWithPrompt(stdoutBuf)) {
                 // The first prompt may not have flushed a trailing '>' yet
                 errorText = errorText || 'startup did not reach a line prompt';
             }
@@ -242,7 +284,11 @@ function createBocfelAdapter(storyPath, options) {
                 errorText = 'unsupported input kind: ' + input.kind;
                 return settle();
             }
-            await waitForTurnEnd(mark, DEFAULT_STEP_TIMEOUT_MS);
+            // A false return means the watchdog fired: waitForTurnEnd has
+            // already recorded the error and terminated the child, so the
+            // settle() below reports 'error' -- it can never mistake the
+            // stale pre-turn prompt for a fresh boundary.
+            await waitForTurnEnd(mark, stepTimeoutMs);
             return settle();
         },
 

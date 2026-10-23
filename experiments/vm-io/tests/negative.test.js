@@ -7,13 +7,19 @@
 //
 // The ifvms adapter runs in-process; its boundary is ZVM's own error
 // handling (fatal_error via the Glk shim) plus the adapter's try/catch.
-// The harness does NOT claim that in-process isolation or worker isolation
-// would be a security sandbox -- that is documented as a limitation.
+// Potentially NONTERMINATING ifvms cases (a nonrecursive infinite Z-code
+// loop would spin a synchronous VM forever, and node:test cannot preempt
+// synchronous JS) run in a killable worker thread whose parent enforces a
+// deadline with worker.terminate().  The harness does NOT claim that
+// in-process or worker isolation is a security sandbox, and no instruction
+// budget exists on any path -- bounding is wall-time; that is documented as
+// a limitation.
 
 const { test } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
+const { Worker } = require('node:worker_threads');
 const { createIfvmsAdapter } = require('../adapters/ifvms-adapter.js');
 const { createBocfelAdapter, probeBocfelAvailable } = require('../adapters/bocfel-adapter.js');
 
@@ -21,6 +27,7 @@ const VM_IO_DIR = __dirname;
 const REPO_ROOT = path.dirname(path.dirname(path.dirname(VM_IO_DIR)));
 const FIXTURE = path.join(REPO_ROOT, 'tests', 'fixtures', 'zmachine', 'fixture.z5');
 const LOOPSTORY = path.join(REPO_ROOT, 'tests', 'fixtures', 'zmachine', 'negative', 'loopstory.z5');
+const SPINLOOP = path.join(REPO_ROOT, 'tests', 'fixtures', 'zmachine', 'negative', 'spinloop.z5');
 const TAMPER_DIR = path.join(REPO_ROOT, 'experiments', 'vm-io', 'results', 'tmp-negative');
 
 const bocfelAvailable = probeBocfelAvailable();
@@ -63,6 +70,69 @@ function writeTampered(fileName) {
 function clearTampered() {
     fs.rmSync(TAMPER_DIR, { recursive: true, force: true });
 }
+
+// Stub story files for launch/behavior tests are written under the same
+// contained tmp-negative directory as the tampered stories and removed with
+// them.
+function writeStub(fileName, body) {
+    fs.mkdirSync(TAMPER_DIR, { recursive: true });
+    const dirResolved = path.resolve(TAMPER_DIR);
+    const target = path.resolve(dirResolved, fileName);
+    if (!target.startsWith(dirResolved + path.sep)) {
+        throw new Error('stub path escaped the temp directory: ' + fileName);
+    }
+    fs.writeFileSync(target, body);
+    return target;
+}
+
+// ---- ifvms bounded-execution tests (killable worker isolation) --------------
+//
+// A synchronous in-process VM cannot be preempted by the test runner: a
+// nonrecursive infinite Z-code loop would hang node:test itself.  Cases that
+// may not terminate run in a worker thread (tests/worker-runner.js) with a
+// deadline enforced by the parent; worker.terminate() preempts even a busy
+// synchronous loop.
+
+function runIfvmsStoryInWorker(storyPath, timeoutMs) {
+    return new Promise((resolve) => {
+        let settled = false;
+        let timedOut = false;
+        const worker = new Worker(path.join(__dirname, 'worker-runner.js'), {
+            workerData: { story: fs.readFileSync(storyPath) },
+        });
+        const timer = setTimeout(() => {
+            timedOut = true;
+            worker.terminate().then(() => {
+                if (!settled) { settled = true; clearTimeout(timer); resolve({ outcome: 'terminated-by-watchdog', timeoutMs }); }
+            });
+        }, timeoutMs);
+        const finish = (value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(value);
+        };
+        worker.on('message', (msg) => finish({ outcome: 'completed', ...msg }));
+        worker.on('error', (e) => finish({ outcome: 'worker-error', error: String(e && e.message ? e.message : e) }));
+        worker.on('exit', (code) => { if (!timedOut) finish({ outcome: 'exited', code }); });
+    });
+}
+
+test('ifvms (worker): runaway recursion completes with a classified error under the worker deadline', { timeout: 60000 }, async () => {
+    const r = await runIfvmsStoryInWorker(LOOPSTORY, 30000);
+    assert.strictEqual(r.outcome, 'completed', 'the terminating case reports through the worker');
+    assert.strictEqual(r.status, 'error', 'stack exhaustion is classified as error');
+    assert.ok(r.errors.length > 0);
+});
+
+test('ifvms (worker): a nonrecursive infinite loop is preempted by the watchdog deadline', { timeout: 60000 }, async () => {
+    const t0 = Date.now();
+    const r = await runIfvmsStoryInWorker(SPINLOOP, 2000);
+    const elapsed = Date.now() - t0;
+    assert.strictEqual(r.outcome, 'terminated-by-watchdog',
+        'the nonterminating story must be killed by the parent deadline, not reported by the test runner');
+    assert.ok(elapsed < 15000, 'preemption happened near the deadline (elapsed ' + elapsed + 'ms)');
+});
 
 // ---- ifvms (in-process) malformed-story cases -------------------------------
 
@@ -195,6 +265,39 @@ if (bocfelAvailable) {
         const r = await a.start();
         assert.strictEqual(r.status, 'error', 'stack exhaustion is classified as error');
         await a.shutdown();
+    });
+
+    test('bocfel: a nonrecursive infinite loop is watchdog-terminated as a classified error', { timeout: 60000 }, async () => {
+        // spinloop never reaches an input boundary, so the startup watchdog
+        // is the only thing that can bound it: the timed-out run must be
+        // classified as an error and the child must be terminated.
+        const a = createBocfelAdapter(SPINLOOP, { stepTimeoutMs: 1500 });
+        const r = await a.start();
+        assert.strictEqual(r.status, 'error', 'nonterminating startup is classified as error, not a stale boundary');
+        assert.match(String(r.error), /watchdog/);
+        const s = await a.shutdown();
+        assert.strictEqual(s.exited, true, 'watchdog-terminated child was reaped');
+    });
+
+    test('bocfel: an unresponsive child is watchdog-terminated on send, not mistaken for a fresh prompt', { timeout: 60000 }, async () => {
+        // The stub prints one '>' prompt and then never responds.  start()
+        // must classify the stub prompt as ready; the hung turn after send()
+        // must become a classified error (never the stale pre-turn prompt),
+        // and the child must actually be terminated.
+        const stub = writeStub('stub-unresponsive.js', 'process.stdout.write(">");\nprocess.stdin.resume();\n');
+        const a = createBocfelAdapter(FIXTURE, {
+            launch: { command: [process.execPath, stub], platform: 'test stub: prints one prompt, never responds' },
+            // Generous enough for a cold node.exe startup under parallel test
+            // load, still far below the test's own timeout.
+            stepTimeoutMs: 2000,
+        });
+        const start = await a.start();
+        assert.strictEqual(start.status, 'waiting_for_line_input', 'the stub prompt classifies as ready');
+        const r = await a.send({ kind: 'line', text: 'look' });
+        assert.strictEqual(r.status, 'error', 'a hung turn is classified as error, not a fresh line-input boundary');
+        assert.match(String(r.error), /watchdog/);
+        const s = await a.shutdown();
+        assert.strictEqual(s.exited, true, 'watchdog-terminated child was reaped');
     });
 
     test('bocfel: cleanup tampered story files', () => {

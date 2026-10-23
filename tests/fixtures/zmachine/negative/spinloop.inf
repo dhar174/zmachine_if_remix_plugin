@@ -1,0 +1,20 @@
+! ==============================================================================
+! SPINLOOP -- minimal purpose-built story for bounded-termination testing
+! (G1-A negative tests, Issue #11).  NOT part of the F01-F12 fixture.
+! ------------------------------------------------------------------------------
+! Original content authored for this project; same redistribution grant as the
+! main fixture (see ../README.md): copy, modify, and redistribute freely.
+!
+! Main prints a start marker and then spins in a NONRECURSIVE infinite loop:
+! no stack growth, no input boundary, no timer -- the Z-machine itself never
+! yields.  A host-side deadline (killable worker thread or child watchdog) is
+! therefore the only mechanism that can bound this story, which is exactly the
+! property under test.  The Serial pin keeps recompilation byte-identical.
+! ==============================================================================
+
+Serial "261022";
+
+[ Main;
+    print "SPINLOOP-START^";
+    while (1) { }
+];

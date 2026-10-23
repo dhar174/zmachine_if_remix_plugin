@@ -10,3 +10,12 @@ a956db582b5a59b81a191eea211f429652c119be07b96e6038e7cb710833c225 *lib/linklpa.h
 c2a7ff448e62f0e7f47bfeb1c057bbc01870ef68d702417ff4df0dcbd49c68fe *lib/ARTISTIC
 c7c9a3eb65d1e82d0a3b4a2ca07faa50fb0eb999e5f4d06efc87b5219deb3dbb *lib/COPYING
 504534fa7ba2ba4fb05410b1d4f646e6f43b7fd94b81966d7528ffa48467acfa *lib/ChangeLog
+
+# Negative-test stories (bounded-termination testing; not part of the F01-F12
+# fixture). Same redistribution grant as the main fixture. spinloop.inf pins
+# Serial "261022" so its recompilation is byte-identical; loopstory predates
+# the Serial pin and is pinned by digest alone.
+d4e20ed5c471bdd27f6fa270ceb69d6d6e0ebdd3bef08214b59984e23ef94cb0 *negative/loopstory.inf
+12821c347ae0c69b32c4e6c63edfe7ebbd7d698e18d586312415efaaed899557 *negative/loopstory.z5
+9bd08bb3f4987f5a76369ea9a5396fb79819dc6b248a7e0cbc1e6ce500db8fdc *negative/spinloop.inf
+3c061aadbd396168bbf45990de2d56ca221e28abbb2b64da85a3ccf644cfcf52 *negative/spinloop.z5

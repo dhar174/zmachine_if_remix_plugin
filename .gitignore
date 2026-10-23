@@ -42,8 +42,8 @@ tests/fixtures/zmachine/tools/
 experiments/**/node_modules/
 experiments/**/dist/
 
-# Mimosa hook state inside probe directories is local tooling state, never committed
-tests/**/.mimosa/
-experiments/**/.mimosa/
+# Mimosa hook state is local tooling state, never committed (any depth)
+.mimosa/
 experiments/vm-io/tools/
 experiments/vm-io/results/tmp-negative/
+/recovery

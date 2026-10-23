@@ -34,16 +34,15 @@ function createIfvmsAdapter(storyBytes /*, options */) {
 
     function classify() {
         if (state.errors.length) return 'error';
+        // The halt flag is authoritative: once glk_exit or the @quit opcode
+        // has been observed the VM is halted, and send() refuses input for
+        // exactly this predicate, so a state reported as ready is always one
+        // send() will accept.  (An earlier diagnostic revision ranked a fresh
+        // pending request above a sticky halted flag; that combination is
+        // unreachable now that the adapter refuses post-halt input before
+        // the stale-event replay can restart the VM.)
+        if (state.halted || vm.quit) return 'halted';
         const tail = state.requestLog.length ? state.requestLog[state.requestLog.length - 1] : null;
-        // A fresh unanswered request means the VM is live and waiting, even if
-        // a stale halted flag was set earlier -- the halted state must not
-        // mask a pending input boundary.
-        if (state.halted || vm.quit) {
-            if (tail && tail.answeredWith === null) {
-                return tail.request === 'char' ? 'waiting_for_character_input' : 'waiting_for_line_input';
-            }
-            return 'halted';
-        }
         if (!tail) return 'running';
         return tail.request === 'char' ? 'waiting_for_character_input' : 'waiting_for_line_input';
     }

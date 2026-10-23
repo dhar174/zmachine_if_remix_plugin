@@ -64,7 +64,10 @@ const SEQUENCE = [
     { id: 'S30-shutdown', purpose: 'adapter shutdown; observe final execution status (halted/error)' },
 ];
 
-// Static evidence-output map: no dynamic path segments anywhere.
+// Static evidence-output map: no dynamic path segments anywhere, and no
+// externally supplied value ever reaches a file path in this tool.  Failure
+// injection tests preserve and restore the canonical evidence files instead
+// of redirecting output.
 const EVIDENCE_FILES = {
     ifvms: path.join(RESULTS_DIR, 'probe-ifvms.jsonl'),
     bocfel: path.join(RESULTS_DIR, 'probe-bocfel.jsonl'),
@@ -74,21 +77,29 @@ function extractMarkers(text) {
     return text.match(MARKER_RE) || [];
 }
 
-async function runSequence(adapterName) {
+// Adapter injection exists for fault-injection tests; normal callers get the
+// fixed adapter constructors.  ifvms takes the story bytes; the bocfel child
+// process takes the story path.
+function defaultCreateAdapter(adapterName, storyBytes) {
+    if (adapterName === 'ifvms') return createIfvmsAdapter(storyBytes);
+    if (adapterName === 'bocfel') return createBocfelAdapter(STORY);
+    throw new Error('unknown adapter: ' + adapterName);
+}
+
+async function runSequence(adapterName, options) {
+    options = options || {};
+    // Unexpected errors stop the sequence: an errored step means the rest of
+    // the run would build on a broken transcript.  The run_end record and
+    // the CLI exit status both reflect the incomplete run.
+    const stopOnError = options.stopOnError !== false;
+    const createAdapter = options.createAdapter || defaultCreateAdapter;
     // The output file is selected statically from the fixed evidence map; no
     // externally supplied value ever reaches a file path in this tool.
     const outPath = adapterName === 'ifvms' ? EVIDENCE_FILES.ifvms : EVIDENCE_FILES.bocfel;
     const story = fs.readFileSync(STORY);
     const storySha256 = crypto.createHash('sha256').update(story).digest('hex');
 
-    let adapter;
-    if (adapterName === 'ifvms') {
-        adapter = createIfvmsAdapter(story);
-    } else if (adapterName === 'bocfel') {
-        adapter = createBocfelAdapter(STORY);
-    } else {
-        throw new Error('unknown adapter: ' + adapterName);
-    }
+    const adapter = createAdapter(adapterName, story);
 
     const out = fs.createWriteStream(outPath, { encoding: 'utf8' });
     const write = (obj) => out.write(JSON.stringify(obj) + '\n');
@@ -110,6 +121,7 @@ async function runSequence(adapterName) {
 
     const steps = [];
     let statusBefore = null;
+    let stepErrors = 0;
     for (let i = 0; i < SEQUENCE.length; i++) {
         const step = SEQUENCE[i];
         const t0 = Date.now();
@@ -145,6 +157,15 @@ async function runSequence(adapterName) {
         write(record);
         steps.push(record);
         statusBefore = result.status;
+        if (stopOnError && result.status === 'error') {
+            stepErrors++;
+            // Best-effort cleanup: a live child process or VM must not
+            // outlive a stopped run.
+            if (typeof adapter.shutdown === 'function') {
+                try { await adapter.shutdown(); } catch { /* best effort */ }
+            }
+            break;
+        }
     }
 
     // Derived summary: the facts the evidence doc and tests build on.
@@ -160,6 +181,9 @@ async function runSequence(adapterName) {
         finished: new Date().toISOString(),
         final_status: statusBefore,
         halted: statusBefore === 'halted',
+        steps_completed: steps.length,
+        step_errors: stepErrors,
+        incomplete: statusBefore !== 'halted' || stepErrors > 0,
         seeded_draws_first_pass: rolls.slice(0, 3),
         seeded_draws_second_pass: rolls.slice(3, 6),
         within_interpreter_rng_reproducible: rolls.length >= 6
@@ -168,24 +192,36 @@ async function runSequence(adapterName) {
     });
     out.end();
     await new Promise((r) => out.on('close', r));
-    return { steps, finalStatus: statusBefore };
+    return { steps, finalStatus: statusBefore, stepErrors };
 }
 
 module.exports = { runSequence, SEQUENCE, STORY, extractMarkers };
 
 if (require.main === module) {
+    // The CLI reports success only for a complete, clean run; a failed or
+    // incomplete run is logged as failed and exits nonzero so scripts and CI
+    // can rely on the exit status.  The JSONL evidence of a failed run is
+    // still written -- it is the record of what happened.
+    const report = (name, res) => {
+        if (res.finalStatus === 'halted' && res.stepErrors === 0) {
+            console.error('probe complete: ' + name + ' final_status=' + res.finalStatus);
+        } else {
+            console.error('probe failed: ' + name + ' final_status=' + res.finalStatus + ' step_errors=' + res.stepErrors);
+            process.exitCode = 1;
+        }
+    };
+    const run = (name) => {
+        fs.mkdirSync(RESULTS_DIR, { recursive: true });
+        return runSequence(name)
+            .then((res) => report(name, res))
+            .catch((e) => { console.error('probe failed: ' + (e && e.message ? e.message : e)); process.exitCode = 1; });
+    };
     // Literal dispatch only: the adapter name from argv never reaches a file
     // path or a dynamic member lookup.
     if (process.argv[2] === 'ifvms') {
-        fs.mkdirSync(RESULTS_DIR, { recursive: true });
-        runSequence('ifvms')
-            .then(({ finalStatus }) => console.error('probe complete: ifvms final_status=' + finalStatus))
-            .catch((e) => { console.error('probe failed: ' + (e && e.message ? e.message : e)); process.exitCode = 1; });
+        run('ifvms');
     } else if (process.argv[2] === 'bocfel') {
-        fs.mkdirSync(RESULTS_DIR, { recursive: true });
-        runSequence('bocfel')
-            .then(({ finalStatus }) => console.error('probe complete: bocfel final_status=' + finalStatus))
-            .catch((e) => { console.error('probe failed: ' + (e && e.message ? e.message : e)); process.exitCode = 1; });
+        run('bocfel');
     } else {
         console.error('usage: node probe.js <ifvms|bocfel>');
         process.exit(1);

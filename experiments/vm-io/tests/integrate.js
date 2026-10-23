@@ -14,24 +14,27 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const { runSequence } = require('../probe.js');
+const { withLocks } = require('./evidence-lock.js');
 
 const RESULTS_DIR = path.join(__dirname, '..', 'results');
 const EVIDENCE_IFVMS = path.join(RESULTS_DIR, 'probe-ifvms.jsonl');
 const EVIDENCE_BOCFEL = path.join(RESULTS_DIR, 'probe-bocfel.jsonl');
 
 // runSequence writes the canonical evidence file for the adapter; tests then
-// read back that file for the run_end summary.
+// read back that file for the run_end summary.  Writes and reads are
+// serialized per adapter because node --test runs test files concurrently.
 function runFor(adapterName) {
     const cacheKey = 'run-' + adapterName;
     if (!globalThis[cacheKey]) {
-        globalThis[cacheKey] = runSequence(adapterName);
+        globalThis[cacheKey] = withLocks([adapterName], 300000, () => runSequence(adapterName));
     }
     return globalThis[cacheKey];
 }
 
-function readRunEnd(adapterName) {
+async function readRunEnd(adapterName) {
     const p = adapterName === 'ifvms' ? EVIDENCE_IFVMS : EVIDENCE_BOCFEL;
-    return fs.readFileSync(p, 'utf8').trim().split('\n').map(JSON.parse).find((r) => r.type === 'run_end');
+    return withLocks([adapterName], 60000, () =>
+        fs.readFileSync(p, 'utf8').trim().split('\n').map(JSON.parse).find((r) => r.type === 'run_end'));
 }
 
 function integrate(adapterName, skipReason) {
@@ -140,7 +143,7 @@ function integrate(adapterName, skipReason) {
 
     test(adapterName + ' run_end summary: halted with reproducible seeded draws', async () => {
         await runFor(adapterName);
-        const runEnd = readRunEnd(adapterName);
+        const runEnd = await readRunEnd(adapterName);
         assert.strictEqual(runEnd.final_status, 'halted');
         assert.strictEqual(runEnd.halted, true);
         assert.strictEqual(runEnd.within_interpreter_rng_reproducible, true);

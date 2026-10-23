@@ -102,3 +102,25 @@ test('read-only internal inspection does not advance VM time', () => {
     );
     assert.ok(!markers.delta.includes('[F06:turn='), 'meta MARKERS does not run the turn daemon');
 });
+
+test('classification and post-halt refusal agree: no reported-ready state is refused', () => {
+    // Drives the real fixed sequence in-process and asserts the invariant the
+    // classify/send reconciliation rests on: whenever the adapter refuses an
+    // input (send-after-halt recorded), the settled status must NOT claim a
+    // ready input boundary -- reported-ready states are exactly the states
+    // send() accepts.
+    const { SEQUENCE } = require('../probe.js');
+    const a = freshAdapter();
+    let unexpectedCount = a.start().unexpectedGlk.length;
+    let refusals = 0;
+    for (const step of SEQUENCE) {
+        if (!step.input) continue;
+        const r = a.send(step.input);
+        const refused = r.unexpectedGlk.length > unexpectedCount;
+        unexpectedCount = r.unexpectedGlk.length;
+        assert.ok(!refused || !String(r.status).startsWith('waiting_for_'),
+            'a state reported as ready must accept input (step ' + step.id + ')');
+        if (refused) refusals++;
+    }
+    assert.strictEqual(refusals, 1, 'only the deliberate post-halt delivery step is refused');
+});
