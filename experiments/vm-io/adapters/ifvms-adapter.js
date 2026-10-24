@@ -132,6 +132,19 @@ function createIfvmsAdapter(storyBytes /*, options */) {
             };
         },
 
+        // G1-B checkpoint probe hook (Issue #12): exposes the live handles the
+        // checkpoint capture/restore code needs -- the shim evidence state, the
+        // ZVM instance, the Glk shim object, and the internal settle() (used by
+        // the restore path to re-sync the output-delta watermark after the
+        // published transcript is replaced) -- without changing any behavior.
+        // Exposing internals is experimental probe surface, not a production
+        // adapter contract; duplicating send()/classify() in a separate wrapper
+        // would risk drifting from the shared halt predicate that PR #36 review
+        // settled.  Exercised end-to-end by the experiments/vm-checkpoint suite.
+        __g1bInternals() {
+            return { state, vm, Glk, settle };
+        },
+
         // The in-process VM needs no teardown; report the final settled state.
         async shutdown() {
             return settle();

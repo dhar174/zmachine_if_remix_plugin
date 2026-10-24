@@ -47,3 +47,6 @@ experiments/**/dist/
 experiments/vm-io/tools/
 experiments/vm-io/results/tmp-negative/
 /recovery
+
+# G1-B checkpoint probe scratch (results/ is regenerated test scratch, never evidence)
+experiments/vm-checkpoint/results/

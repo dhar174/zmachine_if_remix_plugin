@@ -3,14 +3,22 @@
 // executes test files concurrently, and several suites run probe sequences
 // that write results/probe-*.jsonl in place (probe.js has a static evidence
 // path by design).  Writers and readers of those files take one lock per
-// adapter; lock files live under the gitignored results/tmp-negative/ so a
-// crashed run cannot wedge future runs permanently (locks older than ten
-// minutes are treated as stale and stolen).
+// adapter; locks older than ten minutes are treated as stale and stolen.
+//
+// The lock directory must live OUTSIDE results/tmp-negative/: that directory
+// is deleted recursively by negative.test.js clearTampered(), and deleting a
+// held lock file let a second process acquire it -- two concurrent probe
+// runs then tore the canonical evidence JSONL mid-record (observed
+// deterministically on a machine with WSL bocfel; the bocfel negative tests
+// skip on CI, which is why it never surfaced there).  The OS temp dir is
+// never cleaned by suite code; crashed runs are handled by stale-lock
+// stealing below.
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
-const LOCK_DIR = path.join(__dirname, '..', 'results', 'tmp-negative');
+const LOCK_DIR = path.join(os.tmpdir(), 'zirp-vm-io-evidence-locks');
 const POLL_MS = 100;
 const DEFAULT_TIMEOUT_MS = 300000;
 const STALE_MS = 600000;
@@ -58,4 +66,4 @@ async function withLocks(names, timeoutMs, fn) {
     }
 }
 
-module.exports = { withLocks };
+module.exports = { withLocks, LOCK_DIR };

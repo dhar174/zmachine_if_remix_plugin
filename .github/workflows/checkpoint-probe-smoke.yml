@@ -1,0 +1,46 @@
+# G1-B checkpoint probe test smoke (Issue #12): runs the vm-checkpoint probe
+# suite on a clean checkout. This verifies the probe experiment only — it is
+# NOT product CI: the product runtime, adapter, durable store, and deployment
+# do not exist yet (see docs/ROADMAP.md evidence gates). The fixture-integrity
+# and vm-io harness suites are already covered by probe-test-smoke.yml on the
+# same triggers; this workflow adds only the new suite to avoid running them
+# twice per CI event.
+#
+# Zero npm dependencies, so there is no install step. The Bocfel interpreter
+# is not installed on hosted runners; vm-io suites that need it skip with an
+# explicit reason there. The vm-checkpoint suite's restore-isolation children
+# and kill tests run everywhere (they depend only on the pinned fixture and
+# the vendored ifvms sources).
+name: checkpoint-probe-smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  node-test:
+    name: node --test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The fixture digest manifest pins the exact committed (LF) bytes; on a
+      # Windows runner an autocrlf checkout would rewrite text files to CRLF
+      # and fail digest-sensitive reads. Force an LF (blob-faithful) checkout.
+      - name: Normalize checkout to LF bytes
+        run: |
+          git config core.autocrlf false
+          git checkout-index -f -a
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: vm-checkpoint probe suite
+        run: node --test
+        working-directory: experiments/vm-checkpoint

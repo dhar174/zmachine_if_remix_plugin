@@ -37,8 +37,9 @@ Agent-assisted engineering work (Zcode specialist subagents) is configured separ
 Feasibility-probe evidence (executed experiments, not design documents — each record states its own evidence layers and limitations):
 
 - [evidence/g1-native-io.md](evidence/g1-native-io.md) — G1-A native fixture and interpreter I/O probe (Issue #11): fixture identity and reproducibility, interpreter comparison, measured results, and the conditional G1-B handoff.
+- [evidence/g1-vm-recovery.md](evidence/g1-vm-recovery.md) — G1-B checkpoint, recovery, and candidate-isolation probe (Issue #12): recovery-state inventory, round-trip matrix per boundary and RNG mode, isolation results, the Bocfel 2.6 autosave-route investigation, and the proposed (evidence-gated) D39 recommendation.
 
-Probe implementation lives outside `docs/`: fixtures under `tests/fixtures/zmachine/`, the experimental harness under `experiments/vm-io/`. Probe code is not a production adapter and must not be promoted without separate review.
+Probe implementation lives outside `docs/`: fixtures under `tests/fixtures/zmachine/`, the G1-A I/O harness under `experiments/vm-io/`, and the G1-B checkpoint probe under `experiments/vm-checkpoint/`. Probe code is not a production adapter and must not be promoted without separate review.
 
 ## Approved decision consolidation (Issue #10)
 

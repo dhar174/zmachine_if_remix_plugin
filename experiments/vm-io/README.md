@@ -110,8 +110,10 @@ failure-injection tests.
 `node --test` executes test **files** concurrently. Suites that touch the
 canonical evidence files (`results/probe-*.jsonl`) — the integration tests
 and the failure-injection tests — serialize access with
-`tests/evidence-lock.js` (exclusive lock files under `results/tmp-negative/`,
-stale locks stolen after 10 minutes). Probe CLI children are serialized
+`tests/evidence-lock.js` (exclusive lock files under the OS temp dir
+`os.tmpdir()/zirp-vm-io-evidence-locks`, deliberately outside
+`results/tmp-negative/`, which negative tests delete recursively; stale
+locks stolen after 10 minutes). Probe CLI children are serialized
 because their parent holds the lock. Any new suite that touches probe
 evidence files must acquire the lock too.
 

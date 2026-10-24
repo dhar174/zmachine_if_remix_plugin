@@ -101,8 +101,17 @@ async function runSequence(adapterName, options) {
 
     const adapter = createAdapter(adapterName, story);
 
-    const out = fs.createWriteStream(outPath, { encoding: 'utf8' });
-    const write = (obj) => out.write(JSON.stringify(obj) + '\n');
+    // Records are buffered and written ATOMICALLY at the end of the run
+    // (temp file + rename): the canonical evidence path never holds a
+    // partially written state.  This closes a residual tear mode observed on
+    // Windows (2026-10-23): two lock-holding writers whose byte streams
+    // interleaved mid-record when the file was streamed in place -- the
+    // per-adapter evidence lock serializes the writers, but not the OS-level
+    // interleave of an in-flight incremental write against another writer's
+    // truncate/rewrite.  A hard crash mid-run leaves the .tmp beside the
+    // target instead of a torn canonical file.
+    const records = [];
+    const write = (obj) => records.push(JSON.stringify(obj) + '\n');
 
     write({
         type: 'run',
@@ -190,8 +199,9 @@ async function runSequence(adapterName, options) {
             && JSON.stringify(rolls.slice(0, 3)) === JSON.stringify(rolls.slice(3, 6)),
         turn_marker_values: turnMarkers,
     });
-    out.end();
-    await new Promise((r) => out.on('close', r));
+    const tmpPath = outPath + '.tmp';
+    fs.writeFileSync(tmpPath, records.join(''), 'utf8');
+    fs.renameSync(tmpPath, outPath);
     return { steps, finalStatus: statusBefore, stepErrors };
 }
 

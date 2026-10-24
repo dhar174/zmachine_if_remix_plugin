@@ -1,0 +1,9 @@
+{
+    "name": "zmachine-vm-checkpoint-probe",
+    "private": true,
+    "version": "0.1.0",
+    "description": "G1-B checkpoint probe (Issue #12): capture/validate/restore of a live ifvms.js ZVM at input boundaries, plus candidate isolation. Experimental probe code, not a production adapter.",
+    "scripts": {
+        "test": "node --test"
+    }
+}
