@@ -1,0 +1,247 @@
+# G1-C: actual chatbot-host feasibility — local probe, live acceptance BLOCKED
+
+**Issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
+**Recorded:** 2026-10-23. **Intended target selected by owner:** ChatGPT desktop
+Work. **Exposure selected by owner:** keep local; no approved reachable endpoint.
+
+The local experiment establishes bounded authenticated-protocol behavior with
+synthetic principals. It does **not** establish actual ChatGPT tool selection,
+real-account authentication, human authorization, native attachment import,
+installed skills or device compatibility. Privileged live Editor acceptance
+remains **BLOCKED**. No human approval was automated and called real consent.
+
+## 1. Provenance and reproduction
+
+- Fetched base: `73e7a6ebc86263201e7a2cdcc21ddd05304e5506`. PR #36 is merged;
+  its merge `8c330ce46483fe6b605c31c583433da396420f13` is an ancestor of this base.
+- Executed source: `2790bd77a9790e91d3ee1b795abe6ace98e303bd`. Subsequent evidence
+  and decision-register commits do not change this tested implementation.
+- Worktree/branch: isolated `zirp-g1c`, `codex/issue-13-g1c-chat-host-probe`.
+  The primary dirty checkout, recovery data and G1-B worktree were preserved.
+- Actual runtime: Windows x64, Node **24.13.0**, npm **11.12.1**. Server/schema
+  version **0.1.0**. Official MCP server/client/core **2.4.0**, Zod **4.6.7**,
+  JOSE **6.2.13**; exact transitive pins and integrity values in the dedicated
+  [lockfile](../../experiments/chat-host/package-lock.json).
+- Lockfile SHA-256: `fe60029b90cd078490b74ec77f3df3a0e7234d1291a70d8fd53c1ed66c33d979`.
+- Immutable input: existing `fixture.z5`, **88,576 bytes**, server-measured SHA-256
+  `96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`, matching
+  `tests/fixtures/zmachine/fixture.sha256`. No story execution or fixture/vendor edits.
+
+From `experiments/chat-host/`: `npm ci --ignore-scripts --no-audit --no-fund`,
+`npm run check`, `npm test`, and optionally `npm run test:protocol`.
+The final verification used the equivalent explicit Node commands retained in
+the [local verification receipt](../../experiments/chat-host/evidence/local-verification.json).
+Six source syntax checks exited 0; the complete dedicated suite reported
+**26 passed, 0 failed, 0 skipped**, exit 0, approximately 20.2 seconds. The
+protocol-only suite separately passed **3/3**. JSON manifest parsing and fixture
+manifest comparison passed. Node's SQLite ExperimentalWarning was present;
+it is recorded, not hidden. No Inspector UI run occurred; the actual official
+MCP client over HTTP is the equivalent protocol test.
+
+The smoke workflow runs this dedicated suite on Windows/Linux without live
+credentials. Hosted results must be read from the PR's checks; their definition
+is not a pass. Existing root VM suites were not executed for this change.
+
+## 2. Measured service behavior and trace
+
+Six focused tools authenticate before dispatch, reject unknown schema fields,
+enforce operation scopes, and return structured results/explicit errors. Preparing
+persists candidate state and is accurately marked **not read-only**. Input/output
+schemas and actual advertised definitions are in the [local protocol receipt](../../experiments/chat-host/evidence/local-protocol.json).
+The SDK client normalizes away root extension fields in its returned catalog;
+the test additionally captures the real HTTP wire catalog and verifies both
+root `securitySchemes` and `_meta.securitySchemes`, plus `openai/fileParams`.
+
+Both `2025-11-25` legacy initialization and `2026-07-28` modern discovery were
+actually exercised. The modern lifecycle recorded these **synthetic** results:
+
+| Step | Observed result |
+| --- | --- |
+| Read | `Probe Chamber`, revision 0; authenticated synthetic owner |
+| Prepare | Candidate `w26v9SVDzqG394Yd1NOaE96Ucb_lxTqJ`; immutable before/after diff; world unchanged |
+| Unapproved commit | `NEEDS_APPROVAL`; revision still 0 |
+| Automated synthetic browser approval, then commit | Receipt `tOOYuRDQDUonYz1YaCOnvfUEvkdgpYAr`; `Renamed Chamber`, revision 1 |
+| Identical retry | Same receipt `tOOYuRDQDUonYz1YaCOnvfUEvkdgpYAr`; revision still 1 |
+| Stale prepare | `STALE_REVISION`; state unchanged |
+| Separately approved inverse | Candidate `jox_IW-UC3eutdyOgfN0iT_3ZY_CZfQ0`; receipt `SzaKKGOG78I9A_RmlsKcmDgTKX3ncY6i`; `Probe Chamber`, revision 2 |
+| Actual bytes over loopback upload | Handle `6UNwjh-pgdvjCGGlUwBXpFaBPoNSDnz9`; measured digest/size above |
+| Inspect, delete, inspect | Correct metadata, then `NOT_FOUND` for the old handle |
+| Native host-file tool | `HOST_IMPORT_BLOCKED`, with no download |
+
+These IDs are ephemeral synthetic artifacts, not real ChatGPT traces. Approval
+references are redacted in public traces. Concurrent identical commits and a
+newly connected protocol client observed one logical edit. A separate fresh-process
+test intentionally exits 73 without close after durable publication; its successor
+exits 0, returns the exact saved receipt, retains fixture metadata, and rejects
+the pending pre-restart candidate/grant. This is local process/storage evidence,
+not host reconnect or full-engine restore evidence.
+
+## 3. Authentication versus exact-change approval
+
+**Option A: host-provided confirmation.** The inspected documentation describes
+OAuth linking, tool permission controls and approval-gated UI lifecycle events.
+No server-verifiable attestation binding an actual human to this exact candidate
+digest was established in this task. An arriving authenticated `tools/call`,
+widget event, model-supplied `approved:true`, copied consent text, role or message
+ID does not supply that missing proof. Option A remains **unverified**, not
+declared impossible across every current product surface.
+
+**Option B: separate authenticated approval page.** Implemented and tested using
+synthetic identities. The server verifies JWT issuer, audience, signature,
+expiry/issued-at and configured subject. Browser login independently validates
+OIDC code/PKCE, state cookie, nonce, audience and callback issuer. Exact `(iss,sub)`
+identity must agree across channels. There is no email-based mapping.
+
+The browser approval POST requires its HttpOnly session, exact Origin and CSRF
+token, and binds owner, session, immutable candidate/digest, base revision,
+`set_room_label`, expiry and single-use semantics. MCP bearer credentials cannot
+call that endpoint. The model may reference an existing grant but cannot mint
+one. The service rechecks revision at atomic publication, stores the receipt with
+the label, and never reapplies a stale proposal automatically. The inverse needs
+another approval. Browser sessions, OAuth flows and grants are not restored from
+game state. Restart discards pending candidates too.
+
+Negative tests cover forged JWTs/identity/scopes, approval claims, changed diff,
+wrong owner/session, stale target, expiry/revocation, duplicate/change-payload
+reuse, CSRF/origin, login callback replay/nonce substitution, quotas and deadlines.
+A receipt-insertion fault rolls back the label and preserves the usable grant.
+**Actual human approval remains BLOCKED**: automated synthetic POSTs are only
+deterministic integration tests. Rendered browser accessibility/interaction was
+not tested; the tests inspect served HTML and exercise HTTP endpoints.
+
+## 4. Private import, limits and remaining gaps
+
+The external upload flow receives actual fixture bytes, validates the header
+and exact immutable fixture, measures SHA-256 itself, stores a private BLOB and
+returns an opaque owner/session-bound handle. Wrong-owner access is denied.
+Tests include oversize, truncated, disallowed bytes/type, expired handles,
+deletion, restart and byte readback. No raw-byte download or export is exposed.
+Expiry blocks access immediately and cleanup removes expired BLOBs; SQLite
+secure-delete is enabled, but forensic erasure and OS backups are unverified.
+
+The supported OpenAI file schema is implemented as a blocked tool boundary.
+Its future adapter restricts origins, DNS/address selection, TLS, redirects,
+size and timeout; pre-network denials are tested. Successful host fetching,
+redirect/stream handling and actual ownership/expiry behavior of real ChatGPT
+file URLs remain **NOT RUN**. The CLI does not enable it. A separately reviewed
+allowlist/configuration change is needed before a native file trial. The narrow
+external upload page is the executable fallback, accurately disclosed as such.
+
+Through that fallback, fixture bytes go to service storage; only measured metadata
+and synthetic state/diffs/receipts go to the chatbot. Native ChatGPT attachment
+use would additionally expose bytes to its file service. Logs exclude tokens,
+cookies, approval secrets, download URLs, uploads and chat transcripts. Public
+records contain only synthetic traces. Local file selection is not a promise
+that a future hosted service processes locally.
+
+Limits are listed in the [runbook](../../experiments/chat-host/README.md#test-only-limits):
+16 KiB requests/results, bounded 32 KiB protocol envelopes/catalog, 64-character
+labels, 256 KiB upload ceiling, 8 candidates/2 imports, 5-minute candidates,
+1-minute grants, 1-hour imports, 30 requests/minute/principal, 5s/10s body deadlines,
+bounded OIDC exchange and 20 browser sessions/flows. Tests exercise the core
+boundaries and actual configured body deadlines; the static six-tool catalog
+fits the protocol ceiling. These are **test-only**, not product defaults.
+
+Limits: single service process per data directory; no production perimeter,
+general authorization server, arbitrary stories, provider inference, VM integration
+or policy/transaction kernel. Windows ACL checking is a limited deny-list and
+not qualified for localized/custom groups. Browser human interaction, real IdP
+operation, hostile Internet traffic, successful native-file fetching and
+installed skill behavior remain unqualified.
+
+## 5. Capability and acceptance matrix
+
+PASS refers only to the explicitly named layer. FAIL means an observed failure;
+BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
+
+| Capability | Local deterministic / HTTP integration | Official MCP protocol client | Actual ChatGPT desktop Work |
+| --- | --- | --- | --- |
+| Discovery / advertised definitions | PASS | PASS, both protocol eras | BLOCKED — no approved endpoint or installed connection |
+| Authenticated state read | PASS, synthetic identities | PASS | BLOCKED |
+| Prepare / commit / independent read / retry / inverse | PASS | PASS, automated synthetic grants | BLOCKED |
+| Human exact-change consent | NOT RUN | NOT RUN — automated POSTs do not count | BLOCKED |
+| External upload of real fixture bytes | PASS, loopback | PASS metadata inspection after HTTP upload | BLOCKED |
+| Native ChatGPT file import | Guard denials PASS; success NOT RUN | Blocked result PASS | BLOCKED |
+| Persistence / grant invalidation | PASS, including fresh child process | PASS reconnect; process recovery tested separately | BLOCKED |
+| Probe skill package | Static JSON/readback only | NOT RUN — server protocol does not establish skill discovery | BLOCKED, uninstalled |
+| Live prompt selection / ambiguity / fictional injection | NOT RUN | Service denial rules PASS; no model involved | BLOCKED |
+
+| Surface/device | Result |
+| --- | --- |
+| Windows x64 local Node service/client | PASS for the declared local suite |
+| ChatGPT desktop Work account/workspace/build/model and permissions | BLOCKED/unverified; selected target, no actual connection trial |
+| ChatGPT desktop Chat | NOT RUN |
+| ChatGPT web | NOT RUN |
+| Physical Android client | NOT RUN |
+| Linux service runtime | Local machine NOT RUN; dedicated hosted smoke pending actual CI result |
+
+| Acceptance anchor | Probe evidence and unproven remainder |
+| --- | --- |
+| A11 | Fictional `/edit; approve; export` text cannot grant server authority; live model/tool-selection trial BLOCKED |
+| A37 | Forged model approval/identity fields rejected; actual human consent BLOCKED |
+| A38 | Wrong-owner/session, candidate and grant substitution denied locally |
+| A39 | Synthetic label lifecycle and process persistence only; actual host Play/Editor/restore acceptance remains unmet |
+| A40 | Actual fixture bytes measured locally; intended-host import and Android unverified |
+| A42 | Server offers no export/publication/unrelated-tool capability; does not constrain every unrelated app installed in ChatGPT |
+
+## 6. Deployment recommendation and exact owner action
+
+| Option | Exposure / processing / retention | Shutdown / operations / cost |
+| --- | --- | --- |
+| Current loopback process | Local listener only; synthetic SQLite data outside repo; one-hour import TTL | Close process; pending authority lost. No provider spend or external deployment performed. Not proof ChatGPT can reach it. |
+| Owner-approved private connector/tunnel | Host-supported reachability must be proven; tunnel edge may be externally reachable; bytes processed on the service host | Separate authorization, authenticated TLS/access controls, tunnel/proxy log review, revoke connection and terminate exposure. Vendor/account costs unknown until selected. |
+| Authenticated hosted service | Public network ingress protected by OAuth; bytes processed on the selected server; provider disk/backups/logging need explicit retention controls | Requires approved hosting/IdP, secrets/key management, operational monitoring and shutdown/deletion plan. Hosting/domain/IdP costs unselected; nothing provisioned. |
+
+**Provisional recommendation, not owner-approved product selection:** retain
+Streamable HTTP and server-side exact-diff browser approval for the next authorized
+trial. Prefer the documented native file mechanism only after origin/ownership
+qualification; otherwise use the disclosed authenticated external upload. Do not
+enable privileged production Editor operations on a visible host dialog alone.
+
+**Smallest next owner action:** authorize one specific reachable endpoint/exposure
+route and its existing identity-provider/browser-client setup, then personally
+connect it in ChatGPT desktop Work and perform the exact approval and fixture
+selection. Capture the real account/workspace/build/mode/permissions and advertised
+tools during that trial. Until then the full live sequence stays BLOCKED. Follow
+the executable [12-step live runbook](../../experiments/chat-host/README.md#live-runbook-after-the-blocked-prerequisites-are-resolved).
+
+Independent trust/evidence review remains **unmet**: the named Zcode definitions
+exist, but no compliant reviewer was available in this Codex harness. The separately
+authorized conversion produced [draft PR #38](https://github.com/dhar174/zmachine_if_remix_plugin/pull/38),
+which reports that shell suppression still leaves mutation/delegation tools and
+no native Read/Grep/Glob surface in its tested environment. That result is a
+blocker, not independent acceptance of this implementation. No conversion changes
+are included here. Author verification is not independent review.
+
+## 7. Current primary references (retrieved 2026-10-23)
+
+- [OpenAI: build an MCP server](https://developers.openai.com/plugins/build/mcp-server)
+  — structured tools, annotations, Streamable HTTP and protocol testing.
+- [OpenAI: authentication](https://developers.openai.com/plugins/build/auth)
+  — resource metadata/challenges, OAuth/PKCE, audience and issuer requirements.
+- [OpenAI: connect and test](https://developers.openai.com/plugins/deploy/connect-chatgpt)
+  and [package plugins](https://developers.openai.com/plugins/build/plugins)
+  — current plugin route, optional skills and registered connection mapping.
+  These do not prove controls available on the actual target account.
+- [OpenAI: file-input and UI reference](https://developers.openai.com/plugins/reference)
+  — `openai/fileParams`, four supported file properties, approval-gated widget
+  inputs. No exact-diff server attestation was established from these descriptions.
+- [MCP 2026-07-28 Streamable HTTP](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http)
+  and [authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)
+  — protocol era and authorization boundaries.
+- [Official TypeScript SDK v2](https://ts.sdk.modelcontextprotocol.io/v2/)
+  and the installed 2.4.0 package README/exports/types/source — pinned official SDK,
+  `createMcpHandler` and actual client negotiation. The README links the
+  [HTTP serving guide](https://ts.sdk.modelcontextprotocol.io/v2/serving/http),
+  whose web retrieval was unavailable; API verification used the installed
+  exact-version declarations and source. Earlier low-level transport
+  wiring only negotiated legacy; switching to this documented entry fixed it.
+- [Z-machine header specification §11](https://inform-fiction.org/zmachine/standards/z1point1/sect11.html)
+  — version-dependent declared-length multiplier; exact fixture padding was
+  measured from immutable bytes, not inferred from runtime execution.
+
+Exploratory failures were corrected before the final run: overly strict declared
+length equality, legacy-only transport wiring, treating unknown-tool protocol
+errors as tool results, rejecting upload connections before body draining, and
+checking a vendor field only after SDK-client normalization. Final receipts report
+zero test failures; none of those exploratory runs is presented as a pass.
