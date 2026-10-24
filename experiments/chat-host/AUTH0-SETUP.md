@@ -249,7 +249,37 @@ in configuration or provider logs by this probe. ChatGPT receives tool results;
 the local service stores synthetic state and approved fixture bytes. Tunnel
 transport privacy is not a claim that all processing occurs locally.
 
-## Current blockers and references
+## Verified follow-up, 2026-10-24
+
+The real approval-browser OIDC flow now succeeds, and the existing ChatGPT web
+plugin discovers six tools and returns Probe Chamber / revision 0. Fixed-category
+local diagnostics identified JWT_IAT rejection; only future issued-at skew now
+permits five seconds, with strict exp/nbf and a 900-second age limit retained.
+Pinned public keys matched the actual provider. No issuer/audience/owner/scope
+check was weakened. The explicit owner authorization to use existing credentials
+permitted repair/reconnection: the existing browser client secret was transferred
+from its provider UI Copy control directly to a private launcher process, never
+printed, embedded in an argument, saved literally to config or published. The
+clipboard was cleared after transfer. No password or account permission changed.
+
+The actual external browser upload accepted the immutable 88,576-byte fixture,
+measured its expected SHA-256, survived service restart and was deleted; reusing
+the handle returned NOT_FOUND. These were agent-operated fixture operations, not
+human exact-diff approval or native ChatGPT attachment integration. HTML now uses
+strict-origin so native forms supply the required Origin while retaining CSRF.
+Two expired duplicate host account links were removed, leaving the current one.
+OAuth access remains the reviewed four scopes; no new API/client/tunnel was made.
+
+The tunnel client's prepared issuer-origin trust change remains unloaded;
+automatic metadata discovery is not repaired. Manual OAuth did establish the
+working web discovery/read path. The API's 900-second token lifetime can require
+routine reconnection; longer sessions/refresh support are not qualified here.
+Actual desktop Work, exact workspace UUID mapping, human edit approval, live
+commit/inverse and native file import remain unverified. The terminal recovered; source follow-up 98a9751863f8ef872b10398f18c2566cd8e22ba4
+is bound to the 31-test receipt, with hosted CI/publication tracked separately;
+[the evidence report](../../docs/evidence/g1-chat-host.md) is the current status.
+
+## Historical blockers and references (superseded by the follow-up above)
 
 The account configuration and single-user binding checkpoints above are complete.
 The local service and private tunnel runtime are responding after personal

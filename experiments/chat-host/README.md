@@ -5,28 +5,25 @@ operate on a synthetic room label and one immutable redistributable Z5 fixture.
 No interpreter is imported or executed. The host model selects tools; there is
 no provider API dependency or call back into a ChatGPT subscription.
 
-**Live ChatGPT acceptance is BLOCKED.** The original local delivery targeted
-ChatGPT desktop Work and provisioned no exposure or account integration. In a
-subsequent owner-authorized setup session, a private Secure MCP Tunnel metadata
-record and local environment-reference profile were created. Its client has not
-started: `doctor --explain` exited 2 for a missing runtime key. The owner then
-requested Auth0 preparation, then explicitly approved its scoped configuration.
-The [Auth0 setup record](AUTH0-SETUP.md) now records a verified Free subscription,
-real provider metadata and two restricted OAuth clients. The owner personally
-created the probe user, and the private local config is bound to its verified
-subject. After personal hidden-input secret entry, the live local process returned
-resource metadata (HTTP 200) and rejected unauthenticated MCP (HTTP 401). The
-owner then supplied the tunnel runtime key personally and reported doctor PASS.
-Independent CLI health with required successful control-plane polling returned
-exit 0: process running, health/ready HTTP 200, polling observed. Readiness says
-MCP initialization requires OAuth, as expected. After Chrome recovery and separate
-explicit approval, a private plugin was created with manually entered OAuth
-metadata. The host reports authentication succeeded but action discovery failed;
-the tunnel trace records server/discover receiving upstream HTTP 401. Automatic
-OAuth metadata discovery separately failed because the external issuer origin
-was not trusted; its profile correction is prepared but not loaded. No actual
-ChatGPT tool call or human exact-change approval has occurred. See
-[the evidence report](../../docs/evidence/g1-chat-host.md).
+**Privileged live acceptance remains BLOCKED.** The owner-approved private
+Secure MCP Tunnel and Auth0 route now supports actual ChatGPT **web Chat**
+discovery of all six tools and a natural authenticated read: Probe Chamber,
+revision 0. The original desktop Work target, human exact-diff approval, live
+commit/inverse, native attachment import, installed skill and Android trials
+remain unverified. Separate real-identity external upload received the exact
+fixture bytes, measured the expected digest, survived service restart, and was
+deleted; its old handle returned NOT_FOUND. That browser flow was agent-operated,
+not native ChatGPT attachment integration or human edit consent.
+
+The authentication follow-up corrects bounded issued-at skew (five seconds only;
+strict expiry/not-before and 900-second age), adds private fixed-category rejection
+diagnostics, and uses strict-origin on HTML so native form Origin/CSRF protection
+works. The dedicated suite passed **31/31**, with earlier failed runs preserved in
+[the source-bound follow-up receipt](evidence/local-follow-up-2026-10-24.json).
+The terminal bridge stalled temporarily, then recovered. Tested source follow-up
+98a9751863f8ef872b10398f18c2566cd8e22ba4 preserves the original scope; hosted
+CI and final publication are separate evidence gates. See
+[the evidence report](../../docs/evidence/g1-chat-host.md) for all layers/failures.
 
 ## Reproduce local evidence
 
@@ -77,7 +74,8 @@ The service binds **127.0.0.1 only**. SDK 2.4.0's `createMcpHandler` serves mode
 `2026-07-28` discovery and legacy `2025-11-25` initialization from the same tool
 factory. Authentication is checked before protocol dispatch. JWTs require a
 signature under pinned public keys, exact issuer/resource audience, expiry,
-issued-at, configured subject and operation scope. A subject supplied in tool
+issued-at (at most five seconds future skew; age at most 900 seconds), configured
+subject and operation scope. Expiry/not-before use zero tolerance. A subject supplied in tool
 arguments is never used as identity. Updating provider keys is manual.
 
 The browser has a separate OIDC authorization-code + PKCE/nonce/state flow and
@@ -139,7 +137,11 @@ Through external upload, bytes go from the selected device to private service
 storage. This service sends the chatbot synthetic state, diffs, receipts and
 measured metadata, not the binary. A native ChatGPT attachment would also put
 bytes into ChatGPT's file system; its retention must be disclosed separately.
-The service emits only a startup status and fixed error codes, no request logs.
+The service emits a startup status and fixed error codes, no request logs. A
+private auth-diagnostics.json contains at most 32 unique fixed phase/reason
+categories, resets at startup and excludes claims, owners, tokens and grants.
+Diagnostic write failure cannot alter an authentication decision. HTML sends
+only its origin as referrer (strict-origin); JSON retains no-referrer.
 No tokens, cookie values, approval secrets, signed URLs, complete uploads or
 private chat transcripts belong in public evidence. OS administrators, disk
 encryption and reverse-proxy logging are outside the measured boundary.
@@ -202,12 +204,22 @@ npm start
 The CLI checks storage placement and restrictive POSIX mode or a limited Windows
 ACL deny-list check; it never changes ACLs. Windows localization/custom groups
 are not a general ACL audit. Choose a directory under your private user profile
-and verify its ACL before a future live run. HTTPS termination, firewall/tunnel
-setup, authorization-server discovery/client registration and account plugin
-installation are owner-controlled prerequisites, not actions performed here.
+and verify its ACL before a future live run. HTTPS termination, firewall changes and any further account access require their
+applicable authorization. The current private tunnel, two OAuth clients and
+private plugin were separately approved and configured; this does not authorize
+public hosting or broader scopes. Automatic issuer discovery still needs the
+prepared exact-origin trust change loaded on a controlled client restart.
 Stop with Ctrl+C; SIGINT/SIGTERM closes connections, sessions, grants and the DB.
 
 ## Live runbook after the blocked prerequisites are resolved
+
+Current checkpoint: steps 1–5 have narrow **web Chat** discovery/read evidence,
+not desktop Work qualification. The external byte upload/deletion and service
+restart are separate browser evidence. Resume with a fresh candidate and human
+approval; do not repeat resource creation or automate the approval click. The
+900-second API token may require routine reconnection. An initial empty host
+response later loaded; preserve that failure/recovery, not just its final state.
+
 
 1. Record redacted account/workspace, ChatGPT desktop build, Work mode, model
    identity if exposed, permission settings and device. Record the *actual*

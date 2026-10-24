@@ -1,14 +1,94 @@
-# G1-C: actual chatbot-host feasibility — local probe, live acceptance BLOCKED
+# G1-C: real web discovery/read verified; privileged live acceptance BLOCKED
 
 **Issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
-**Recorded:** 2026-10-23. **Intended target selected by owner:** ChatGPT desktop
-Work. **Original exposure selection:** keep local; no approved reachable endpoint.
+**Updated:** 2026-10-24. Actual tested route: ChatGPT **web Chat** in Chrome on
+Windows x64, using the owner-approved private Secure MCP Tunnel and Auth0.
+The original intended desktop Work surface has not been tested.
 
-The local experiment establishes bounded authenticated-protocol behavior with
-synthetic principals. It does **not** establish actual ChatGPT tool selection,
-real-account authentication, human authorization, native attachment import,
-installed skills or device compatibility. Privileged live Editor acceptance
-remains **BLOCKED**. No human approval was automated and called real consent.
+The actual host now advertises all six probe tools, and a natural request returned
+**Probe Chamber, revision 0**. The tunnel recorded a main-channel tools/call with
+HTTP 200. Separate real-identity browser sign-in, external upload of the exact
+fixture bytes, restart/readback, deletion and old-handle denial were observed.
+These results do not establish human exact-change consent, a committed live edit,
+native ChatGPT attachment import, installed skill behavior or device compatibility.
+Privileged live Editor acceptance remains **BLOCKED**.
+
+## Current live checkpoint (2026-10-24)
+
+- The dedicated real Auth0 subject is the sole configured owner. Both public JWKs
+  matched the provider metadata. Fixed-category diagnostics identified JWT_IAT
+  rejection; the issuer's HTTP Date was approximately 0.4 seconds ahead of local
+  UTC. The source now permits only five seconds of future issued-at skew, retains
+  a strict 900-second maximum age, and leaves expiry/not-before at zero tolerance.
+  Browser sign-in then displayed the real synthetic session at revision 0.
+- The actual plugin management page shows OAuth used, one current account link,
+  and Allow low-risk permission. Two expired duplicate links from failed setup
+  attempts were disconnected; no app, provider user, client or tunnel was deleted.
+  Refresh tools succeeded. The real host UI exposed three write and three read
+  operations with their descriptions (see the redacted receipt below). The UI did
+  not expose full JSON schemas; local wire catalogs remain separate evidence.
+- An initial read conversation worked for 17 seconds but displayed no result.
+  A fresh read trial showed Read authenticated synthetic state / Worked for 6s,
+  initially This response couldn't load. After routine reconnection the persisted
+  response displayed Probe Chamber, revision 0. A subsequent response repeated
+  that state. Only one actual tools/call is established by the captured tunnel
+  counter; the repeated answer is not claimed as an independent second call.
+- GPT-6 / High was initially selected. The model menu also contained a Usage limit
+  reached notice. The operator then selected GPT-5.6 Sol / High in the actual model
+  submenu and reconnected the existing scoped app after the host reported expiry.
+  The notice and response failure are observations; their causal relationship is
+  unproven. ChatGPT build, exact model build and workspace UUID mapping remain
+  unverified. Personal is the observed plugin directory, not proof of workspace
+  type. The settings sidebar also displayed Personal.
+- The actual external upload sent **88,576 bytes**, measured version 5 and SHA-256
+  **96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b**.
+  Private read-only SQL verified the owner binding, metadata and stored BLOB digest.
+  After service restart, the native deletion form returned DELETED; repeating the
+  deleted handle returned NOT_FOUND, and its row/BLOB were logically absent.
+  Handle: 75z7AqGPYopxBL7RwRIC6L-ncHAEuahv (now deleted). This was an
+  **agent-operated, authenticated external browser upload/deletion**, explicitly
+  authorized for this fixture. It is neither a native attachment import nor human
+  exact-diff edit consent. Another real principal was not used; wrong-owner denial
+  remains synthetic-test evidence.
+- The first native deletion failed ORIGIN_DENIED. HTML now uses Referrer-Policy:
+  strict-origin because Fetch specifies Origin:null for no-referrer native POSTs.
+  The actual form succeeded after that correction; null/foreign origins still
+  fail, CSRF remains required, and JSON responses retain no-referrer.
+- Local authentication diagnostics contain only bounded fixed categories, are
+  private, reset on process start and contain no claims/tokens/grants. Durable
+  synthetic game data remains separate from credential/session/grant memory.
+- An optional further tool-outcome diagnostic edit was attempted when the host
+  response was empty. The terminal/edit bridge stalled; that attempt was canceled
+  and disk readback confirmed it was **not applied**. The terminal later recovered. The tested source fixes were committed as
+  98a9751863f8ef872b10398f18c2566cd8e22ba4; its exact source manifest was
+  verified unchanged after the passing suite. New-head hosted CI remains unverified.
+
+Redacted actual host catalog:
+
+| Host classification | Actual advertised operations |
+| --- | --- |
+| Write (3) | probe_commit_label; probe_import_fixture; probe_prepare_label |
+| Read (3) | probe_get_candidate; probe_get_state; probe_inspect_import |
+
+Redacted live trace: natural request for current synthetic label/revision →
+Read authenticated synthetic state → Probe Chamber / revision 0. Actual ChatGPT preparation subsequently returned candidate
+0xStIwD1Etv6pAEES0P229JcQPbVr2uy, digest
+f4cbab898330f48d418dfed3762642bd5b8499cc60d0e3c943abf7763d63e107,
+base revision 0, Probe Chamber → Renamed Chamber, expiry
+2026-10-24T05:18:17.267Z. The separately authenticated browser displayed the same
+immutable fields; no approval button was automated. No real human grant or commit
+receipt exists at this checkpoint. Synthetic game state was unchanged
+through these checks. Callback URLs, real account IDs, provider user IDs, credentials,
+chat identifiers and unrelated chats are excluded from public evidence.
+
+The active tunnel has not loaded the prepared oauth_trusted_origins profile
+correction. Automatic OAuth metadata discovery still reports destination origin
+not trusted. The manually configured OAuth route did achieve real discovery and
+read; that does not prove the automatic route was repaired. Harpoon has no targets
+registered and rejects that unrelated channel; the probe uses main. No public
+listener, paid resource or broader scope was provisioned.
+
+## Historical setup journal (superseded where the current checkpoint differs)
 
 **Owner-authorized setup follow-up, 2026-10-23:** the actual ChatGPT web Plugins
 form exposes Connection: Tunnel and OAuth. After explicit confirmation, Platform
@@ -122,8 +202,10 @@ been demonstrated.
 
 - Fetched base: `73e7a6ebc86263201e7a2cdcc21ddd05304e5506`. PR #36 is merged;
   its merge `8c330ce46483fe6b605c31c583433da396420f13` is an ancestor of this base.
-- Executed source: `2790bd77a9790e91d3ee1b795abe6ace98e303bd`. Subsequent evidence
-  and decision-register commits do not change this tested implementation.
+- Original executed source: `2790bd77a9790e91d3ee1b795abe6ace98e303bd` (26 tests).
+  Published draft head before the authentication follow-up: `c09b073891764b5e4e4cfcd72a6b9bcd96996148`.
+  Source follow-up: `98a9751863f8ef872b10398f18c2566cd8e22ba4`; the [follow-up receipt](../../experiments/chat-host/evidence/local-follow-up-2026-10-24.json)
+  binds all 16 source/test/manifest files by SHA-256 and records the observed 31-test pass.
 - Worktree/branch: isolated `zirp-g1c`, `codex/issue-13-g1c-chat-host-probe`.
   The primary dirty checkout, recovery data and G1-B worktree were preserved.
 - Actual runtime: Windows x64, Node **24.13.0**, npm **11.12.1**. Server/schema
@@ -139,12 +221,21 @@ From `experiments/chat-host/`: `npm ci --ignore-scripts --no-audit --no-fund`,
 `npm run check`, `npm test`, and optionally `npm run test:protocol`.
 The final verification used the equivalent explicit Node commands retained in
 the [local verification receipt](../../experiments/chat-host/evidence/local-verification.json).
-Six source syntax checks exited 0; the complete dedicated suite reported
+Original verification: six source syntax checks exited 0; the dedicated suite reported
 **26 passed, 0 failed, 0 skipped**, exit 0, approximately 20.2 seconds. The
 protocol-only suite separately passed **3/3**. JSON manifest parsing and fixture
 manifest comparison passed. Node's SQLite ExperimentalWarning was present;
 it is recorded, not hidden. No Inspector UI run occurred; the actual official
 MCP client over HTTP is the equivalent protocol test.
+
+The 2026-10-24 follow-up passed all **31 tests, 0 failures, 0 skips**, exit 0,
+21,423.9291 ms, and six syntax checks. The focused official protocol suite passed
+3/3 after extracting light synthetic data imports for the recovery child. Earlier
+30-test suites failed 1/30 (recovery timeout), then 2/30 (ECONNRESET and recovery
+timeout); isolated 5s/15s child failures were observed. The child now avoids MCP/JOSE
+startup and retains a bounded 15s test-only process budget; transport limits did not
+change. The passing final source has no subsequent runtime edits. Node SQLite
+ExperimentalWarning remains. See the follow-up receipt for commands and failures.
 
 The smoke workflow runs this dedicated suite on Windows/Linux without live
 credentials. Hosted results must be read from the PR's checks; their definition
@@ -214,8 +305,8 @@ wrong owner/session, stale target, expiry/revocation, duplicate/change-payload
 reuse, CSRF/origin, login callback replay/nonce substitution, quotas and deadlines.
 A receipt-insertion fault rolls back the label and preserves the usable grant.
 **Actual human approval remains BLOCKED**: automated synthetic POSTs are only
-deterministic integration tests. Rendered browser accessibility/interaction was
-not tested; the tests inspect served HTML and exercise HTTP endpoints.
+deterministic integration tests. Real browser sign-in, upload and native deletion
+were exercised; no agent action is labeled human exact-diff approval.
 
 ## 4. Private import, limits and remaining gaps
 
@@ -253,35 +344,36 @@ fits the protocol ceiling. These are **test-only**, not product defaults.
 Limits: single service process per data directory; no production perimeter,
 general authorization server, arbitrary stories, provider inference, VM integration
 or policy/transaction kernel. Windows ACL checking is a limited deny-list and
-not qualified for localized/custom groups. Browser human interaction, real IdP
-operation, hostile Internet traffic, successful native-file fetching and
-installed skill behavior remain unqualified.
+not qualified for localized/custom groups. Human exact-diff approval, hostile Internet traffic, successful native-file fetching
+and installed skill behavior remain unqualified. Real IdP/browser operation is
+qualified only for the narrow current checkpoint above.
 
 ## 5. Capability and acceptance matrix
 
 PASS refers only to the explicitly named layer. FAIL means an observed failure;
 BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 
-| Capability | Local deterministic / HTTP integration | Official MCP protocol client | Actual ChatGPT desktop Work |
+| Capability | Local deterministic / official MCP protocol | Actual ChatGPT web Chat | Actual authenticated external browser |
 | --- | --- | --- | --- |
-| Discovery / advertised definitions | PASS | PASS, both protocol eras | FAIL — plugin created by explicit approval using manual OAuth; action discovery returned 401; tool definitions not obtained |
-| Authenticated state read | PASS, synthetic identities | PASS | BLOCKED — host reports OAuth success, service acceptance unverified |
-| Prepare / commit / independent read / retry / inverse | PASS | PASS, automated synthetic grants | BLOCKED |
-| Human exact-change consent | NOT RUN | NOT RUN — automated POSTs do not count | BLOCKED |
-| External upload of real fixture bytes | PASS, loopback | PASS metadata inspection after HTTP upload | BLOCKED |
-| Native ChatGPT file import | Guard denials PASS; success NOT RUN | Blocked result PASS | BLOCKED |
-| Persistence / grant invalidation | PASS, including fresh child process | PASS reconnect; process recovery tested separately | BLOCKED |
-| Probe skill package | Static JSON/readback only | NOT RUN — server protocol does not establish skill discovery | BLOCKED, uninstalled |
-| Live prompt selection / ambiguity / fictional injection | NOT RUN | Service denial rules PASS; no model involved | BLOCKED |
+| Discovery / advertised definitions | PASS, both protocol eras, full wire schemas | PASS, six names/descriptions; full JSON schemas not captured | N/A |
+| Authenticated state read | PASS, synthetic identities | PASS, real owner; Probe Chamber / revision 0 | PASS, same configured owner/session |
+| Prepare / commit / read / retry / inverse | PASS, automated synthetic grants | Prepare PASS; commit/retry/inverse BLOCKED pending human exact-diff interaction | Candidate diff displayed; human click pending |
+| Human exact-change consent | NOT RUN; synthetic POSTs do not count | BLOCKED | BLOCKED; must be a real human click |
+| External upload / delete real fixture | PASS, synthetic identities / MCP metadata | Metadata read NOT RUN | PASS, agent-operated real identity/bytes; old handle NOT_FOUND |
+| Native ChatGPT attachment import | Guard denials PASS; success NOT RUN | BLOCKED, disabled CLI | N/A; external upload is a fallback |
+| Persistence / grant invalidation | PASS, fresh process / reconnect | Host restart/reconnect sequence NOT RUN | Fixture persisted across restart, deletion succeeded; pending grant invalidation NOT RUN live |
+| Probe skill discovery / invocation | Static package only | NOT RUN / uninstalled | N/A |
+| Prompt ambiguity / fictional injection | Service denials PASS; no model in tests | NOT RUN as a dedicated live adversarial trial | N/A |
 
 | Surface/device | Result |
 | --- | --- |
-| Windows x64 local Node service/client | PASS for the declared local suite |
-| ChatGPT desktop Work account/workspace/build/model and permissions | BLOCKED/unverified; selected target, no actual connection trial |
+| Windows x64 local Node service/client | PASS for declared local suite and narrow live checkpoints |
+| Chrome / ChatGPT web Chat | PASS discovery/read; browser/app build not captured; GPT-6 High and GPT-5.6 Sol High observed |
+| Exact ChatGPT workspace association / permissions | Tunnel metadata selected organization/workspace; actual workspace UUID mapping unverified; OAuth and Allow low-risk observed |
+| ChatGPT desktop Work | NOT RUN; original intended surface remains unqualified |
 | ChatGPT desktop Chat | NOT RUN |
-| ChatGPT web | Configuration UI observed; actual tool-use trial NOT RUN |
-| Physical Android client | NOT RUN |
-| Linux service runtime | Local machine NOT RUN; hosted Linux smoke PASS at `49212e0b88504d63e1058dc0fe1a3001d4725dae`; 11 reported PR check entries SUCCESS at that head |
+| Physical Android | NOT RUN |
+| Linux service runtime | Local NOT RUN; hosted Linux smoke PASS at historical 49212e0b88504d63e1058dc0fe1a3001d4725dae; no new-head CI claim |
 
 | Acceptance anchor | Probe evidence and unproven remainder |
 | --- | --- |
@@ -297,7 +389,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Option | Exposure / processing / retention | Shutdown / operations / cost |
 | --- | --- | --- |
 | Current loopback process | Local listener only; synthetic SQLite data outside repo; one-hour import TTL | Close process; pending authority lost. No provider spend or external deployment performed. Not proof ChatGPT can reach it. |
-| Owner-approved Secure MCP Tunnel + Auth0 | Private route metadata created; outbound client health/readiness/polling verified; no public listener needed; tool results traverse OpenAI and bytes are processed on the local service | Approved OAuth setup saved; actual Auth0 subscription Free / USD 0 observed. Actual authenticated ChatGPT discovery and host tool use pending. Stop both processes and revoke the plugin/tunnel access after testing; provider authentication logs have their own retention. |
+| Owner-approved Secure MCP Tunnel + Auth0 | Private route metadata created; outbound client health/readiness/polling verified; no public listener needed; tool results traverse OpenAI and bytes are processed on the local service | Approved OAuth setup saved; actual Auth0 subscription Free / USD 0 observed. Actual web discovery/read verified; privileged live sequence pending. Stop both processes and revoke the plugin/tunnel access after testing; provider authentication logs have their own retention. |
 | Authenticated hosted service | Public network ingress protected by OAuth; bytes processed on the selected server; provider disk/backups/logging need explicit retention controls | Requires approved hosting/IdP, secrets/key management, operational monitoring and shutdown/deletion plan. Hosting/domain/IdP costs unselected; nothing provisioned. |
 
 **Provisional recommendation, not owner-approved product selection:** retain
@@ -306,13 +398,17 @@ trial. Prefer the documented native file mechanism only after origin/ownership
 qualification; otherwise use the disclosed authenticated external upload. Do not
 enable privileged production Editor operations on a visible host dialog alone.
 
-**Smallest next owner action:** complete the open Approval Browser consent
-personally to qualify the browser identity path. Diagnose the actual host
-server/discover 401 and load the prepared trusted-origin correction on the next
-controlled tunnel restart. Then retry the existing created plugin, followed by
-personal exact-diff approval and fixture selection. Capture the real account/workspace/build/mode/permissions and advertised
-tools during that trial. Until then the full live sequence stays BLOCKED. Follow
-the executable [12-step live runbook](../../experiments/chat-host/README.md#live-runbook-after-the-blocked-prerequisites-are-resolved).
+**Smallest remaining human action:** personally inspect and click Approve this exact
+edit on a fresh immutable candidate page, then notify the coordinator immediately
+(the grant lasts one minute). Credential use is authorized; agent sign-in is not
+human edit consent. No user credential re-entry is needed unless provider sessions
+expire or MFA is required. The inverse needs a separate personal approval.
+The [live runbook](../../experiments/chat-host/README.md#live-runbook-after-the-blocked-prerequisites-are-resolved)
+continues from the verified read, preserving separate host, consent and import gates.
+The terminal recovered and the coordinator committed the source-bound follow-up.
+PR #39 must retain live acceptance BLOCKED until the remaining sequence is proven;
+hosted CI must be checked for the final published head separately. The prepared tunnel trust change can be loaded on a controlled restart;
+its runtime key must remain private and must not be extracted from a running process.
 
 Independent trust/evidence review remains **unmet**: the named Zcode definitions
 exist, but no compliant reviewer was available in this Codex harness. The separately
@@ -354,3 +450,5 @@ length equality, legacy-only transport wiring, treating unknown-tool protocol
 errors as tool results, rejecting upload connections before body draining, and
 checking a vendor field only after SDK-client normalization. Final receipts report
 zero test failures; none of those exploratory runs is presented as a pass.
+
+Follow-up references retrieved/inspected 2026-10-24: [Fetch request Origin rules](https://fetch.spec.whatwg.org/#append-a-request-origin-header), installed JOSE 6.2.13 JWT claim-validation source, and the current OpenAI authentication/connect/tunnel references above. The Python public-metadata fetch failed certificate validation; OS-trust PowerShell retrieval succeeded. No TLS bypass was used.
