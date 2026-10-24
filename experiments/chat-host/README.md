@@ -14,7 +14,9 @@ requested Auth0 preparation, then explicitly approved its scoped configuration.
 The [Auth0 setup record](AUTH0-SETUP.md) now records a verified Free subscription,
 real provider metadata and two restricted OAuth clients. The owner personally
 created the probe user, and the private local config is bound to its verified
-subject. Personally entered secrets and service startup are pending. No actual
+subject. After personal hidden-input secret entry, the live local process returned
+resource metadata (HTTP 200) and rejected unauthenticated MCP (HTTP 401). The
+tunnel runtime key and installed connection are still pending. No actual
 ChatGPT call or human exact-change approval has occurred. See
 [the evidence report](../../docs/evidence/g1-chat-host.md).
 

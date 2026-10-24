@@ -58,12 +58,23 @@ retains an empty allowlist and is not the startup file.
 
 A local service launcher was read back, passed PowerShell parsing, and actually
 exited 2 before requesting a secret when the final owner-bound config was absent.
-After binding, an interactive PowerShell process was launched for hidden input;
-at the checkpoint it had no Node child and no loopback listener. Its prompt keeps
-the browser-client secret in process environment only; the separate tunnel
-launcher prompts for the restricted runtime key. These launchers are local
-account-specific artifacts, not public repository files. Service start remains
-unverified until personal secret entry and independent listener checks.
+After binding, the owner entered the browser secret through hidden input and
+reported `LISTENING_LOCAL_ONLY`. Independent direct TCP and HTTP checks reached
+`127.0.0.1:3213`: resource metadata returned 200 with the configured resource,
+issuer and four scopes; unauthenticated MCP returned 401. The Node child belongs
+to the launched PowerShell process. Windows CIM/netstat did not consistently
+show a LISTEN row, so the live socket inventory alone does not prove exclusion
+of every other interface; the tested source explicitly binds 127.0.0.1.
+No issued token or completed browser login is established by these checks.
+An open Auth0 consent page showed `invalid_request` with a missing-session
+message; login must be restarted from the application before it can count.
+
+The launcher keeps the browser-client secret in process environment only. A
+separate hidden-input tunnel launcher was opened, and a one-day runtime-key
+draft was prepared with exactly Tunnels Read + Use and all other permission
+categories unset. The owner must create and transfer that key personally.
+These launchers are local account-specific artifacts, not public repository
+files. Tunnel readiness and polling remain unverified.
 
 ## Findings and cost gate
 
@@ -188,7 +199,8 @@ transport privacy is not a claim that all processing occurs locally.
 ## Current blockers and references
 
 The account configuration and single-user binding checkpoints above are complete.
-Personally entered secrets are still required before service start.
+The local service is responding after personal secret entry; successful OAuth
+and the restricted tunnel runtime key remain pending.
 The tunnel metadata record was created after explicit owner confirmation, and
 its local profile was read back. `doctor --explain` exited 2 because the
 runtime-key environment variable was missing. The daemon, live ChatGPT tools,

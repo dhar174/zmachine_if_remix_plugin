@@ -51,9 +51,17 @@ subject in private local configuration. The existing auth module accepted that
 configuration with one owner, without reading a secret or starting the service.
 A local service launcher passed syntax/readback checks and exited 2 before
 secret input/start when the final owner-bound config was absent. An interactive
-PowerShell process was subsequently launched for hidden secret input; it had
-no Node child and no loopback listener at the recorded check. No authenticated
-service or tunnel daemon was verified running. Private account identifiers,
+PowerShell process was subsequently launched for hidden secret input. After
+personal entry, the owner reported `LISTENING_LOCAL_ONLY`; the Node child was
+verified under that launcher. Direct TCP and HTTP reached 127.0.0.1:3213,
+resource metadata returned 200 with the expected issuer/resource/scopes, and
+unauthenticated MCP returned 401. Windows CIM/netstat did not consistently
+show the LISTEN row: source-level explicit loopback binding is verified, but
+live exclusion of every other interface is not established by that inventory.
+An open Auth0 consent page reported `invalid_request` / missing session; no
+successful browser login is claimed. A one-day Tunnels Read + Use runtime-key
+draft and separate hidden-input launcher await personal key creation/entry.
+The tunnel daemon/readiness/polling remain unverified. Private account identifiers,
 test-user addresses and login URLs containing transient state are not published.
 All live acceptance cells
 below remain unchanged.
@@ -204,7 +212,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 
 | Capability | Local deterministic / HTTP integration | Official MCP protocol client | Actual ChatGPT desktop Work |
 | --- | --- | --- | --- |
-| Discovery / advertised definitions | PASS | PASS, both protocol eras | BLOCKED — approved private route configured; secrets/startup/installed connection pending |
+| Discovery / advertised definitions | PASS | PASS, both protocol eras | BLOCKED — approved private route configured; local service responds; runtime key/installed connection pending |
 | Authenticated state read | PASS, synthetic identities | PASS | BLOCKED |
 | Prepare / commit / independent read / retry / inverse | PASS | PASS, automated synthetic grants | BLOCKED |
 | Human exact-change consent | NOT RUN | NOT RUN — automated POSTs do not count | BLOCKED |
@@ -246,9 +254,9 @@ trial. Prefer the documented native file mechanism only after origin/ownership
 qualification; otherwise use the disclosed authenticated external upload. Do not
 enable privileged production Editor operations on a visible host dialog alone.
 
-**Smallest next owner action:** personally enter the approval-browser secret in
-the prepared local hidden-input prompt, supply the restricted tunnel runtime key
-through its separate prompt, and transfer the ChatGPT client secret directly
+**Smallest next owner action:** create the reviewed one-day Tunnels Read + Use
+runtime key and supply it through its separate hidden-input prompt; keep the
+local service running. Then transfer the ChatGPT client secret directly
 to the host secret field. Then verify startup/readiness and approve/install the
 specific plugin connection, followed by personal exact-diff approval and fixture
 selection. Capture the real account/workspace/build/mode/permissions and advertised
