@@ -5,10 +5,14 @@ operate on a synthetic room label and one immutable redistributable Z5 fixture.
 No interpreter is imported or executed. The host model selects tools; there is
 no provider API dependency or call back into a ChatGPT subscription.
 
-**Live ChatGPT acceptance is BLOCKED.** The owner selected ChatGPT desktop Work
-as the intended target and explicitly chose to keep this slice local. No tunnel,
-hosted service, account integration, permission change, or live human approval
-was provisioned. See [the evidence report](../../docs/evidence/g1-chat-host.md).
+**Live ChatGPT acceptance is BLOCKED.** The original local delivery targeted
+ChatGPT desktop Work and provisioned no exposure or account integration. In a
+subsequent owner-authorized setup session, a private Secure MCP Tunnel metadata
+record and local environment-reference profile were created. Its client has not
+started: `doctor --explain` exited 2 for a missing runtime key. The owner then
+requested [Auth0 compatibility/cost preparation](AUTH0-SETUP.md) before creating
+anything in Auth0. No actual ChatGPT call or human approval has occurred. See
+[the evidence report](../../docs/evidence/g1-chat-host.md).
 
 ## Reproduce local evidence
 

@@ -2,13 +2,36 @@
 
 **Issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
 **Recorded:** 2026-10-23. **Intended target selected by owner:** ChatGPT desktop
-Work. **Exposure selected by owner:** keep local; no approved reachable endpoint.
+Work. **Original exposure selection:** keep local; no approved reachable endpoint.
 
 The local experiment establishes bounded authenticated-protocol behavior with
 synthetic principals. It does **not** establish actual ChatGPT tool selection,
 real-account authentication, human authorization, native attachment import,
 installed skills or device compatibility. Privileged live Editor acceptance
 remains **BLOCKED**. No human approval was automated and called real consent.
+
+**Owner-authorized setup follow-up, 2026-10-23:** the actual ChatGPT web Plugins
+form exposes Connection: Tunnel and OAuth. After explicit confirmation, Platform
+created one private tunnel associated with the selected organization/workspace;
+its ID was entered in an unsaved plugin draft. This proves metadata creation,
+not functioning discovery or verified workspace use. Official Windows x64
+`tunnel-client` 0.0.18 (git `274a5588414819f063d27100a4fb1096aae3830f`) was installed
+from its release, with archive SHA-256 checked against the release asset digest.
+Its local profile was created/read back with a runtime-key environment reference
+and loopback MCP URL. `doctor --explain` loaded the profile and exited **2** for
+the missing runtime key; the daemon/readiness/active polling were **NOT RUN**.
+No public ingress, paid resource or plugin installation was provisioned.
+
+Read-only inspection of the selected Google project found existing IAP/service-
+account OAuth clients, External/Testing consent configuration, and no enabled
+Firebase/Identity Toolkit/Secure Token APIs. This is account configuration
+inspection, not authentication evidence. The owner requested Auth0 preparation
+with compatibility/cost verification before creation. The resulting
+[configuration sheet](../../experiments/chat-host/AUTH0-SETUP.md) records current
+official references, Free-plan findings and live gates. Auth0 opened at a login
+page; no tenant, client, grant or user was created. Private account identifiers,
+test-user addresses and login URLs containing transient state are not published.
+All live acceptance cells below remain unchanged.
 
 ## 1. Provenance and reproduction
 
