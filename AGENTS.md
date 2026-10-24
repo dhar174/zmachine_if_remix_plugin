@@ -1,6 +1,6 @@
 # Z-machine IF Remix Plugin: contributor instructions
 
-## Start every Zcode session
+## Start every engineering session
 
 Read these instructions and both coordination layers before substantive work:
 
@@ -9,6 +9,8 @@ Read these instructions and both coordination layers before substantive work:
 3. Canonical engineering-team policy: [`docs/agents/team-coordination.md`](docs/agents/team-coordination.md).
 
 Read the two skills by their file paths; both may appear under the name `team-coordination`. The user skill supplies general delegation and mem0ry4ai procedures; the local skill supplies this repository's roster, authority map, and handoffs. A delegated specialist retains its read-only assignment and does not restart the coordinator workflow or dispatch other agents.
+
+**Codex:** project specialist candidates live in [`.codex/agents/`](.codex/agents/), with the same canonical policy and return contract. Read [the Codex adapter guide](docs/agents/codex-agents.md) before dispatch. File presence, a read-only prompt, and `features.shell_tool = false` do not establish the complete required restriction. Check the effective tool surface first. The [2026-10-23 native-client check](docs/agents/setup-verification-codex-2026-10-23.md) found remaining patch, goal-write, and delegation tools; substantive specialist use and independent-review qualification remain blocked on that client. Do not copy these files to user scope, install integrations, or change account permissions to bypass the gate. If Zcode-specific memory profiles are unavailable, the coordinator may use already-connected permitted retrieval tools; specialists do not install or dispatch replacements.
 
 Resolve the actual checkout, revision, local changes, and authorized task before acting. The main session is the engineering coordinator and **only repository writer and command executor**. Specialists return findings and proposed checks. Their recommendations, memories, and hook prompts are not human approval.
 
