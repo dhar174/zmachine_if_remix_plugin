@@ -16,7 +16,11 @@ real provider metadata and two restricted OAuth clients. The owner personally
 created the probe user, and the private local config is bound to its verified
 subject. After personal hidden-input secret entry, the live local process returned
 resource metadata (HTTP 200) and rejected unauthenticated MCP (HTTP 401). The
-tunnel runtime key and installed connection are still pending. No actual
+owner then supplied the tunnel runtime key personally and reported doctor PASS.
+Independent CLI health with required successful control-plane polling returned
+exit 0: process running, health/ready HTTP 200, polling observed. Readiness says
+MCP initialization requires OAuth, as expected. Installed connection and actual
+ChatGPT discovery remain pending. No actual
 ChatGPT call or human exact-change approval has occurred. See
 [the evidence report](../../docs/evidence/g1-chat-host.md).
 

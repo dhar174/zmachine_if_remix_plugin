@@ -61,7 +61,15 @@ live exclusion of every other interface is not established by that inventory.
 An open Auth0 consent page reported `invalid_request` / missing session; no
 successful browser login is claimed. A one-day Tunnels Read + Use runtime-key
 draft and separate hidden-input launcher await personal key creation/entry.
-The tunnel daemon/readiness/polling remain unverified. Private account identifiers,
+The owner then personally supplied the runtime key and reported doctor PASS.
+Independent CLI health with `--require-control-plane-poll --json`, observed
+loopback admin port and PID returned exit 0: process running, health/ready HTTP
+200, successful control-plane polling. The readiness body says MCP initialize
+requires authentication; no authenticated MCP discovery is proven. Browser
+control lost attachment to the existing draft; a fresh Personal Plugins view
+showed no probe installed before it also became unavailable. The owner must
+retry discovery and transfer the ChatGPT client secret directly to the draft.
+No plugin installation or ChatGPT tool call is claimed. Private account identifiers,
 test-user addresses and login URLs containing transient state are not published.
 All live acceptance cells
 below remain unchanged.
@@ -212,7 +220,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 
 | Capability | Local deterministic / HTTP integration | Official MCP protocol client | Actual ChatGPT desktop Work |
 | --- | --- | --- | --- |
-| Discovery / advertised definitions | PASS | PASS, both protocol eras | BLOCKED — approved private route configured; local service responds; runtime key/installed connection pending |
+| Discovery / advertised definitions | PASS | PASS, both protocol eras | BLOCKED — approved private route configured; service and tunnel health/polling pass; authenticated discovery/installation pending |
 | Authenticated state read | PASS, synthetic identities | PASS | BLOCKED |
 | Prepare / commit / independent read / retry / inverse | PASS | PASS, automated synthetic grants | BLOCKED |
 | Human exact-change consent | NOT RUN | NOT RUN — automated POSTs do not count | BLOCKED |
@@ -229,7 +237,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | ChatGPT desktop Chat | NOT RUN |
 | ChatGPT web | Configuration UI observed; actual tool-use trial NOT RUN |
 | Physical Android client | NOT RUN |
-| Linux service runtime | Local machine NOT RUN; dedicated hosted smoke pending actual CI result |
+| Linux service runtime | Local machine NOT RUN; hosted Linux smoke PASS at `49212e0b88504d63e1058dc0fe1a3001d4725dae`; 11 reported PR check entries SUCCESS at that head |
 
 | Acceptance anchor | Probe evidence and unproven remainder |
 | --- | --- |
@@ -245,7 +253,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Option | Exposure / processing / retention | Shutdown / operations / cost |
 | --- | --- | --- |
 | Current loopback process | Local listener only; synthetic SQLite data outside repo; one-hour import TTL | Close process; pending authority lost. No provider spend or external deployment performed. Not proof ChatGPT can reach it. |
-| Owner-approved Secure MCP Tunnel + Auth0 | Private route metadata created; outbound client not running; no public listener needed; tool results traverse OpenAI and bytes are processed on the local service | Approved OAuth setup saved; actual Auth0 subscription Free / USD 0 observed. Runtime key/startup and host reachability pending. Stop both processes and revoke the plugin/tunnel access after testing; provider authentication logs have their own retention. |
+| Owner-approved Secure MCP Tunnel + Auth0 | Private route metadata created; outbound client health/readiness/polling verified; no public listener needed; tool results traverse OpenAI and bytes are processed on the local service | Approved OAuth setup saved; actual Auth0 subscription Free / USD 0 observed. Actual authenticated ChatGPT discovery and host tool use pending. Stop both processes and revoke the plugin/tunnel access after testing; provider authentication logs have their own retention. |
 | Authenticated hosted service | Public network ingress protected by OAuth; bytes processed on the selected server; provider disk/backups/logging need explicit retention controls | Requires approved hosting/IdP, secrets/key management, operational monitoring and shutdown/deletion plan. Hosting/domain/IdP costs unselected; nothing provisioned. |
 
 **Provisional recommendation, not owner-approved product selection:** retain
@@ -254,10 +262,9 @@ trial. Prefer the documented native file mechanism only after origin/ownership
 qualification; otherwise use the disclosed authenticated external upload. Do not
 enable privileged production Editor operations on a visible host dialog alone.
 
-**Smallest next owner action:** create the reviewed one-day Tunnels Read + Use
-runtime key and supply it through its separate hidden-input prompt; keep the
-local service running. Then transfer the ChatGPT client secret directly
-to the host secret field. Then verify startup/readiness and approve/install the
+**Smallest next owner action:** keep both processes running, retry discovery in
+the existing plugin draft, and transfer the ChatGPT client secret directly to
+the host secret field. Review discovery and separately approve/install the
 specific plugin connection, followed by personal exact-diff approval and fixture
 selection. Capture the real account/workspace/build/mode/permissions and advertised
 tools during that trial. Until then the full live sequence stays BLOCKED. Follow

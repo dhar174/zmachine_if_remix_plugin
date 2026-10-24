@@ -74,7 +74,16 @@ separate hidden-input tunnel launcher was opened, and a one-day runtime-key
 draft was prepared with exactly Tunnels Read + Use and all other permission
 categories unset. The owner must create and transfer that key personally.
 These launchers are local account-specific artifacts, not public repository
-files. Tunnel readiness and polling remain unverified.
+files. The owner subsequently reported doctor PASS and left the client running.
+Independent `tunnel-client health --port <observed-loopback-port> --pid <observed-pid>
+--require-control-plane-poll --json` returned exit 0: running process, health/ready
+HTTP 200, successful control-plane poll. The readiness body explicitly states
+MCP initialize requires authentication; it does not establish authenticated
+MCP discovery. The redacted runtime checkpoint is separate from ChatGPT evidence.
+Browser control lost its attachment to the existing draft; a fresh Plugins view
+loaded Personal with no probe plugin, then also became unavailable. The owner
+was asked to retry discovery and transfer only the ChatGPT client secret directly
+to the existing draft. No plugin was installed by the agent.
 
 ## Findings and cost gate
 
@@ -199,12 +208,14 @@ transport privacy is not a claim that all processing occurs locally.
 ## Current blockers and references
 
 The account configuration and single-user binding checkpoints above are complete.
-The local service is responding after personal secret entry; successful OAuth
-and the restricted tunnel runtime key remain pending.
+The local service and private tunnel runtime are responding after personal
+secret entry. Successful end-user OAuth and the installed ChatGPT connection
+remain pending.
 The tunnel metadata record was created after explicit owner confirmation, and
 its local profile was read back. `doctor --explain` exited 2 because the
-runtime-key environment variable was missing. The daemon, live ChatGPT tools,
-real human exact-change approval and actual user import have not run. The Free
+runtime-key environment variable was missing; that earlier failure is retained.
+Subsequent independent daemon readiness/polling checks passed. Live ChatGPT
+tools, real human exact-change approval and actual user import have not run. The Free
 subscription and provider metadata are observed; end-to-end compatibility is
 still unverified.
 
