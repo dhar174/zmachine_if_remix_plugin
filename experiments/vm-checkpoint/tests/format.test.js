@@ -104,6 +104,49 @@ test('malformed nested recovery state is rejected before any interpreter exists 
     ioStreams.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(ioStreams.payload));
     expectCode(() => validateEnvelope(ioStreams, EXPECTED), 'E_STRUCTURE');
 
+    // Pending memory-output-stream stack entries: slot 3 holds [address,
+    // text] write-back entries that _print appends to (streams[3][0][1] +=
+    // text); a malformed entry must not pass only to crash the continuation
+    // after readiness (PR #37 re-review: streams[3] = [null] restored
+    // ready:true and then threw "Cannot read properties of null (reading
+    // '1')" on the next input).
+    const memStreamNull = JSON.parse(JSON.stringify(env));
+    memStreamNull.payload.io.streams[3] = [null];
+    memStreamNull.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(memStreamNull.payload));
+    expectCode(() => validateEnvelope(memStreamNull, EXPECTED), 'E_STRUCTURE');
+
+    // Even a WELL-FORMED entry is rejected: slot 3 is the memory-output-
+    // stream stack (output_stream 3), not a command log, and its write-back
+    // path has no round-trip evidence -- nonempty stacks fail explicitly
+    // instead of being accepted unverified.
+    const memStreamEntry = JSON.parse(JSON.stringify(env));
+    memStreamEntry.payload.io.streams[3] = [[0x3000, 'pending memory-stream text']];
+    memStreamEntry.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(memStreamEntry.payload));
+    expectCode(() => validateEnvelope(memStreamEntry, EXPECTED), 'E_STRUCTURE');
+
+    // File-backed transcript state: an open Glk stream reference (or mode 2,
+    // which is exactly that reference in use) cannot cross the data-only
+    // envelope.  Slot 2 = transcript, slot 4 = command recording.
+    const transcriptRef = JSON.parse(JSON.stringify(env));
+    transcriptRef.payload.io.streams[2] = { mode: 2, str: null };
+    transcriptRef.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(transcriptRef.payload));
+    expectCode(() => validateEnvelope(transcriptRef, EXPECTED), 'E_STRUCTURE');
+    const commandFileMode = JSON.parse(JSON.stringify(env));
+    commandFileMode.payload.io.streams[4] = { mode: 2 };
+    commandFileMode.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(commandFileMode.payload));
+    expectCode(() => validateEnvelope(commandFileMode, EXPECTED), 'E_STRUCTURE');
+    const badCache = JSON.parse(JSON.stringify(env));
+    badCache.payload.io.streams[2] = { mode: 1, cache: 5 };
+    badCache.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badCache.payload));
+    expectCode(() => validateEnvelope(badCache, EXPECTED), 'E_STRUCTURE');
+
+    // Redirected input: slot 0 holds 0 (keyboard) or a live Glk stream
+    // reference -- only the former is representable.
+    const redirectedInput = JSON.parse(JSON.stringify(env));
+    redirectedInput.payload.io.streams[0] = 1;
+    redirectedInput.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(redirectedInput.payload));
+    expectCode(() => validateEnvelope(redirectedInput, EXPECTED), 'E_STRUCTURE');
+
     // windows.main: null loses the captured transcript prefix silently.
     const noMain = JSON.parse(JSON.stringify(env));
     noMain.payload.windows.main = null;

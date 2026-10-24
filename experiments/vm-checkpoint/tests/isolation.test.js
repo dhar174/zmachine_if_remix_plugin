@@ -321,6 +321,17 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
         e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
         variants['unseeded-rng'] = JSON.stringify(e);
     }
+    // Pending memory-output-stream stack entry (PR #37 re-review): slot 3
+    // holds [address, text] write-back entries; a null entry previously
+    // restored ready:true and crashed the continuation on the next print.
+    // Even well-formed entries are rejected as an unsupported surface, so
+    // this honest-digest envelope must be refused in the child.
+    {
+        const e = JSON.parse(baseline.envelopeJson);
+        e.payload.io.streams[3] = [null];
+        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        variants['memorystream-stack-entry'] = JSON.stringify(e);
+    }
     // Nested-state malformations that pass shallow shape checks (PR #37
     // review): empty io table, missing main window, empty char readData,
     // transcript/window disagreement.  All previously restored and then
@@ -359,6 +370,7 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
         'wrong-runtime': 'E_RUNTIME',
         'bad-boundary': 'E_BOUNDARY',
         'unseeded-rng': 'E_RNG',
+        'memorystream-stack-entry': 'E_STRUCTURE',
         'io-empty': 'E_STRUCTURE',
         'windows-main-null': 'E_STRUCTURE',
         'char-readdata-empty': 'E_STRUCTURE',

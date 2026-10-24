@@ -44,8 +44,12 @@ explicit supplement sections above, at a boundary where a request is pending
 **Restore** (always into a fresh interpreter): full envelope validation
 *before* any ZVM exists (format/version/identity/boundary/structure/size,
 **deep validation of the nested `io`/windows/`readData` state restore
-consumes, cross-section transcript↔window consistency after the digest
-verifies**, and **rejection of unseeded RNG payloads — `E_RNG`**); a fresh
+consumes — the `io` stream slots are validated down to their contents per
+the vendored runtime's slot semantics (slot 0 = input stream, slot 1 =
+screen flag, slot 2 = transcript state, slot 3 = the memory-output-stream
+stack, slot 4 = command-recording state), cross-section
+transcript↔window consistency after the digest verifies**, and **rejection
+of unseeded RNG payloads — `E_RNG`**); a fresh
 adapter runs its normal startup so windows/origram/stack exist, then
 `vm.restore_file(quetzal, 1)` re-verifies story identity
 (release/serial/checksum) and rebuilds memory/stacks/pc; the
@@ -55,7 +59,9 @@ way and must not stand in for the source values); `io`, RNG seed (re-applied
 *after* restore because `update_header()` zeroes it), pending request (re-
 issued against the restored `read_data` buffer), and the published
 transcript are then applied, and the output-delta watermark is synced so no
-prefix text is ever republished.
+prefix text is ever republished. **Capture runs the same validation on its
+own output**, so a state the envelope cannot carry is refused at the source
+with the same codes restore uses.
 
 **RNG policy:** checkpointable boundaries require the game to be in **seeded
 (predictable) mode**. Unseeded capture is refused at the source (`E_RNG`)
@@ -112,9 +118,10 @@ stories cannot be driven to a VM error on demand).
   equal to a never-candidated control) (A15); kills during bootstrap, at the
   boundary, during the serialization phase, and pre-publication; unbounded
   spinloop child preempted by a parent deadline and reaped; output limit;
-  twelve hostile-checkpoint variants rejected in children — nested-state
+  thirteen hostile-checkpoint variants rejected in children — nested-state
   malformations (empty io, missing main window, empty char readData,
-  transcript/window disagreement) and an honest unseeded envelope (`E_RNG`)
+  transcript/window disagreement, pending memory-output-stream stack
+  entries) and an honest unseeded envelope (`E_RNG`)
   alongside the identity/digest/boundary/corrupt-quetzal cases (A34); and
   the runner's failure accounting (exit 4 for returned errors and thrown
   exceptions, via the selftest modes).
@@ -124,9 +131,15 @@ stories cannot be driven to a VM error on demand).
 Timed input (`read_data.time` stored but never used; Flags1 timed-input bit
 clear), sound and graphics (no-op / absent opcodes), Glk file streams
 (glksim records them as unexpected), interpreter number/version header
-fields (never written), **unseeded RNG checkpoints (rejected with `E_RNG`
-at capture and at validation — host `Math.random` state is not
-reconstructable across processes)**, and in-memory undo history (dropped on
+fields (never written), **pending `output_stream 3` memory-stream writes
+and redirected input — nonempty memory-stream stacks, file-backed
+transcript/command stream state, and non-keyboard input are rejected with
+`E_STRUCTURE` at capture and at validation: the write-back path has no
+round-trip evidence and live Glk stream references cannot cross a data-only
+envelope** (the fixture never selects these streams), **unseeded RNG
+checkpoints (rejected with `E_RNG` at capture and at validation — host
+`Math.random` state is not reconstructable across processes)**, and
+in-memory undo history (dropped on
 restore, matching upstream ifvms autosave semantics — `@restore_undo` after
 restore is safe and empty; tested).
 

@@ -217,8 +217,15 @@ function validateEnvelope(envelope, expected) {
 // Deep validation of the nested io state restore consumes: a missing or
 // malformed stream entry or window-selector field faults the continuation
 // only when the next input arrives, so it must be rejected here, before any
-// interpreter is constructed (review finding on PR #37: `io: {}` passed
-// validation and then threw on `streams[2]` mid-turn).
+// interpreter is constructed (review findings on PR #37: `io: {}` passed
+// validation and then threw on `streams[2]` mid-turn; `streams[3] = [null]`
+// passed and threw on `streams[3][0][1] += text` in _print after readiness).
+//
+// Slot semantics from the vendored runtime (src/zvm/io.js, initialized as
+// `streams: [ 0, 1, {}, [], {} ]`): slot 0 = input stream (0 = keyboard,
+// otherwise a live Glk stream reference), slot 1 = screen-stream flag,
+// slot 2 = transcript state object, slot 3 = the memory-output-stream stack
+// (output_stream 3), slot 4 = command-recording state object.
 function validateIo(io) {
     const int = (name, lo, hi) => {
         if (!Number.isInteger(io[name]) || io[name] < lo || io[name] > hi) {
@@ -240,11 +247,45 @@ function validateIo(io) {
     if (!Array.isArray(s) || s.length !== 5) {
         throw new CheckpointError('E_STRUCTURE', 'io.streams must be the 5-slot stream table');
     }
-    if (s[0] !== 0 && s[0] !== 1) throw new CheckpointError('E_STRUCTURE', 'io.streams[0] (input stream 1 flag) must be 0 or 1');
-    if (s[1] !== 0 && s[1] !== 1) throw new CheckpointError('E_STRUCTURE', 'io.streams[1] (screen stream flag) must be 0 or 1');
-    if (!isPlainObject(s[2])) throw new CheckpointError('E_STRUCTURE', 'io.streams[2] (transcript) must be an object');
-    if (!Array.isArray(s[3])) throw new CheckpointError('E_STRUCTURE', 'io.streams[3] (command log) must be an array');
-    if (!isPlainObject(s[4])) throw new CheckpointError('E_STRUCTURE', 'io.streams[4] (memory-stream state) must be an object');
+    if (s[0] !== 0) {
+        throw new CheckpointError('E_STRUCTURE', 'io.streams[0] (input stream) must be 0 (keyboard): redirected input holds a live Glk stream reference the data-only envelope cannot carry');
+    }
+    if (s[1] !== 0 && s[1] !== 1) throw new CheckpointError('E_STRUCTURE', 'io.streams[1] (screen stream) must be 0 or 1');
+    validateStreamState(2, 'transcript', s[2]);
+    // Slot 3 is a stack of pending [tableAddress, text] memory-stream writes:
+    // _print appends to streams[3][0][1] and output_stream -3 writes the text
+    // back to VM memory (io.js).  No supported boundary carries pending stack
+    // entries (the fixture never selects output_stream 3) and the write-back
+    // path has no round-trip evidence, so nonempty stacks are rejected as an
+    // unsupported surface instead of being accepted and faulting on the next
+    // print.
+    if (!Array.isArray(s[3])) throw new CheckpointError('E_STRUCTURE', 'io.streams[3] (memory-output-stream stack) must be an array');
+    if (s[3].length > 0) {
+        throw new CheckpointError('E_STRUCTURE', 'io.streams[3] (memory-output-stream stack) must be empty: pending output_stream 3 memory writes are unsupported in schema v1');
+    }
+    validateStreamState(4, 'command recording', s[4]);
+}
+
+// Transcript (slot 2) and command-recording (slot 4) state objects start as
+// `{}` and gain {mode, cache, str} fields when the story uses output_stream
+// 2/4.  mode 2 routes text to an open Glk FILE stream held in `.str` -- a
+// live host object a data-only envelope cannot serialize -- so both the
+// reference and the mode are rejected (glk-file-streams is declared
+// unsupported).  mode 1 caches plain strings and survives the clone.
+function validateStreamState(slot, label, st) {
+    if (!isPlainObject(st)) throw new CheckpointError('E_STRUCTURE', 'io.streams[' + slot + '] (' + label + ') must be an object');
+    if (st.str !== undefined) {
+        throw new CheckpointError('E_STRUCTURE', 'io.streams[' + slot + '] (' + label + ') carries an open Glk stream reference: file-backed ' + label + ' is unsupported in the data-only envelope');
+    }
+    if (st.mode !== undefined && (!Number.isInteger(st.mode) || st.mode < 0 || st.mode > 2)) {
+        throw new CheckpointError('E_STRUCTURE', 'io.streams[' + slot + '] (' + label + ') mode must be an integer 0..2');
+    }
+    if (st.mode === 2) {
+        throw new CheckpointError('E_STRUCTURE', 'io.streams[' + slot + '] (' + label + ') is in mode 2 (open Glk file stream): unsupported in the data-only envelope');
+    }
+    if (st.cache !== undefined && (typeof st.cache !== 'string' || st.cache.length > CAPS.outputChars)) {
+        throw new CheckpointError('E_STRUCTURE', 'io.streams[' + slot + '] (' + label + ') cache must be a string within the output cap');
+    }
 }
 
 // Window entries: the main window is required (continuation output targets

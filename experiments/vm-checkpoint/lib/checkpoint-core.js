@@ -104,7 +104,7 @@ function captureCheckpoint(adapter, context) {
         },
     };
 
-    return {
+    const envelope = {
         format: FORMAT,
         version: SCHEMA_VERSION,
         identity: {
@@ -125,6 +125,22 @@ function captureCheckpoint(adapter, context) {
         },
         capabilities: capabilityStatement(),
     };
+
+    // Self-validate: capture must never emit an envelope restore would reject,
+    // so the single validation rulebook governs both sides.  Beyond digest
+    // honesty this refuses AT THE SOURCE the I/O surfaces schema v1 cannot
+    // carry (mirroring the E_RNG policy): a nonempty memory-output-stream
+    // stack (pending output_stream 3 writes), file-backed
+    // transcript/command-recording state (open Glk stream references), or
+    // redirected input.  None is reachable with the fixture (it never touches
+    // output_stream/input_stream); a story that does simply cannot be
+    // checkpointed at such a boundary in v1 -- fail explicitly, not silently.
+    validateEnvelope(envelope, {
+        storySha256: context.storySha256,
+        storySize: context.storySize,
+        runtimeRevision: REVISION,
+    });
+    return envelope;
 }
 
 function windowsPayload(vm) {
@@ -148,7 +164,7 @@ function capabilityStatement() {
             storyIdentity: 'serialized (Quetzal IFhd release/serial/checksum) + envelope story digest',
             interpreterHeaderFields: 'serialized (header block [0x00..0x40) written back verbatim after restore_file; update_header() recomputation is window-set-dependent and must not stand in for the source values)',
             rng: 'seeded mode only (xorshift seed serialized and re-applied after restore_file); unseeded capture and restore are REJECTED with E_RNG -- host Math.random state can be neither captured nor reconstructed (bridge section 8), and Issue #12 requires unsupported modes to fail explicitly',
-            ioStreamsAndFlags: 'serialized (plain-data clone)',
+            ioStreamsAndFlags: 'serialized (plain-data clone); the input stream must be keyboard (slot 0 = 0) and the memory-output-stream stack (slot 3) must be empty — pending output_stream 3 writes, file-backed transcript/command streams (mode 2 / open Glk references), and redirected input are rejected at capture and validation with E_STRUCTURE',
             pendingInput: 'serialized (read_data + re-issued Glk request)',
             windowTextAndCursor: 'serialized (main/upper/status window objects)',
             publishedTranscript: 'serialized (buffer + grid window text)',
@@ -160,8 +176,10 @@ function capabilityStatement() {
             sound: 'unsupported (upstream no-op opcodes)',
             graphics: 'unsupported (no picture opcode support in vendored ZVM)',
             glkFileStreams: 'unsupported (glksim records them as unexpected)',
+            memoryOutputStreams: 'unsupported (pending output_stream 3 stack writes rejected: the [address, text] write-back path has no round-trip evidence in v1)',
+            redirectedInputStream: 'unsupported (input_stream redirection holds a live Glk stream reference the data-only envelope cannot carry)',
         },
-        unsupported: ['timed-input', 'sound', 'graphics', 'glk-file-streams', 'undo-history', 'interpreter-number-version', 'unseeded-rng'],
+        unsupported: ['timed-input', 'sound', 'graphics', 'glk-file-streams', 'undo-history', 'interpreter-number-version', 'unseeded-rng', 'memory-output-stream-writes', 'redirected-input'],
         schemaVersion: SCHEMA_VERSION,
     };
 }
