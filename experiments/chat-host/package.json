@@ -1,0 +1,19 @@
+{
+  "name": "zirp-g1c-chat-host-probe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "24.13.x" },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "test:protocol": "node --test test/protocol.test.js",
+    "start": "node src/cli.js",
+    "check": "node --check src/model.js && node --check src/store.js && node --check src/service.js && node --check src/auth.js && node --check src/host-file.js && node --check src/cli.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "jose": "6.2.13",
+    "zod": "4.6.7"
+  },
+  "devDependencies": { "@modelcontextprotocol/client": "2.4.0" }
+}
