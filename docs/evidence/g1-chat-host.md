@@ -28,10 +28,35 @@ Firebase/Identity Toolkit/Secure Token APIs. This is account configuration
 inspection, not authentication evidence. The owner requested Auth0 preparation
 with compatibility/cost verification before creation. The resulting
 [configuration sheet](../../experiments/chat-host/AUTH0-SETUP.md) records current
-official references, Free-plan findings and live gates. Auth0 opened at a login
-page; no tenant, client, grant or user was created. Private account identifiers,
+official references, Free-plan findings and live gates. At preparation time Auth0
+opened at a login page; the owner subsequently signed in and explicitly approved
+the scoped account configuration. Its Teams subscription page showed Free / USD 0,
+with 22 trial days also advertised. Provider OIDC metadata and two public JWKs
+were read from the actual tenant. Existing resource-parameter/issuer-response
+settings were on; CIMD/DCR were off and unchanged.
+
+One RS256 API and two regular-web clients were saved. The API's 900-second token
+lifetimes were checked after save; exact host/local callbacks and the browser's
+authorization-code-only grant set were checked after navigation/reload. The real
+API access table showed 4/4 probe scopes for the third-party ChatGPT client,
+0/4 for the approval browser/default app/automatically created Test Application,
+and denied machine access. The login connection's owner-approved domain-level
+promotion survived reload. No client secret was retrieved by the agent.
+
+These are **actual account configuration and public-metadata observations**,
+not successful end-user OAuth, ChatGPT discovery/tool use, human exact-change
+authorization or file import. The owner personally created the probe user; its
+provider-issued ID was read from the real profile and bound as the sole allowed
+subject in private local configuration. The existing auth module accepted that
+configuration with one owner, without reading a secret or starting the service.
+A local service launcher passed syntax/readback checks and exited 2 before
+secret input/start when the final owner-bound config was absent. An interactive
+PowerShell process was subsequently launched for hidden secret input; it had
+no Node child and no loopback listener at the recorded check. No authenticated
+service or tunnel daemon was verified running. Private account identifiers,
 test-user addresses and login URLs containing transient state are not published.
-All live acceptance cells below remain unchanged.
+All live acceptance cells
+below remain unchanged.
 
 ## 1. Provenance and reproduction
 
@@ -179,7 +204,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 
 | Capability | Local deterministic / HTTP integration | Official MCP protocol client | Actual ChatGPT desktop Work |
 | --- | --- | --- | --- |
-| Discovery / advertised definitions | PASS | PASS, both protocol eras | BLOCKED — no approved endpoint or installed connection |
+| Discovery / advertised definitions | PASS | PASS, both protocol eras | BLOCKED — approved private route configured; secrets/startup/installed connection pending |
 | Authenticated state read | PASS, synthetic identities | PASS | BLOCKED |
 | Prepare / commit / independent read / retry / inverse | PASS | PASS, automated synthetic grants | BLOCKED |
 | Human exact-change consent | NOT RUN | NOT RUN — automated POSTs do not count | BLOCKED |
@@ -194,7 +219,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Windows x64 local Node service/client | PASS for the declared local suite |
 | ChatGPT desktop Work account/workspace/build/model and permissions | BLOCKED/unverified; selected target, no actual connection trial |
 | ChatGPT desktop Chat | NOT RUN |
-| ChatGPT web | NOT RUN |
+| ChatGPT web | Configuration UI observed; actual tool-use trial NOT RUN |
 | Physical Android client | NOT RUN |
 | Linux service runtime | Local machine NOT RUN; dedicated hosted smoke pending actual CI result |
 
@@ -212,7 +237,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Option | Exposure / processing / retention | Shutdown / operations / cost |
 | --- | --- | --- |
 | Current loopback process | Local listener only; synthetic SQLite data outside repo; one-hour import TTL | Close process; pending authority lost. No provider spend or external deployment performed. Not proof ChatGPT can reach it. |
-| Owner-approved private connector/tunnel | Host-supported reachability must be proven; tunnel edge may be externally reachable; bytes processed on the service host | Separate authorization, authenticated TLS/access controls, tunnel/proxy log review, revoke connection and terminate exposure. Vendor/account costs unknown until selected. |
+| Owner-approved Secure MCP Tunnel + Auth0 | Private route metadata created; outbound client not running; no public listener needed; tool results traverse OpenAI and bytes are processed on the local service | Approved OAuth setup saved; actual Auth0 subscription Free / USD 0 observed. Runtime key/startup and host reachability pending. Stop both processes and revoke the plugin/tunnel access after testing; provider authentication logs have their own retention. |
 | Authenticated hosted service | Public network ingress protected by OAuth; bytes processed on the selected server; provider disk/backups/logging need explicit retention controls | Requires approved hosting/IdP, secrets/key management, operational monitoring and shutdown/deletion plan. Hosting/domain/IdP costs unselected; nothing provisioned. |
 
 **Provisional recommendation, not owner-approved product selection:** retain
@@ -221,9 +246,11 @@ trial. Prefer the documented native file mechanism only after origin/ownership
 qualification; otherwise use the disclosed authenticated external upload. Do not
 enable privileged production Editor operations on a visible host dialog alone.
 
-**Smallest next owner action:** authorize one specific reachable endpoint/exposure
-route and its existing identity-provider/browser-client setup, then personally
-connect it in ChatGPT desktop Work and perform the exact approval and fixture
+**Smallest next owner action:** personally enter the approval-browser secret in
+the prepared local hidden-input prompt, supply the restricted tunnel runtime key
+through its separate prompt, and transfer the ChatGPT client secret directly
+to the host secret field. Then verify startup/readiness and approve/install the
+specific plugin connection, followed by personal exact-diff approval and fixture
 selection. Capture the real account/workspace/build/mode/permissions and advertised
 tools during that trial. Until then the full live sequence stays BLOCKED. Follow
 the executable [12-step live runbook](../../experiments/chat-host/README.md#live-runbook-after-the-blocked-prerequisites-are-resolved).

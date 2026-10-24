@@ -2,8 +2,68 @@
 
 Prepared 2026-10-23 after the owner requested inspection of existing Google
 configuration and then Auth0 compatibility/cost preparation **before creating
-anything in Auth0**. This is a proposed configuration, not an installed account,
-tenant, OAuth client, grant, or successful authentication trace.
+anything in Auth0**. The subsequent owner-approved configuration checkpoint below
+supersedes the original preparation status. It does not establish a successful
+end-user authentication flow, ChatGPT tool call, or exact-change approval.
+
+## Applied account-configuration checkpoint
+
+After the owner personally signed in and explicitly approved the scoped saves,
+the actual development tenant's Teams subscription page showed **Free / USD 0**.
+The dashboard also showed 22 trial days remaining; visible trial controls are
+not evidence of permanent Free-plan entitlements. No paid features were selected.
+
+The tenant already had Resource Parameter Compatibility Profile and Include
+Issuer in Authorization Responses enabled. Its real public OIDC metadata was
+retrieved: exact HTTPS issuer/auth/token/JWKS endpoints, `S256`,
+`client_secret_post`, and issuer-response support were present. CIMD and DCR
+were disabled and left disabled. Two public signing keys were retrieved and
+private JWK fields were explicitly rejected before writing local configuration.
+
+Saved configuration, checked through the real dashboard:
+
+- `G1-C Synthetic Probe`: Auth0 JWT profile, RS256, 900-second maximum and
+  implicit/hybrid access-token lifetimes, per-app user-delegated authorization,
+  machine-to-machine access denied. Lifetime values were read back after saving.
+- `G1-C ChatGPT Client`: third-party regular web application, user-defined
+  registration, `client_secret_post`, authorization-code grant only. Its exact
+  callback came from the real ChatGPT plugin draft and was read back after
+  navigation. The API table confirmed exactly the four probe permissions.
+- `G1-C Approval Browser`: first-party regular web application,
+  `client_secret_post`, callback `http://127.0.0.1:3213/oauth/callback`,
+  authorization-code grant only. Callback and reduced grant set survived reload.
+  It has no API scopes; its ID token establishes the browser identity.
+- `Username-Password-Authentication`: promoted to domain level after the owner
+  explicitly approved that this makes the login connection available to
+  registered third-party clients. The value survived reload. API grants and
+  the service's subject allowlist remain separate restrictions.
+- Auth0 also created `G1-C Synthetic Probe (Test Application)` with the API.
+  Its table row has zero delegated permissions and denied machine access under
+  the API policy. It was not used for login or calls. The existing Default App
+  also has zero permissions for this API.
+
+The API audience follows the official tunnel-client 0.0.18 documentation's
+`https://api.openai.com/v1/mcp/{tunnel_id}` endpoint. Its agreement with the
+actual rewritten metadata and issued JWT audience still needs the live flow.
+Account/client/tunnel IDs and callback suffixes are retained only in local
+setup records. The ChatGPT plugin remains an unsaved draft; no client secret
+was retrieved, logged or stored in files by the agent.
+
+The owner personally created one probe user. Its provider-issued User ID was
+read from the selected real profile and bound as the sole allowed subject in a
+private local config. The existing auth module accepted that real-provider
+configuration with exactly one owner and the expected loopback origin; this
+check did not read a secret or start a service. The earlier pending template
+retains an empty allowlist and is not the startup file.
+
+A local service launcher was read back, passed PowerShell parsing, and actually
+exited 2 before requesting a secret when the final owner-bound config was absent.
+After binding, an interactive PowerShell process was launched for hidden input;
+at the checkpoint it had no Node child and no loopback listener. Its prompt keeps
+the browser-client secret in process environment only; the separate tunnel
+launcher prompts for the restricted runtime key. These launchers are local
+account-specific artifacts, not public repository files. Service start remains
+unverified until personal secret entry and independent listener checks.
 
 ## Findings and cost gate
 
@@ -42,8 +102,8 @@ operation scopes and exact-change approval remain mandatory.
 The [Auth0 resource compatibility guide](https://auth0.com/ai/docs/mcp/guides/resource-param-compatibility-profile)
 documents both required tenant toggles under Settings / Advanced / Settings:
 **Resource Parameter Compatibility Profile** and **Include Issuer in Authorization
-Responses**. These are proposed changes for a dedicated test tenant, not changes
-already applied to an existing shared tenant.
+Responses**. Both were already enabled in the inspected tenant; no change to
+these tenant toggles was needed.
 
 Auth0 is therefore a **documented candidate**, not a live PASS. No Auth0 SDK,
 Management API credential, replacement server, or new dependency is needed for
@@ -65,12 +125,12 @@ MCP SDK 2.4.0 and JOSE 6.2.13. No implementation was changed for Auth0.
    only these permissions. No blanket third-party grant or client-credentials
    access is required. Stage persists a candidate; commit still requires a
    separately created exact-change browser grant.
-4. **ChatGPT OAuth client:** prefer manually registered CIMD using the exact
-   metadata URL supplied by the real host, public-client `none` plus S256 PKCE
-   if supported by its actual controls. Otherwise review the documented
-   predefined-client route with the exact host callback URI and a supported
-   token endpoint method. Do not guess a CIMD URL/callback or enable open DCR as
-   a workaround. Verify actual plan entitlements for the selected method.
+4. **ChatGPT OAuth client:** the inspected host supports User-Defined OAuth
+   Client and supplied a concrete callback. This predefined third-party regular
+   web client with `client_secret_post` is the selected route. CIMD/DCR remain
+   disabled. The owner must transfer the client secret directly to the host's
+   secret field; the agent does not retrieve it. S256 is advertised and selected
+   in the draft; actual code exchange remains to be tested.
 5. **Approval/upload browser client:** `G1-C Approval Browser`, a separate regular
    web client with authorization code + S256 PKCE and `client_secret_post` (or
    the supported public-client `none` route after review). Allow only the exact
@@ -127,12 +187,14 @@ transport privacy is not a claim that all processing occurs locally.
 
 ## Current blockers and references
 
-No authenticated Auth0 dashboard session, real tenant metadata, test-user
-subject or approved client configuration is available yet. The tunnel metadata
-record was created after explicit owner confirmation, and its local profile
-was read back. `doctor --explain` exited 2 because the runtime-key environment
-variable was missing. The client, live ChatGPT tools, real human approval and
-actual user import have not run. Costs/compatibility are documentation findings.
+The account configuration and single-user binding checkpoints above are complete.
+Personally entered secrets are still required before service start.
+The tunnel metadata record was created after explicit owner confirmation, and
+its local profile was read back. `doctor --explain` exited 2 because the
+runtime-key environment variable was missing. The daemon, live ChatGPT tools,
+real human exact-change approval and actual user import have not run. The Free
+subscription and provider metadata are observed; end-to-end compatibility is
+still unverified.
 
 References retrieved 2026-10-23:
 

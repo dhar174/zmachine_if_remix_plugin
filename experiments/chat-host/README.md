@@ -10,8 +10,12 @@ ChatGPT desktop Work and provisioned no exposure or account integration. In a
 subsequent owner-authorized setup session, a private Secure MCP Tunnel metadata
 record and local environment-reference profile were created. Its client has not
 started: `doctor --explain` exited 2 for a missing runtime key. The owner then
-requested [Auth0 compatibility/cost preparation](AUTH0-SETUP.md) before creating
-anything in Auth0. No actual ChatGPT call or human approval has occurred. See
+requested Auth0 preparation, then explicitly approved its scoped configuration.
+The [Auth0 setup record](AUTH0-SETUP.md) now records a verified Free subscription,
+real provider metadata and two restricted OAuth clients. The owner personally
+created the probe user, and the private local config is bound to its verified
+subject. Personally entered secrets and service startup are pending. No actual
+ChatGPT call or human exact-change approval has occurred. See
 [the evidence report](../../docs/evidence/g1-chat-host.md).
 
 ## Reproduce local evidence
@@ -153,9 +157,12 @@ separate review, TLS/access controls and operational authorization.
 
 ## Start only with explicitly configured authentication
 
-No live config was created in this task. Obtain separate authorization before
-creating OAuth clients/integrations or exposing the listener. The example below
-is a configuration shape, not usable credentials or an installed integration:
+The initial local delivery created no live config. The later explicitly
+authorized setup prepared an owner-bound private config and hidden-input
+launchers; see [its current checkpoint](AUTH0-SETUP.md). Further client/access
+changes and integration installation still require their applicable approval.
+The example below is a configuration shape, not usable credentials or an
+installed integration:
 
 ```json
 {
