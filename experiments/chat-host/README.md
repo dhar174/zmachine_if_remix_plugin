@@ -19,9 +19,13 @@ resource metadata (HTTP 200) and rejected unauthenticated MCP (HTTP 401). The
 owner then supplied the tunnel runtime key personally and reported doctor PASS.
 Independent CLI health with required successful control-plane polling returned
 exit 0: process running, health/ready HTTP 200, polling observed. Readiness says
-MCP initialization requires OAuth, as expected. Installed connection and actual
-ChatGPT discovery remain pending. No actual
-ChatGPT call or human exact-change approval has occurred. See
+MCP initialization requires OAuth, as expected. After Chrome recovery and separate
+explicit approval, a private plugin was created with manually entered OAuth
+metadata. The host reports authentication succeeded but action discovery failed;
+the tunnel trace records server/discover receiving upstream HTTP 401. Automatic
+OAuth metadata discovery separately failed because the external issuer origin
+was not trusted; its profile correction is prepared but not loaded. No actual
+ChatGPT tool call or human exact-change approval has occurred. See
 [the evidence report](../../docs/evidence/g1-chat-host.md).
 
 ## Reproduce local evidence

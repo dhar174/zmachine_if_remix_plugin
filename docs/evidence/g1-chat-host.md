@@ -74,6 +74,50 @@ test-user addresses and login URLs containing transient state are not published.
 All live acceptance cells
 below remain unchanged.
 
+The owner subsequently reported copying the ChatGPT client secret directly into
+the existing draft. Reattachment briefly recovered the real form: OAuth,
+user-defined client and client_secret_post were selected, while discovery still
+reported failure and endpoint/scope fields were blank with PKCE unchecked.
+Automated retry/form entry failed; no successful field mutation or discovery is
+inferred. The owner received the exact verified metadata values for manual entry,
+with plugin creation still pending separate approval.
+
+Local diagnostics reported four completed/failing dispatched requests, with
+control-plane polling healthy; this does not identify the requests or establish
+a root cause. Official installed-version configuration docs require an explicit
+trusted origin for an external authorization server. The profile lacked it, so
+a byte-verified backup was retained and only the exact existing Auth0 origin was
+added to mcp.oauth_trusted_origins. The active client was not restarted and has
+not loaded that change. Agent-shell doctor showed profile_load PASS but failed
+for its absent key environment: process exit 1, diagnostic EXIT_CODE 2. The
+owner's separate running client still has its own key; no key was read or moved.
+The origin change is prepared, not proven to fix discovery. The host's visible
+manual OAuth route can be tested separately without claiming automatic discovery.
+
+
+After Chrome crashed, a restarted instance of the same profile restored the
+Plugins page but lost the unsaved form. The coordinator restored the existing
+private tunnel and verified that the callback URL was unchanged. Manual OAuth
+endpoints, four scopes and S256 were read back; a duplicated client ID was
+corrected and read back. The owner supplied the secret directly, explicitly
+approved creating this specific private plugin, and the real UI reached Connect
+G1-C Synthetic Probe with the plugin in Installed / Created by you. The owner
+clicked Connect. Their screenshot reports "Authentication succeeded, action
+discovery failed". This is host-reported OAuth success, not verified service JWT
+acceptance or a tool call.
+
+The actual local operator UI identified the external Auth0 metadata failure as
+"destination origin is not trusted". This confirms the missing trusted-origin
+setting; its prepared profile change remains unloaded until restart. Bounded
+in-memory inspection of the official redacted log export found a main-channel
+server/discover request with upstream HTTP 401 (target_http), matching the
+failed action-discovery trial. No token, header, upload or transcript was retained.
+The export was initially parsed as JSON and failed; bounded gzip decoding then
+succeeded. The separate browser login reached the real Auth0 consent page for
+G1-C Approval Browser; the owner was asked to accept personally, without approving
+any label edit. No service-authenticated read or human exact-diff approval has
+been demonstrated.
+
 ## 1. Provenance and reproduction
 
 - Fetched base: `73e7a6ebc86263201e7a2cdcc21ddd05304e5506`. PR #36 is merged;
@@ -220,8 +264,8 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 
 | Capability | Local deterministic / HTTP integration | Official MCP protocol client | Actual ChatGPT desktop Work |
 | --- | --- | --- | --- |
-| Discovery / advertised definitions | PASS | PASS, both protocol eras | BLOCKED — approved private route configured; service and tunnel health/polling pass; authenticated discovery/installation pending |
-| Authenticated state read | PASS, synthetic identities | PASS | BLOCKED |
+| Discovery / advertised definitions | PASS | PASS, both protocol eras | FAIL — plugin created by explicit approval using manual OAuth; action discovery returned 401; tool definitions not obtained |
+| Authenticated state read | PASS, synthetic identities | PASS | BLOCKED — host reports OAuth success, service acceptance unverified |
 | Prepare / commit / independent read / retry / inverse | PASS | PASS, automated synthetic grants | BLOCKED |
 | Human exact-change consent | NOT RUN | NOT RUN — automated POSTs do not count | BLOCKED |
 | External upload of real fixture bytes | PASS, loopback | PASS metadata inspection after HTTP upload | BLOCKED |
@@ -262,11 +306,11 @@ trial. Prefer the documented native file mechanism only after origin/ownership
 qualification; otherwise use the disclosed authenticated external upload. Do not
 enable privileged production Editor operations on a visible host dialog alone.
 
-**Smallest next owner action:** keep both processes running, retry discovery in
-the existing plugin draft, and transfer the ChatGPT client secret directly to
-the host secret field. Review discovery and separately approve/install the
-specific plugin connection, followed by personal exact-diff approval and fixture
-selection. Capture the real account/workspace/build/mode/permissions and advertised
+**Smallest next owner action:** complete the open Approval Browser consent
+personally to qualify the browser identity path. Diagnose the actual host
+server/discover 401 and load the prepared trusted-origin correction on the next
+controlled tunnel restart. Then retry the existing created plugin, followed by
+personal exact-diff approval and fixture selection. Capture the real account/workspace/build/mode/permissions and advertised
 tools during that trial. Until then the full live sequence stays BLOCKED. Follow
 the executable [12-step live runbook](../../experiments/chat-host/README.md#live-runbook-after-the-blocked-prerequisites-are-resolved).
 
