@@ -1,0 +1,353 @@
+{
+  "kind": "deterministic-local-codex-configuration-probe",
+  "checked_at_utc": "2026-10-24T01:15:32.131755+00:00",
+  "version": "codex-cli 0.164.0-alpha.11.1",
+  "executable_sha256": "c6144bc19b2705f25a40d8488b3d57d17a223c5df3c5f65e3c58d72601956c1e",
+  "file_sha256": {
+    ".codex/agents/zmachine-acceptance-reviewer.toml": "07cbfb98f9a2341c37e6fd7b77a2f6132ed203507ffc96746e192003b6d91cc4",
+    ".zcode/agents/zmachine-acceptance-reviewer.md": "1bb3e1dbece77e0c215ba0a0feef3006df64121c6a0efb7a5e47dc893c359873",
+    ".codex/agents/zmachine-chat-host.toml": "cf88b954872135ebb7ca6ae7792b690240f4180b877f73cc4759e18ea5ac1cd1",
+    ".zcode/agents/zmachine-chat-host.md": "34a9557f5787e944e91eeb4effa27a5963fdcbaf3a2145960d4c58ffc0f757e5",
+    ".codex/agents/zmachine-context-contracts.toml": "b86a4cf5b76bf836a473a4e27512e63cd005c33ae446bc01426021de1f820ec2",
+    ".zcode/agents/zmachine-context-contracts.md": "b254574f1b7e0c7fd267d0c0b97de7f537c69cd18744705d451b21bc36f315d3",
+    ".codex/agents/zmachine-continuity-provenance.toml": "1abf02bd266f1786a38f897b11a27a1e31fedf994b4dc26f87ebb94a36b41f15",
+    ".zcode/agents/zmachine-continuity-provenance.md": "316afaf6babadbab7b488205419732dadbb3e1e84d0614c1b94d9c737b815da2",
+    ".codex/agents/zmachine-narrative-knowledge.toml": "5cbc5c9e0a58a2b83661b6e27e1578a9a33d41cf315fc2a34cfb53a01b355dbe",
+    ".zcode/agents/zmachine-narrative-knowledge.md": "2ed3bf37b4496af9e97cf8e70ed8218890fe1bdbc464630afd76037d26c1fc63",
+    ".codex/agents/zmachine-policy-directives.toml": "aac43130347a520daf8c2f55e13f2b81ae827f5793c6ce1b5c878367acbe41ce",
+    ".zcode/agents/zmachine-policy-directives.md": "f8d174b6ff94b9da01d5fd7dd8ed60a7998edf29880a497cf2077fea94c652ce",
+    ".codex/agents/zmachine-turn-persistence.toml": "a0f2bd0913cd3ee65f464eb3cb4695d20abd0597448aedcdfab39f20e29fae0c",
+    ".zcode/agents/zmachine-turn-persistence.md": "b06a1b82dc71d958d74ba3c3dcbd67893820e3c766a6f0a087a6a5ce6ef9da9e",
+    ".codex/agents/zmachine-vm-bridge.toml": "26f78bc78e419ffefdf3dd0047a015917c14afae13d2c204efce7fb27db40352",
+    ".zcode/agents/zmachine-vm-bridge.md": "c7aeccfebe8fffdfb6046e4bd6b82b02f4ed8b9e8078e7dd31206f827f7d7a45",
+    "docs/agents/verify-codex-agents.py": "a869616a4b96c1e38659243a3e3974a68816fe6f9f88dfeb2b30d3f06d72e587"
+  },
+  "native_exit": 0,
+  "native_stderr": "Reading additional input from stdin...\n",
+  "static_profile_checks": "passed",
+  "roles": {
+    "zmachine-acceptance-reviewer": {
+      "mock_invocation_completed": true,
+      "instruction_match": true,
+      "advertised_tools": [
+        "apply_patch",
+        "clock.sleep",
+        "clock__curr_time",
+        "collaboration.followup_task",
+        "collaboration.interrupt_agent",
+        "collaboration.list_agents",
+        "collaboration.send_message",
+        "collaboration.spawn_agent",
+        "collaboration.wait_agent",
+        "create_goal",
+        "functions.exec",
+        "functions.request_user_input",
+        "functions.wait",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image"
+      ],
+      "runtime_tools": {
+        "shell": "undefined",
+        "patch": "function",
+        "names": [
+          "apply_patch",
+          "clock__curr_time",
+          "create_goal",
+          "get_goal",
+          "list_mcp_resource_templates",
+          "list_mcp_resources",
+          "read_mcp_resource",
+          "update_goal",
+          "view_image"
+        ]
+      }
+    },
+    "zmachine-chat-host": {
+      "mock_invocation_completed": true,
+      "instruction_match": true,
+      "advertised_tools": [
+        "apply_patch",
+        "clock.sleep",
+        "clock__curr_time",
+        "collaboration.followup_task",
+        "collaboration.interrupt_agent",
+        "collaboration.list_agents",
+        "collaboration.send_message",
+        "collaboration.spawn_agent",
+        "collaboration.wait_agent",
+        "create_goal",
+        "functions.exec",
+        "functions.request_user_input",
+        "functions.wait",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image"
+      ],
+      "runtime_tools": {
+        "shell": "undefined",
+        "patch": "function",
+        "names": [
+          "apply_patch",
+          "clock__curr_time",
+          "create_goal",
+          "get_goal",
+          "list_mcp_resource_templates",
+          "list_mcp_resources",
+          "read_mcp_resource",
+          "update_goal",
+          "view_image"
+        ]
+      }
+    },
+    "zmachine-context-contracts": {
+      "mock_invocation_completed": true,
+      "instruction_match": true,
+      "advertised_tools": [
+        "apply_patch",
+        "clock.sleep",
+        "clock__curr_time",
+        "collaboration.followup_task",
+        "collaboration.interrupt_agent",
+        "collaboration.list_agents",
+        "collaboration.send_message",
+        "collaboration.spawn_agent",
+        "collaboration.wait_agent",
+        "create_goal",
+        "functions.exec",
+        "functions.request_user_input",
+        "functions.wait",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image"
+      ],
+      "runtime_tools": {
+        "shell": "undefined",
+        "patch": "function",
+        "names": [
+          "apply_patch",
+          "clock__curr_time",
+          "create_goal",
+          "get_goal",
+          "list_mcp_resource_templates",
+          "list_mcp_resources",
+          "read_mcp_resource",
+          "update_goal",
+          "view_image"
+        ]
+      }
+    },
+    "zmachine-continuity-provenance": {
+      "mock_invocation_completed": true,
+      "instruction_match": true,
+      "advertised_tools": [
+        "apply_patch",
+        "clock.sleep",
+        "clock__curr_time",
+        "collaboration.followup_task",
+        "collaboration.interrupt_agent",
+        "collaboration.list_agents",
+        "collaboration.send_message",
+        "collaboration.spawn_agent",
+        "collaboration.wait_agent",
+        "create_goal",
+        "functions.exec",
+        "functions.request_user_input",
+        "functions.wait",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image"
+      ],
+      "runtime_tools": {
+        "shell": "undefined",
+        "patch": "function",
+        "names": [
+          "apply_patch",
+          "clock__curr_time",
+          "create_goal",
+          "get_goal",
+          "list_mcp_resource_templates",
+          "list_mcp_resources",
+          "read_mcp_resource",
+          "update_goal",
+          "view_image"
+        ]
+      }
+    },
+    "zmachine-narrative-knowledge": {
+      "mock_invocation_completed": true,
+      "instruction_match": true,
+      "advertised_tools": [
+        "apply_patch",
+        "clock.sleep",
+        "clock__curr_time",
+        "collaboration.followup_task",
+        "collaboration.interrupt_agent",
+        "collaboration.list_agents",
+        "collaboration.send_message",
+        "collaboration.spawn_agent",
+        "collaboration.wait_agent",
+        "create_goal",
+        "functions.exec",
+        "functions.request_user_input",
+        "functions.wait",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image"
+      ],
+      "runtime_tools": {
+        "shell": "undefined",
+        "patch": "function",
+        "names": [
+          "apply_patch",
+          "clock__curr_time",
+          "create_goal",
+          "get_goal",
+          "list_mcp_resource_templates",
+          "list_mcp_resources",
+          "read_mcp_resource",
+          "update_goal",
+          "view_image"
+        ]
+      }
+    },
+    "zmachine-policy-directives": {
+      "mock_invocation_completed": true,
+      "instruction_match": true,
+      "advertised_tools": [
+        "apply_patch",
+        "clock.sleep",
+        "clock__curr_time",
+        "collaboration.followup_task",
+        "collaboration.interrupt_agent",
+        "collaboration.list_agents",
+        "collaboration.send_message",
+        "collaboration.spawn_agent",
+        "collaboration.wait_agent",
+        "create_goal",
+        "functions.exec",
+        "functions.request_user_input",
+        "functions.wait",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image"
+      ],
+      "runtime_tools": {
+        "shell": "undefined",
+        "patch": "function",
+        "names": [
+          "apply_patch",
+          "clock__curr_time",
+          "create_goal",
+          "get_goal",
+          "list_mcp_resource_templates",
+          "list_mcp_resources",
+          "read_mcp_resource",
+          "update_goal",
+          "view_image"
+        ]
+      }
+    },
+    "zmachine-turn-persistence": {
+      "mock_invocation_completed": true,
+      "instruction_match": true,
+      "advertised_tools": [
+        "apply_patch",
+        "clock.sleep",
+        "clock__curr_time",
+        "collaboration.followup_task",
+        "collaboration.interrupt_agent",
+        "collaboration.list_agents",
+        "collaboration.send_message",
+        "collaboration.spawn_agent",
+        "collaboration.wait_agent",
+        "create_goal",
+        "functions.exec",
+        "functions.request_user_input",
+        "functions.wait",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image"
+      ],
+      "runtime_tools": {
+        "shell": "undefined",
+        "patch": "function",
+        "names": [
+          "apply_patch",
+          "clock__curr_time",
+          "create_goal",
+          "get_goal",
+          "list_mcp_resource_templates",
+          "list_mcp_resources",
+          "read_mcp_resource",
+          "update_goal",
+          "view_image"
+        ]
+      }
+    },
+    "zmachine-vm-bridge": {
+      "mock_invocation_completed": true,
+      "instruction_match": true,
+      "advertised_tools": [
+        "apply_patch",
+        "clock.sleep",
+        "clock__curr_time",
+        "collaboration.followup_task",
+        "collaboration.interrupt_agent",
+        "collaboration.list_agents",
+        "collaboration.send_message",
+        "collaboration.spawn_agent",
+        "collaboration.wait_agent",
+        "create_goal",
+        "functions.exec",
+        "functions.request_user_input",
+        "functions.wait",
+        "get_goal",
+        "list_mcp_resource_templates",
+        "list_mcp_resources",
+        "read_mcp_resource",
+        "update_goal",
+        "view_image"
+      ],
+      "runtime_tools": {
+        "shell": "undefined",
+        "patch": "function",
+        "names": [
+          "apply_patch",
+          "clock__curr_time",
+          "create_goal",
+          "get_goal",
+          "list_mcp_resource_templates",
+          "list_mcp_resources",
+          "read_mcp_resource",
+          "update_goal",
+          "view_image"
+        ]
+      }
+    }
+  },
+  "admission": "blocked",
+  "independent_review": "not performed",
+  "live_model_behavior": "not tested"
+}

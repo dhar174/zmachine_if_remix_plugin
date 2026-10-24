@@ -2,11 +2,13 @@
 
 This directory holds the engineering-team configuration for the repository: the canonical coordination policy ([team-coordination.md](team-coordination.md)), this guide, and point-in-time setup-verification records. The specialist definitions themselves are versioned as source templates in the repository's [`.zcode/agents/`](../../.zcode/agents/) directory.
 
+Codex project equivalents are in [`.codex/agents/`](../../.codex/agents/). Start with [the Codex adapter guide](codex-agents.md) and [its verification record](setup-verification-codex-2026-10-23.md). Their effective-tool admission gate currently fails; discovery and a successful mock invocation do not qualify them as read-only. The installation instructions below apply to Zcode only.
+
 The coordination policy — roles, routing table, assignment and return contracts, shared invariants — is [team-coordination.md](team-coordination.md). This README is operational guidance only; where any wording disagrees, the policy wins.
 
 ## Roster
 
-All specialists are read-only investigators (`Read`, `Grep`, `Glob`), inherit the primary session's model, and cannot spawn subagents or edit files.
+All specialist assignments are read-only investigations (`Read`, `Grep`, `Glob`), with no subagent dispatch or file edits. These are required restrictions, not proof that a particular definition or client enforces them. Inspect actual model fields and tools: some preserved Zcode sources pin a provider model and list tools beyond the canonical assignment. The Codex adapters omit those provider-specific model fields and require the admission check in policy §9.1.
 
 | Agent | Mission (one line) |
 | --- | --- |
