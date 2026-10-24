@@ -35,7 +35,7 @@ export async function boundedResponse(response, max, signal) {
 
 // Configuration comes from one explicitly supplied file, never credential discovery.
 // Public keys are pinned for this short probe; provider key rotation is manual.
-export function createAuth(input, { clock = Date.now, fetcher = fetch } = {}) {
+export function createAuth(input, { clock = Date.now, fetcher = fetch, onFailure } = {}) {
   const config = parse(authConfigSchema, input), origin = new URL(config.public_origin);
   requireThat(origin.origin === config.public_origin && !origin.username && !origin.password
     && (origin.protocol === 'https:' || (origin.protocol === 'http:' && origin.hostname === '127.0.0.1')), 'INVALID_PUBLIC_ORIGIN');
@@ -43,13 +43,28 @@ export function createAuth(input, { clock = Date.now, fetcher = fetch } = {}) {
   const keys = createLocalJWKSet(config.jwks), sessions = new Map(), flows = new Map();
   const owners = config.subjects.map(s => principal(config.issuer, s));
   const cookieFlags = `Path=/; HttpOnly; SameSite=Lax${origin.protocol === 'https:' ? '; Secure' : ''}`;
+  // Local diagnostics contain fixed categories only, never exceptions or claims.
+  const report = (phase, reason) => { try { onFailure?.({phase, reason}); } catch {} };
+  const jwtReason = error => {
+    if (error?.code === 'OWNER_NOT_ALLOWED') return 'OWNER_NOT_ALLOWED';
+    if (error?.code === 'JWT_IAT_REJECTED') return 'JWT_IAT';
+    if (error?.code === 'ERR_JWT_CLAIM_VALIDATION_FAILED') return ['iss','aud','iat','exp','sub','nbf'].includes(error.claim)
+      ? `JWT_${error.claim.toUpperCase()}` : 'JWT_CLAIMS';
+    return ({ERR_JWT_EXPIRED:'JWT_EXPIRED', ERR_JOSE_ALG_NOT_ALLOWED:'JWT_ALGORITHM',
+      ERR_JWS_SIGNATURE_VERIFICATION_FAILED:'JWT_SIGNATURE', ERR_JWKS_NO_MATCHING_KEY:'JWT_KEY',
+      ERR_JWS_INVALID:'JWT_FORMAT', ERR_JWT_INVALID:'JWT_FORMAT'})[error?.code] || 'JWT_REJECTED';
+  };
   const cleanup = () => {
     for (const map of [sessions, flows]) for (const [key, value] of map) if (value.expires <= clock()) map.delete(key);
   };
   async function verify(token, audience) {
+    const currentDate = new Date(clock()), now = Math.floor(currentDate.getTime()/1000);
     const { payload } = await jwtVerify(token, keys, { issuer: config.issuer, audience,
-      algorithms: ['RS256', 'ES256'], requiredClaims: ['sub', 'exp', 'iat'], maxTokenAge:'15m', currentDate: new Date(clock()) });
-    requireThat(typeof payload.sub === 'string' && config.subjects.includes(payload.sub), 'UNAUTHENTICATED', 401);
+      algorithms: ['RS256', 'ES256'], requiredClaims: ['sub', 'exp', 'iat'], currentDate });
+    // Only iat permits five seconds of issuer skew. exp/nbf keep JOSE's zero
+    // tolerance, and tokens older than 900 seconds are still rejected exactly.
+    requireThat(Number.isFinite(payload.iat) && payload.iat <= now+5 && now-payload.iat <= 900, 'JWT_IAT_REJECTED', 401);
+    requireThat(typeof payload.sub === 'string' && config.subjects.includes(payload.sub), 'OWNER_NOT_ALLOWED', 401);
     return payload;
   }
   return {
@@ -57,12 +72,15 @@ export function createAuth(input, { clock = Date.now, fetcher = fetch } = {}) {
     resourceMetadata: { resource: config.audience, authorization_servers: [config.issuer],
       scopes_supported: ['probe:read', 'probe:stage', 'probe:commit', 'probe:import'] },
     async authenticateMcp(req) {
+      let reason = 'BEARER_MISSING_OR_MALFORMED';
       try {
         requireThat(/^Bearer [^ ]+$/.test(req.headers.authorization || ''), 'UNAUTHENTICATED', 401);
+        reason = 'JWT';
         const payload = await verify(req.headers.authorization.slice(7), config.audience);
+        reason = 'SCOPE_CLAIM_MISSING';
         requireThat(typeof payload.scope === 'string', 'UNAUTHENTICATED', 401);
         return { owner: principal(config.issuer, payload.sub), scopes: payload.scope.split(' ') };
-      } catch { throw new ProbeError('UNAUTHENTICATED', 401); }
+      } catch (error) { report('mcp', reason === 'JWT' ? jwtReason(error) : reason); throw new ProbeError('UNAUTHENTICATED', 401); }
     },
     browser(req) {
       cleanup(); const session = sessions.get(cookie(req, 'probe_session'));
@@ -80,7 +98,8 @@ export function createAuth(input, { clock = Date.now, fetcher = fetch } = {}) {
     },
     async callback(req, res, url) {
       cleanup(); const state = url.searchParams.get('state'), flow = flows.get(state);
-      requireThat(flow && cookie(req, 'probe_flow') === state && url.searchParams.get('iss') === config.issuer, 'INVALID_LOGIN', 401);
+      try { requireThat(flow && cookie(req, 'probe_flow') === state && url.searchParams.get('iss') === config.issuer, 'INVALID_LOGIN', 401); }
+      catch (error) { report('browser','CALLBACK_BINDING'); throw error; }
       flows.delete(state);
       const code = url.searchParams.get('code'); requireThat(code && code.length < 4096, 'INVALID_LOGIN', 401);
       const body = new URLSearchParams({ grant_type: 'authorization_code', code,
@@ -95,7 +114,8 @@ export function createAuth(input, { clock = Date.now, fetcher = fetch } = {}) {
       const tokens = JSON.parse((await boundedResponse(response, 16384, signal)).toString('utf8'));
       let claims;
       try { claims = await verify(tokens.id_token, config.browser_client_id); }
-      catch { throw new ProbeError('INVALID_LOGIN',401); }
+      catch (error) { report('browser',jwtReason(error)); throw new ProbeError('INVALID_LOGIN',401); }
+      if (claims.nonce !== flow.nonce || (claims.azp && claims.azp !== config.browser_client_id)) report('browser','NONCE_OR_CLIENT_BINDING');
       requireThat(claims.nonce === flow.nonce && (!claims.azp || claims.azp === config.browser_client_id), 'INVALID_LOGIN', 401);
       requireThat(sessions.size < 20, 'LOGIN_LIMIT', 429);
       const handle = id();

@@ -57,6 +57,9 @@ export async function createProbe({ directory, auth, clock = Date.now, limits = 
   }
   function html(res, body, script = '') {
     const nonce = id();
+    // Native form POSTs use Origin:null under no-referrer. Send only the
+    // origin as referrer while preserving the strict Origin + CSRF checks.
+    res.setHeader('referrer-policy', 'strict-origin');
     res.setHeader('content-security-policy', `default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`);
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><title>G1-C probe</title><h1>G1-C synthetic probe</h1>${body}${script ? `<script nonce="${nonce}">${script}</script>` : ''}</html>`);

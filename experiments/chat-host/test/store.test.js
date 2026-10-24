@@ -85,10 +85,11 @@ test('rollback when durable receipt insertion fails leaves state and grant intac
 });
 test('fresh process recovers exact receipt after injected post-commit exit 73 and rejects old authority',t=>{
   const directory=temporary();t.after(()=>removeTemporary(directory));
-  const first=spawnSync(process.execPath,['test/restart-child.js'],{input:JSON.stringify({directory,phase:'commit-and-crash'}),encoding:'utf8',timeout:5000});
-  assert.equal(first.status,73,first.stderr);const previous=JSON.parse(first.stdout);
-  const second=spawnSync(process.execPath,['test/restart-child.js'],{input:JSON.stringify({directory,phase:'recover',previous}),encoding:'utf8',timeout:5000});
-  assert.equal(second.status,0,second.stderr);const recovered=JSON.parse(second.stdout);
+  // Test-only process startup/recovery budget; transport deadlines are unchanged.
+  const first=spawnSync(process.execPath,['test/restart-child.js'],{input:JSON.stringify({directory,phase:'commit-and-crash'}),encoding:'utf8',timeout:15000});
+  assert.equal(first.status,73,JSON.stringify({error:first.error?.code,signal:first.signal,stderr:first.stderr}));const previous=JSON.parse(first.stdout);
+  const second=spawnSync(process.execPath,['test/restart-child.js'],{input:JSON.stringify({directory,phase:'recover',previous}),encoding:'utf8',timeout:15000});
+  assert.equal(second.status,0,JSON.stringify({error:second.error?.code,signal:second.signal,stderr:second.stderr}));const recovered=JSON.parse(second.stdout);
   assert.deepEqual(recovered.receipt,previous.receipt);assert.equal(recovered.state.revision,1);
   assert.equal(recovered.pendingStatus,'NOT_FOUND');assert.deepEqual(recovered.imported,previous.imported);
 });

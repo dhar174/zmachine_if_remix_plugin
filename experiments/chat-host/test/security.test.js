@@ -67,6 +67,22 @@ test('real HTTP fixture upload requires cookie/CSRF/type and denies foreign hand
   assert.equal((await h.post('/delete-import',{import_handle:metadata.import_handle},browser)).status,200);
   assert.equal(h.probe.store.db.prepare('SELECT COUNT(*) AS n FROM imports').get().n,0);
 });
+
+test('HTML forms preserve origin privacy while null and foreign origins cannot delete an import',async t=>{
+  const h=await setup(t),browser=await h.login(),state=h.probe.store.state(owner);
+  const imported=h.probe.store.importBytes(owner,state.session_id,fixture);
+  const page=await fetch(`${h.probe.origin}/session`,{headers:{cookie:browser.cookie}});
+  assert.equal(page.headers.get('referrer-policy'),'strict-origin');
+  const metadata=await fetch(`${h.probe.origin}/.well-known/oauth-protected-resource`);
+  assert.equal(metadata.headers.get('referrer-policy'),'no-referrer');
+  for(const origin of ['null','https://foreign.invalid']) {
+    assert.equal((await h.post('/delete-import',{import_handle:imported.import_handle},browser,{origin})).status,403);
+    assert.deepEqual(h.probe.store.inspectImport(owner,state.session_id,imported.import_handle),imported);
+  }
+  assert.equal((await h.post('/delete-import',{import_handle:imported.import_handle},browser)).status,200);
+  assert.throws(()=>h.probe.store.inspectImport(owner,state.session_id,imported.import_handle),error=>error.code==='NOT_FOUND');
+  assert.equal(h.probe.store.state(owner).revision,0);
+});
 test('request byte limit, rate window and output bound fail without world mutations',async t=>{
   let now=1800000000000;const h=await setup(t,{clock:()=>now});const token=await h.sign();
   const headers={authorization:`Bearer ${token}`,'content-type':'application/json',accept:'application/json, text/event-stream'};

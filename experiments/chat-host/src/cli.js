@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync, realpathSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -23,7 +23,18 @@ try {
     // The CLI is a local experiment, not a multi-user Windows storage service.
   }
   const config = JSON.parse(readFileSync(process.env.PROBE_AUTH_CONFIG,'utf8'));
-  const auth = createAuth(config);
+  const diagnostics = new Set();
+  const diagnosticPath = resolve(actual,'auth-diagnostics.json');
+  try { writeFileSync(diagnosticPath, '[]', {mode:0o600}); }
+  catch { console.error(JSON.stringify({status:'AUTH_DIAGNOSTIC_UNAVAILABLE'})); }
+  const auth = createAuth(config, { onFailure(event) {
+    const entry = JSON.stringify(event);
+    if (diagnostics.has(entry) || diagnostics.size >= 32) return;
+    diagnostics.add(entry);
+    // Bounded, private, credential-free diagnostics; not an auth/grant store.
+    try { writeFileSync(diagnosticPath, JSON.stringify([...diagnostics].map(value => JSON.parse(value))), {mode:0o600}); }
+    catch { console.error(JSON.stringify({status:'AUTH_DIAGNOSTIC_UNAVAILABLE'})); }
+  } });
   const port = Number(process.env.PROBE_PORT || 3213);
   requireThat(Number.isInteger(port) && port >= 1024 && port <= 65535,'INVALID_PORT');
   const probe = await createProbe({ directory:actual,auth,port,publicOrigin:auth.origin });

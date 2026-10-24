@@ -1,7 +1,7 @@
 // Test-only subprocess: no network listener, external identity or live-mode import.
 import { readFileSync,writeSync } from 'node:fs';
 import { ProbeStore } from '../src/store.js';
-import { owner,other,proposal,approvalArgs,commitArgs,fixture } from './helpers.js';
+import { owner,other,proposal,approvalArgs,commitArgs,fixture } from './probe-data.js';
 const input=JSON.parse(readFileSync(0,'utf8'));
 const store=new ProbeStore(input.directory,[owner,other]);
 if(input.phase==='commit-and-crash') {
