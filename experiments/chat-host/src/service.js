@@ -186,7 +186,15 @@ export async function createProbe({ directory, auth, clock = Date.now, limits = 
         delete fields.csrf;
         if (url.pathname === '/approve') {
           const args = parse(z.strictObject({ candidate_id: z.string(), digest: z.string(), expected_revision: z.string().regex(/^\d+$/) }), fields);
-          return json(res,200,store.approve(session.owner,{...args, session_id:state.session_id, expected_revision:Number(args.expected_revision)}));
+          const candidate = store.candidate(session.owner,state.session_id,args.candidate_id);
+          const grant = store.approve(session.owner,{...args, session_id:state.session_id, expected_revision:Number(args.expected_revision)});
+          // The browser confirms the human action without receiving its grant
+          // reference. Authenticated MCP inspection retrieves that server state.
+          return html(res, `<h2>Approval recorded</h2><p>Operation: set_room_label; session: ${escape(candidate.session_id)}; base revision: ${candidate.base_revision}</p>
+            <p>Before: <strong>${escape(candidate.diff.before)}</strong></p><p>After: <strong>${escape(candidate.diff.after)}</strong></p>
+            <p>Candidate: ${escape(candidate.candidate_id)}<br>Digest: ${escape(candidate.digest)}<br>Approval expires: ${escape(new Date(grant.expires_at).toISOString())}</p>
+            <p>Approval alone does not commit the edit. Return to ChatGPT now so it can inspect the server-held approval and commit this exact candidate before expiry.</p>
+            <p><a href="/candidate?id=${encodeURIComponent(candidate.candidate_id)}">Review candidate or revoke approval</a></p>`);
         }
         if (url.pathname === '/revoke') {
           const args = parse(z.strictObject({ candidate_id:z.string() }),fields);

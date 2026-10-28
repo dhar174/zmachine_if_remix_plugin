@@ -33,11 +33,36 @@ test('MCP bearer cannot approve; browser cookie, exact CSRF, origin and immutabl
   }
   assert.equal((await h.post('/approve',exact,browser,{origin:'https://evil.invalid'})).status,403);
   assert.equal((await h.post('/approve',exact,bob)).status,404);
-  const approved=await h.post('/approve',exact,browser);assert.equal(approved.status,200);const grant=await approved.json();
+  const approved=await h.post('/approve',exact,browser);assert.equal(approved.status,200);const grant=h.probe.store.approval(owner,state.session_id,c.candidate_id);
   assert.equal((await h.post('/revoke',{candidate_id:c.candidate_id},browser)).status,200);
   assert.throws(()=>h.probe.store.commit(owner,commitArgs(c,grant)),e=>e.code==='NEEDS_APPROVAL');
   assert.equal(h.probe.store.state(owner).revision,0);
 });
+test('browser approval confirmation is HTML without a grant reference; authenticated tools retain the exact expiring grant',async t=>{
+  let now=1800000000000;const h=await setup(t,{clock:()=>now}),browser=await h.login();
+  const state=h.probe.store.state(owner),candidate=h.probe.store.prepare(owner,proposal(state));
+  const approved=await h.post('/approve',{candidate_id:candidate.candidate_id,digest:candidate.digest,expected_revision:'0'},browser);
+  assert.equal(approved.status,200);
+  assert.match(approved.headers.get('content-type'),/^text\/html/);
+  const page=await approved.text();
+  const inspected=await h.probe.invoke({owner,scopes:['probe:read']},'probe_get_candidate',{
+    session_id:state.session_id,candidate_id:candidate.candidate_id});
+  assert.ok(inspected.approval);
+  const grant=inspected.approval;
+  assert.equal(grant.expires_at,now+LIMITS.grantMs);
+  assert.match(page,/Approval recorded/);
+  for(const value of [candidate.candidate_id,candidate.digest,candidate.diff.before,candidate.diff.after,new Date(grant.expires_at).toISOString()])assert.ok(page.includes(value));
+  assert.ok(!page.includes(grant.approval_ref)&&!page.includes('approval_ref'));
+  assert.match(approved.headers.get('content-security-policy'),/frame-ancestors 'none'/);
+  assert.equal(approved.headers.get('referrer-policy'),'strict-origin');
+  assert.equal(h.probe.store.state(owner).revision,0);
+  now=grant.expires_at;
+  assert.equal((await h.probe.invoke({owner,scopes:['probe:read']},'probe_get_candidate',{
+    session_id:state.session_id,candidate_id:candidate.candidate_id})).approval,null);
+  assert.throws(()=>h.probe.store.commit(owner,commitArgs(candidate,grant)),e=>e.code==='NEEDS_APPROVAL');
+  assert.equal(h.probe.store.state(owner).revision,0);
+});
+
 test('OIDC callback rejects missing binding, wrong issuer, duplicate cookie and replay; sessions expire',async t=>{
   let now=1800000000000;const h=await setup(t,{clock:()=>now});
   for(const query of ['state=forged&code=x',`state=x&code=y&iss=${issuer}`])assert.equal((await fetch(`${h.probe.origin}/oauth/callback?${query}`,{redirect:'manual'})).status,401);
