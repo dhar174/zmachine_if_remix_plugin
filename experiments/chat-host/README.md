@@ -242,7 +242,13 @@ response later loaded; preserve that failure/recovery, not just its final state.
    Test ambiguous/in-fiction requests and record host behavior separately from
    server denial; preparation alone must not change the label.
 6. The **user** opens the approval URL, signs in, checks the immutable diff and
-   clicks approval. Capture a redacted server grant/result and subsequent commit
+   clicks approval. The success page is an HTML confirmation and does not reveal
+   the approval reference. ChatGPT must immediately call `probe_get_candidate`
+   and use only its existing, unexpired server-held grant to commit the exact
+   candidate. Prepare that conditional chat prompt before asking the user to
+   click; do not spend the one-minute grant on setup, tests or documentation.
+   If it expires, stop and prepare a fresh candidate for new personal consent.
+   Capture a redacted server grant/result and subsequent commit
    receipt. An agent must not click approval and call it human consent. A host
    dialog alone is not exact-diff server attestation.
 7. Ask ChatGPT to independently read state/revision. Retry the identical commit

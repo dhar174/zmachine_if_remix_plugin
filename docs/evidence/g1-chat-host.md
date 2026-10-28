@@ -418,6 +418,60 @@ no native Read/Grep/Glob surface in its tested environment. That result is a
 blocker, not independent acceptance of this implementation. No conversion changes
 are included here. Author verification is not independent review.
 
+## 6.1. Recovery and approval confirmation follow-up (2026-10-28)
+
+This checkpoint supersedes the earlier pending-personal-click status, without
+claiming a successful live write. The owner personally reset the dedicated probe
+password and created a replacement restricted, one-day tunnel runtime key with
+only Tunnels Read + Use. The existing private tunnel resumed polling; official
+doctor and readiness checks passed. No new tunnel, scope, public listener, paid
+resource or identity-provider permission was created. The previously prepared
+issuer-origin profile correction was loaded, but that alone does not qualify
+automatic ChatGPT OAuth discovery.
+
+Actual ChatGPT web Chat refreshed the six advertised tools and again read
+`Probe Chamber`, revision `0`, and prepared immutable candidates. The owner
+reported personally clicking the exact-diff approval twice. In the first attempt,
+the browser result contained a server-held approval reference, but its 60-second
+grant had expired when inspected. ChatGPT returned `NEEDS_APPROVAL`, with no
+receipt and revision still `0`. In the second attempt, browser control stalled
+after the approval POST; a fresh conversation tab showed the conditional commit
+prompt still unsent. No second commit or receipt is established. The raw approval
+references were not retained. These are failed live completion attempts, not a
+successful approval-to-commit lifecycle. GPT-6 High and GPT-5.6 Sol Medium were
+observed; an Instant response failed to load and is not qualified.
+
+The success response from the approval POST was raw JSON. Browser control
+repeatedly stalled while resolving that document response. This correlation is
+an investigation finding, not a proven root cause. Source commit
+`188e7b3eb8e037b1ad175c507e244954378b2b7e` replaces it with an HTML confirmation
+showing the immutable diff, candidate, digest, base revision and expiry. The page
+does not expose the grant reference; authenticated `probe_get_candidate` still
+retrieves the existing server-held grant. Signature, owner/session/scope binding,
+CSRF/Origin checks, 60-second grant expiry, single-use semantics and revision
+checks are unchanged. A new personal approval is required after service restart.
+Live effectiveness of this browser-response change is **NOT RUN** at this source
+checkpoint. Full live privileged acceptance remains **BLOCKED**.
+
+Verification at this source: six syntax checks passed; `npm test` passed
+**32/32**, zero failed/skipped, exit `0`, duration `20,576.1977 ms`. The three
+official-client protocol tests are included. A focused regression first failed
+on the prior JSON content type, then passed after the HTML change; the separate
+protocol suite passed **3/3**. The regression also verifies that the browser
+does not receive the reference and that expiry still rejects commit without
+changing revision. Node's SQLite experimental warning remains informational.
+The earlier test result became inaccessible after a context/output truncation;
+this is the observed replacement full run, not an inferred result. Historical
+CI success at `223ba42` does not qualify this new source. Independent review is
+still unmet for the harness reason recorded above.
+
+The four OpenAI primary starting pages below were retrieved again on
+**2026-10-28**. SDK/lockfile and tool-schema versions remain unchanged. The next
+live run must first verify the restarted service, stage a fresh candidate,
+prepare the conditional ChatGPT commit prompt, obtain a new personal approval,
+then send that prompt immediately. An expired grant must never be reused or
+extended to make the demo succeed.
+
 ## 7. Current primary references (retrieved 2026-10-23)
 
 - [OpenAI: build an MCP server](https://developers.openai.com/plugins/build/mcp-server)
