@@ -1,6 +1,6 @@
 # G1-C chat-host probe (Issue #13)
 
-This is a local feasibility experiment, not the remix engine. Six MCP tools
+This is a local feasibility experiment, not the remix engine. Seven MCP tools
 operate on a synthetic room label and one immutable redistributable Z5 fixture.
 No interpreter is imported or executed. The host model selects tools; there is
 no provider API dependency or call back into a ChatGPT subscription.
@@ -70,6 +70,14 @@ The HTML approval-confirmation follow-up passed **32/32** with six syntax checks
 the exact source hashes and test result. The browser success page displays the
 exact diff and expiry without exposing its server-held approval reference.
 
+The **0.1.1 receipt-recovery follow-up** passed **35/35** tests and six syntax
+checks; the dedicated official protocol suite passed 4/4. Actual web Chat then
+read the historical Classic forward receipt twice and corrected its earlier
+no-commit report, while a fresh state read remained Probe Chamber / 4. This
+read-only recovery needs no consumed approval reference and does not authorize
+a retry. It does not retrospectively qualify the unobserved commit replay.
+See the [source-bound recovery receipt](evidence/receipt-recovery-2026-10-29.json).
+
 ## Reproduce local evidence
 
 Use Node **24.13.0**, npm **11.12.1** (the tested environment). From this directory:
@@ -105,11 +113,12 @@ Deleting `results/` is optional: no server is left running after tests.
 | `probe_get_state` | Read pre-provisioned session; `probe:read` |
 | `probe_prepare_label` | Persist immutable candidate; `probe:stage`; **not read-only** |
 | `probe_get_candidate` | Read exact diff and any server-held approval reference; `probe:read` |
+| `probe_get_receipt` | Read an existing historical receipt by owner/session/original commit request ID; `probe:read` |
 | `probe_commit_label` | Exact approved CAS update and stable receipt; `probe:commit` |
 | `probe_import_fixture` | Documented host-file schema, currently blocked by CLI; `probe:import` |
 | `probe_inspect_import` | Owner-bound metadata only; `probe:read` |
 
-Input and output schemas are strict, version **0.1.0**. Only plain bounded label
+Input and output schemas are strict, version **0.1.1**. Only plain bounded label
 assignments exist; `/edit`, source-message IDs, executable operations, paths,
 base64 and arbitrary approval fields cannot grant authority. Fictional text
 returned by the read tool is explicitly untrusted. There is no export, arbitrary
@@ -325,6 +334,12 @@ password based only on an old conversation's link error.
    in the inverse trial; qualify it separately from cross-turn recovery. Never
    replace a missing reference, issue a new grant,
    or copy a grant secret into ordinary chat merely to obtain a retry result.
+   If the outcome is uncertain or the original reference is inaccessible, use
+   `probe_get_receipt` with the original session and commit request ID, then read
+   current state separately. A receipt is historical: a later inverse may have
+   changed the room again. NOT_FOUND does not prove no in-flight commit and is
+   never authority to retry. This lookup does not qualify an identical commit
+   replay that was never performed.
 8. Ask to restore “Probe Chamber” using a new inverse candidate. The user approves
    separately; verify revision increments once more. No generic undo tool exists.
 9. Prefer a documented, ownership-checked native host file mechanism only after

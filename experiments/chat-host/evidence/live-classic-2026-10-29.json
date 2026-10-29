@@ -188,6 +188,15 @@
     "new_mutation_or_import": false,
     "full_acceptance": "BLOCKED; prior narration/personal inverse/device/skill/native import/review gaps unchanged"
   },
+  "receipt_recovery_followup": {
+    "record": "receipt-recovery-2026-10-29.json",
+    "source_commit": "89268050bfcb0644b1223c8b306273dc903c5a18",
+    "version": "0.1.1",
+    "actual_web": "PASS: new read-only tool returned original forward receipt twice, historical revision 3; current-state read revision 4; host corrected prior no-commit narration",
+    "Classic_new_receipt_operation": "NOT RUN; prior native Classic evidence remains separate",
+    "original_forward_commit_replay": "Still unverified/NOT RUN; receipt retrieval is not mutation replay",
+    "new_approval_or_mutation": false
+  },
   "remaining": {
     "Classic_personal_forward": "exact browser grant and durable commit PASS; initial narration FAIL, subsequent actual read reconciled state",
     "Classic_forward_identical_replay": "UNVERIFIED same-turn; later verbatim retry NOT RUN because original reference inaccessible",
@@ -197,6 +206,6 @@
     "desktop_Work_and_Android": "NOT RUN",
     "installed_workflow_skill": "NOT RUN",
     "independent_restricted_review": "UNMET; suitable enforced profile unavailable",
-    "new_runtime_test_suite": "NOT RUN; documentation only; tested source hashes must remain unchanged"
+    "new_runtime_test_suite": "Earlier continuation was documentation only at 188e7b3; subsequent v0.1.1 receipt-recovery source 8926805 passed 35/35, with four official protocol tests included; see separate source-bound receipt"
   }
 }

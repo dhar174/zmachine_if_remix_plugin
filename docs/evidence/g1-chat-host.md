@@ -17,7 +17,9 @@ one-day replacement key, and fresh actual **web Chat and Classic desktop Chat**
 reads both returned Probe Chamber / 4. The processes are intentionally left
 running for the owner (§6.9); the earlier shutdown remains a historical checkpoint.
 
-The actual host advertises all six probe tools. After the owner personally
+The initial host catalog advertised six probe tools; v0.1.1 adds a read-only
+receipt lookup, discovered through Refresh tools and actually invoked in web
+Chat (§6.10). After the owner personally
 approved the immutable diff in the separately authenticated browser, ChatGPT
 committed **Probe Chamber → Renamed Chamber**, revision **0 → 1**. The browser
 displayed Approval recorded; ChatGPT returned receipt
@@ -249,10 +251,12 @@ been demonstrated.
 - Worktree/branch: isolated `zirp-g1c`, `codex/issue-13-g1c-chat-host-probe`.
   The primary dirty checkout, recovery data and G1-B worktree were preserved.
 - Actual runtime: Windows x64, Node **24.13.0**, npm **11.12.1**. Server/schema
-  version **0.1.0**. Official MCP server/client/core **2.4.0**, Zod **4.6.7**,
+  initial version **0.1.0**, receipt-recovery follow-up **0.1.1** (§6.10).
+  Official MCP server/client/core **2.4.0**, Zod **4.6.7**,
   JOSE **6.2.13**; exact transitive pins and integrity values in the dedicated
   [lockfile](../../experiments/chat-host/package-lock.json).
-- Lockfile SHA-256: `fe60029b90cd078490b74ec77f3df3a0e7234d1291a70d8fd53c1ed66c33d979`.
+- Initial v0.1.0 lockfile SHA-256: `fe60029b90cd078490b74ec77f3df3a0e7234d1291a70d8fd53c1ed66c33d979`.
+  The v0.1.1 package-version-only lockfile change is bound in the recovery receipt.
 - Immutable input: existing `fixture.z5`, **88,576 bytes**, server-measured SHA-256
   `96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`, matching
   `tests/fixtures/zmachine/fixture.sha256`. No story execution or fixture/vendor edits.
@@ -283,7 +287,7 @@ is not a pass. Existing root VM suites were not executed for this change.
 
 ## 2. Measured service behavior and trace
 
-Six focused tools authenticate before dispatch, reject unknown schema fields,
+Seven focused tools (six before v0.1.1) authenticate before dispatch, reject unknown schema fields,
 enforce operation scopes, and return structured results/explicit errors. Preparing
 persists candidate state and is accurately marked **not read-only**. Input/output
 schemas and actual advertised definitions are in the [local protocol receipt](../../experiments/chat-host/evidence/local-protocol.json).
@@ -398,7 +402,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 
 | Capability | Local deterministic / official MCP protocol | Actual ChatGPT web Chat | Actual authenticated external browser |
 | --- | --- | --- | --- |
-| Discovery / advertised definitions | PASS, both protocol eras, full wire schemas | PASS, six names/descriptions; full JSON schemas not captured | N/A |
+| Discovery / advertised definitions | PASS, both protocol eras, seven full wire schemas at v0.1.1 | Initial six names/descriptions PASS; new receipt tool actually invoked after refresh; full host JSON schemas not captured | N/A |
 | Authenticated state read | PASS, synthetic identities | PASS, real owner; independent final read Probe Chamber / revision 2 | PASS, same configured owner/session |
 | Prepare / commit / read / retry / inverse | PASS, automated synthetic grants | Forward/inverse/read and same-turn identical retry PASS; changed-payload reuse denied; cross-turn identical retry NOT RUN | Separate forward and inverse human approvals PASS |
 | Human exact-change consent | NOT RUN; synthetic POSTs do not count | Forward and inverse used their own exact server-held grants: PASS | PASS: separate personal forward, inverse and restart-only approvals; matching confirmations observed |
@@ -980,6 +984,66 @@ unattended hosting or longer credential lifetime is qualified. The working chat
 is left open; no new edit or import was performed. Prior narration failure,
 unverified personal inverse and remaining device/skill/native-import/review gaps
 are unchanged. Complete Issue #13 acceptance remains BLOCKED.
+
+## 6.10. Read-only receipt recovery after consumed approval (2026-10-29 EDT)
+
+The Classic false no-commit report exposed an avoidable recovery gap: a model
+without the original consumed approval reference could read current state but
+could not inspect the exact historical commit. Probe **0.1.1** adds only
+`probe_get_receipt(session_id, request_id)` under existing `probe:read`. The
+authenticated owner/session/original commit request key selects an existing
+receipt; no grant, payload hash, credential or owner identifier is returned.
+The result is historical and may differ from current state after an inverse.
+NOT_FOUND cannot prove the absence of an in-flight commit or authorize a retry.
+No transaction/schema migration, new scope, approval API or production kernel
+was added. Candidate/commit descriptions now direct uncertain outcomes to this
+lookup instead of treating consumed approval as proof of no commit.
+
+Three new tests first failed against the old implementation, then passed.
+At final source **`89268050bfcb0644b1223c8b306273dc903c5a18`**, six syntax checks
+and **35/35 tests**, zero failed/skipped, exited 0 (20,897.9826 ms). Four official
+protocol tests are included; a separate 4/4 run preceded the CLI-only version
+correction. The new tests cover scope, owner/session isolation, strict fields,
+missing requests, absence of authority in results, restart/expiry and historical
+receipt retrieval after a later inverse. All 16 source/test/manifest hashes are
+bound in the [recovery receipt](../../experiments/chat-host/evidence/receipt-recovery-2026-10-29.json).
+SDK dependencies remain pinned at MCP 2.4.0, JOSE 6.2.13 and Zod 4.6.7; package
+and model/server versions are 0.1.1. The first startup check failed because the
+CLI banner hard-coded 0.1.0; it now imports the shared VERSION, and the final
+restart actually reported LISTENING_LOCAL_ONLY / 0.1.1. Both runs and the fix are
+recorded. One file search and a documentation patch failed on nonexistent/stale
+context; corrected existing-path inspection/readback followed.
+
+The existing tunnel stayed running. The owner-authorized Auth0 session supplied
+the existing browser secret locally for the controlled service restart; clipboard
+was cleared after transfer. The existing plugin's **Refresh tools** control was
+used, followed by request-bound Reconnect/Connect after an expired-link card.
+Settings showed multiple same-named linked entries, some requiring authentication
+update. No entries were removed and no internal mapping/root cause is claimed.
+
+Actual web Chat then called the new receipt tool twice for original request
+`c1a551c3000000000000000000000002`. Both reads returned
+**`GzVmOQEPHNLhlCJxn8arg9BvzFCUQgSn`**, candidate
+`b4r0lWUbyY83BwY0YNo7-pPW8KZvUkhu`, Probe Chamber → Classic Chamber,
+committed revision **3**. A subsequent actual state read returned Probe Chamber /
+**4**. The host explicitly corrected its earlier no-commit conclusion and kept
+the historical receipt distinct from current state. At **17:54:21.334Z**, tunnel
+aggregate successful tools/call responses rose from **2 to 5**, consistent with
+two receipt reads and one state read; private SQL independently matched the
+receipt and retained four receipts, zero candidates/imports and revision 4.
+No new approval, candidate, commit or import was performed. This is actual
+read-only reconciliation, **not** retrospective proof of the unobserved identical
+commit replay. The new receipt operation in Classic native UI is NOT RUN; earlier
+Classic evidence remains separate. General narration reliability is not proven.
+
+Current OpenAI MCP-server guidance and official MCP tool specifications were
+rechecked **2026-10-29** before this change. They require server authorization and
+accurate schemas/annotations; metadata does not supply authority. References:
+[OpenAI MCP server](https://developers.openai.com/plugins/build/mcp-server) and
+[MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools).
+The current service and tunnel remain running for owner use under the same
+one-day key and local availability limits. Full acceptance and independent
+restricted review remain BLOCKED/unmet for the previously listed gaps.
 
 ## 7. Current primary references (retrieved 2026-10-23)
 

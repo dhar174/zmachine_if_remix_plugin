@@ -1,0 +1,258 @@
+{
+  "recorded": "2026-10-29",
+  "evidence_layer": "LOCAL_DETERMINISTIC_AND_OFFICIAL_PROTOCOL_SYNTHETIC_ONLY",
+  "source_commit": "89268050bfcb0644b1223c8b306273dc903c5a18",
+  "version": "0.1.1",
+  "SDK_versions": {
+    "server": "2.4.0",
+    "client": "2.4.0",
+    "jose": "6.2.13",
+    "zod": "4.6.7"
+  },
+  "tested_source_sha256": {
+    "src/auth.js": "39b3f802a0fdbe04451665df75d374d271b611c4ffaab52d7781a6033688c83e",
+    "src/cli.js": "3ed55c6293ec2248ae0c0e923be627bfa9b431383ab70e8253c4e685aceee1f3",
+    "src/service.js": "f9ad2d8512f54d6352def3c7639deb1a3084b35e25527eb334c1bd6e307e370d",
+    "src/model.js": "6dc125f626189803ad2259a2564dfeca8b5fbae38b0a75f80d5bd63e45f980c4",
+    "src/store.js": "7a053387841e1608fdd8f1085a7c28bfa6be3e36ba64900f4a9873fe18e593e7",
+    "src/host-file.js": "4f24878e2576b98dec35644c25c8cd71f47ecedf93baee8302437a4ca3042830",
+    "test/auth-diagnostics.test.js": "78b700affdfe576c424d45ca3c437db033d4995f618322c212d6a6f6f42b4760",
+    "test/concurrency.test.js": "78a796900d3490dfd383108bf082b875122022f54cbd3030c6b3eeae1f21c71a",
+    "test/protocol.test.js": "c0136e00dbd64c5c67ed66c240ebff253e7fbf498e5415509c9b02bbf7f997ad",
+    "test/security.test.js": "7eb335ae8cccdbe7ab77d8e17fc4e05d7fec1a277296068b5e4d878f984583ac",
+    "test/store.test.js": "a53af942ed624919191e711b0d5a5b9176ade00ee46466fb666134a19e0b6b2e",
+    "test/helpers.js": "a45c691e1acbf1b0e6ab18e92cc41abcb7c13c2d5aa5f62e5d5a66bc63af1079",
+    "test/probe-data.js": "b9e88c5ffa34af384187f8a957f9e056378e5ba7d74ca0e8725706eae6b448ed",
+    "test/restart-child.js": "81aabd3b01913f20df6fcd98e79085d8a386585c333a64012aa5325e56a6e844",
+    "package.json": "a62aacb47ac9c5f54e5280b90653580cd1e7e3a65c057121da417620c4324a16",
+    "package-lock.json": "b5db61ad5aa621915d61a0ebe167851fe25e448d77f0f795403e3cbffbb31556"
+  },
+  "commands": [
+    {
+      "command": "node --test --test-name-pattern=\"receipt lookup|receipt recovery\" test/store.test.js test/protocol.test.js",
+      "phase": "RED before implementation",
+      "exit_code": 1,
+      "tests": 3,
+      "passed": 0,
+      "failed": 3,
+      "duration_ms": 788.8728,
+      "failures": "receipt method and MCP tool absent",
+      "source_checkpoint": "old runtime 43b234c with new failing tests"
+    },
+    {
+      "command": "same focused command",
+      "phase": "GREEN after implementation",
+      "exit_code": 0,
+      "tests": 3,
+      "passed": 3,
+      "failed": 0,
+      "duration_ms": 730.7128,
+      "source_checkpoint": "137ebbd before CLI startup version correction"
+    },
+    {
+      "command": "npm run check",
+      "exit_code": 0,
+      "syntax_checks": 6,
+      "source_checkpoint": "137ebbd before CLI startup version correction"
+    },
+    {
+      "command": "npm test",
+      "exit_code": 0,
+      "tests": 35,
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 20909.3113,
+      "source_checkpoint": "137ebbd before CLI startup version correction"
+    },
+    {
+      "command": "npm run test:protocol",
+      "exit_code": 0,
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 1248.9226,
+      "source_checkpoint": "137ebbd before CLI startup version correction"
+    },
+    {
+      "command": "npm run check",
+      "source_checkpoint": "89268050bfcb0644b1223c8b306273dc903c5a18",
+      "exit_code": 0,
+      "syntax_checks": 6
+    },
+    {
+      "command": "npm test",
+      "source_checkpoint": "89268050bfcb0644b1223c8b306273dc903c5a18",
+      "exit_code": 0,
+      "tests": 35,
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 20897.9826
+    }
+  ],
+  "protocol_tool_count": 7,
+  "receipt_tool_definition": {
+    "name": "probe_get_receipt",
+    "title": "probe_get_receipt",
+    "description": "Read an existing committed receipt by authenticated session and original commit request ID, including after approval consumption or restart. Returns historical commit facts, not current state or new authority. NOT_FOUND does not prove no in-flight commit and never authorizes a retry.",
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "securitySchemes": [
+      {
+        "type": "oauth2",
+        "scopes": [
+          "probe:read"
+        ]
+      }
+    ],
+    "_meta": {
+      "securitySchemes": [
+        {
+          "type": "oauth2",
+          "scopes": [
+            "probe:read"
+          ]
+        }
+      ]
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{32}$"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{32}$"
+        }
+      },
+      "required": [
+        "session_id",
+        "request_id"
+      ],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "COMMITTED"
+        },
+        "receipt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{32}$"
+        },
+        "session_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{32}$"
+        },
+        "candidate_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{32}$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "before": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "room_label": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740990
+        }
+      },
+      "required": [
+        "status",
+        "receipt_id",
+        "session_id",
+        "candidate_id",
+        "digest",
+        "before",
+        "room_label",
+        "revision"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "fixture_SHA256": "96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b",
+  "live_status_at_source_checkpoint": "Actual web Chat receipt recovery PASS after existing request-bound reconnect and Refresh tools",
+  "references_retrieved": "2026-10-29",
+  "primary_references": [
+    "https://developers.openai.com/plugins/build/mcp-server",
+    "https://modelcontextprotocol.io/specification/2025-11-25/server/tools"
+  ],
+  "limits_and_authorization": "unchanged; no schema migration; no authority returned by receipt lookup",
+  "notes": [
+    "Synthetic grants are test-only, not actual personal approval.",
+    "SQLite ExperimentalWarning informational.",
+    "One search failed because a presumed skill-template directory does not exist; known-file reads were used."
+  ],
+  "initial_source_commit": "137ebbd934973d895565b4f7c891c71133cb5324",
+  "initial_cli_sha256": "40d0b86d825823f79aadcf0d0440910425277fb084dcc11970c06df9516ceb20",
+  "startup_version_check": {
+    "initial_exit": 1,
+    "failure": "CLI hard-coded 0.1.0 while shared model/server/package were 0.1.1",
+    "fix": "CLI imports shared VERSION; startup now verified LISTENING_LOCAL_ONLY version 0.1.1",
+    "final_HTTP_unauthenticated": 401,
+    "private_state": "Probe Chamber / 4, four receipts preserved"
+  },
+  "live": {
+    "observed_utc": "2026-10-29T17:54:21.334Z",
+    "surface": "ChatGPT web Chat in existing probe conversation; High effort displayed; exact model ID not captured",
+    "discovery": "Existing plugin settings Refresh tools; later request-bound Reconnect/Connect; no new permission or approval",
+    "historical_request_id": "c1a551c3000000000000000000000002",
+    "historical_receipt": {
+      "status": "COMMITTED",
+      "receipt_id": "GzVmOQEPHNLhlCJxn8arg9BvzFCUQgSn",
+      "session_id": "tiXoFfimi3kjxKTVI25n5dGSap7zNoTt",
+      "candidate_id": "b4r0lWUbyY83BwY0YNo7-pPW8KZvUkhu",
+      "digest": "a9adb01dbf9a10ab03f2041fb2a18100906c2330086ec3a11967522fc0e9b69e",
+      "before": "Probe Chamber",
+      "room_label": "Classic Chamber",
+      "revision": 3
+    },
+    "receipt_reads": 2,
+    "same_receipt_both_reads": true,
+    "current_state": {
+      "room_label": "Probe Chamber",
+      "revision": 4
+    },
+    "host_correction": "Earlier no-commit conclusion explicitly corrected using historical receipt; historical revision 3 kept distinct from current revision 4",
+    "transport": {
+      "cumulative_successful_tools_calls": 5,
+      "earlier_baseline": 2,
+      "recovery_request_delta": 3,
+      "evidence_limit": "aggregate metrics correlated with two receipt reads plus one current-state read, not raw per-tool audit log"
+    },
+    "private_storage": {
+      "receipts": 4,
+      "candidates": 0,
+      "imports": 0
+    },
+    "new_approval_or_mutation": false,
+    "original_commit_replay": "Still UNVERIFIED/NOT RUN; read-only recovery does not qualify mutation replay",
+    "Classic_new_receipt_tool": "NOT RUN; earlier Classic state-read/write/import evidence remains separate",
+    "full_acceptance": "BLOCKED; other previously recorded gaps unchanged",
+    "warnings": [
+      "settings showed multiple same-named connected-account entries, some authentication update required; request-bound reconnect succeeded; no other accounts removed or identity mapping inferred",
+      "Browser observation timeout recovered by rebind without duplicate submission"
+    ]
+  }
+}
