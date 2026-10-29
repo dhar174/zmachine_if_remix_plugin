@@ -1,4 +1,4 @@
-# G1-C: human-approved live web commit verified; complete acceptance BLOCKED
+# G1-C: approved live web edits/replay verified; complete acceptance BLOCKED
 
 **Issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
 **Updated:** 2026-10-28. Actual tested route: ChatGPT **web Chat** in Chrome on
@@ -15,9 +15,13 @@ were denied. ChatGPT inspected metadata from the real-byte external fixture
 upload, then read the retained state and import after service restart. These
 are bounded live web results, not full product acceptance.
 
-The cross-turn identical retry is **NOT RUN**: the model reported that it could
-not recover its original consumed approval reference. No replacement was minted.
-The inverse still needs separate personal approval. Native attachment integration,
+The separately approved inverse restored **Probe Chamber, revision 2**, receipt
+`BKjar9YK9lWNxG2SRcFiL1SYJc5hrL50`. An immediate identical replay within that
+tool-use turn returned the same receipt and revision; private SQL found exactly
+two receipts total. Changed-payload reuse returned IDEMPOTENCY_CONFLICT. The
+earlier cross-turn identical retry remains **NOT RUN**: the model reported that
+it could not recover its original consumed approval reference. No replacement was
+minted. Native attachment integration,
 unconsumed human-grant invalidation across restart, installed skills, additional
 real principals and device trials remain unqualified. Complete live acceptance
 remains **BLOCKED**. See the 2026-10-28 continuation below; the 2026-10-24 entries
@@ -366,9 +370,9 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Capability | Local deterministic / official MCP protocol | Actual ChatGPT web Chat | Actual authenticated external browser |
 | --- | --- | --- | --- |
 | Discovery / advertised definitions | PASS, both protocol eras, full wire schemas | PASS, six names/descriptions; full JSON schemas not captured | N/A |
-| Authenticated state read | PASS, synthetic identities | PASS, real owner; independent read Renamed Chamber / revision 1 | PASS, same configured owner/session |
-| Prepare / commit / read / retry / inverse | PASS, automated synthetic grants | Prepare/forward commit/read PASS; cross-turn identical retry NOT RUN; inverse BLOCKED pending separate human approval | Exact forward diff and real human Approval recorded PASS |
-| Human exact-change consent | NOT RUN; synthetic POSTs do not count | Forward commit used existing server-held grant: PASS for this candidate | PASS: owner personally clicked; exact HTML confirmation observed |
+| Authenticated state read | PASS, synthetic identities | PASS, real owner; independent final read Probe Chamber / revision 2 | PASS, same configured owner/session |
+| Prepare / commit / read / retry / inverse | PASS, automated synthetic grants | Forward/inverse/read and same-turn identical retry PASS; changed-payload reuse denied; cross-turn identical retry NOT RUN | Separate forward and inverse human approvals PASS |
+| Human exact-change consent | NOT RUN; synthetic POSTs do not count | Forward and inverse used their own exact server-held grants: PASS | PASS: owner personally clicked twice; matching HTML confirmations observed |
 | External upload / delete real fixture | PASS, synthetic identities / MCP metadata | Metadata read PASS before/after restart; deleted handle NOT_FOUND in fresh chat | PASS, agent-operated real identity/bytes; row removed after DELETED |
 | Native ChatGPT attachment import | Guard denials PASS; success NOT RUN | BLOCKED, disabled CLI | N/A; external upload is a fallback |
 | Persistence / grant invalidation | PASS, fresh process / reconnect | State/import read after restart and fresh-chat state read PASS; prior pending candidate NOT_FOUND; unconsumed human grant invalidation NOT RUN | Reauthentication PASS; committed receipt and bytes retained; pending human grant NOT RUN live |
@@ -399,26 +403,31 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Option | Exposure / processing / retention | Shutdown / operations / cost |
 | --- | --- | --- |
 | Current loopback process | Local listener only; synthetic SQLite data outside repo; one-hour import TTL | Close process; pending authority lost. No provider spend or external deployment performed. Not proof ChatGPT can reach it. |
-| Owner-approved Secure MCP Tunnel + Auth0 | Private route metadata created; outbound client health/readiness/polling verified; no public listener needed; tool results traverse OpenAI and bytes are processed on the local service | Approved OAuth setup saved; actual Auth0 subscription Free / USD 0 observed. Actual web discovery/read verified; privileged live sequence pending. Stop both processes and revoke the plugin/tunnel access after testing; provider authentication logs have their own retention. |
+| Owner-approved Secure MCP Tunnel + Auth0 | Private route metadata created; outbound client health/readiness/polling verified; no public listener needed; tool results traverse OpenAI and bytes are processed on the local service | Approved OAuth setup saved; actual Auth0 subscription Free / USD 0 observed. Web discovery/read, separately approved edits and same-turn replay verified. Stop both processes and revoke the plugin/tunnel access after testing; provider authentication logs have their own retention. |
 | Authenticated hosted service | Public network ingress protected by OAuth; bytes processed on the selected server; provider disk/backups/logging need explicit retention controls | Requires approved hosting/IdP, secrets/key management, operational monitoring and shutdown/deletion plan. Hosting/domain/IdP costs unselected; nothing provisioned. |
 
 **Provisional recommendation, not owner-approved product selection:** retain
-Streamable HTTP and server-side exact-diff browser approval for the next authorized
-trial. Prefer the documented native file mechanism only after origin/ownership
+Streamable HTTP and server-side exact-diff browser approval for this bounded web
+route: read, separately approved forward/inverse edits and same-turn replay worked.
+Cross-turn replay needs a trusted way to retain the original exact request; model
+history did not provide it in this trial. Prefer the documented native file mechanism only after origin/ownership
 qualification; otherwise use the disclosed authenticated external upload. Do not
 enable privileged production Editor operations on a visible host dialog alone.
 
-**Smallest remaining human action:** personally inspect and click Approve this exact
-edit on a fresh immutable candidate page, then notify the coordinator immediately
-(the grant lasts one minute). Credential use is authorized; agent sign-in is not
-human edit consent. No user credential re-entry is needed unless provider sessions
-expire or MFA is required. The inverse needs a separate personal approval.
+**Smallest remaining live-authority action:** one fresh personal approval for a
+clearly disclosed restart-invalidation candidate. The coordinator must observe
+its active exact grant, restart before expiry without committing, and show that
+the old candidate/authority is unusable while revision 2 persists. This is separate
+from the two successful edits; no pending human grant existed at the previous
+restart. Credential use is authorized; agent sign-in is not human edit consent.
+No credential re-entry is needed unless provider sessions expire or MFA is required.
 The [live runbook](../../experiments/chat-host/README.md#live-runbook-after-the-blocked-prerequisites-are-resolved)
-continues from the verified read, preserving separate host, consent and import gates.
+preserves separate host, consent, import and restart-authority gates.
 The terminal recovered and the coordinator committed the source-bound follow-up.
 PR #39 must retain live acceptance BLOCKED until the remaining sequence is proven;
-hosted CI must be checked for the final published head separately. The prepared tunnel trust change can be loaded on a controlled restart;
-its runtime key must remain private and must not be extracted from a running process.
+hosted CI must be checked for the final published head separately. The tunnel trust
+correction has been loaded; its runtime key remains private and must not be
+extracted from a running process.
 
 Independent trust/evidence review remains **unmet**: the named Zcode definitions
 exist, but no compliant reviewer was available in this Codex harness. The separately
@@ -574,6 +583,40 @@ The next required human interaction is a new immutable-diff approval for the
 inverse Renamed Chamber → Probe Chamber, revision 1. Complete acceptance stays
 BLOCKED pending that and the remaining matrix gaps. Independent review remains
 unmet; no source definition is treated as an invoked restricted reviewer.
+
+## 6.3. Separately approved inverse and same-turn replay (2026-10-28)
+
+The owner personally approved inverse candidate
+`cUwmdckdJrSeCDomcmnzy7aqqXCwXqfe`, digest
+`dfaea833f0b0c1c3015ce2ec4a9c1f75c316c0dc4753657288522eea47ff8299`,
+Renamed Chamber → Probe Chamber, base revision 1. The matching HTML confirmation
+displayed grant expiry 2026-10-29T01:40:38.315Z. The coordinator sent the prepared
+schema-valid request `cd0de914ea3442c6b46e9569bab490e8`. Browser result inspection
+timed out twice; the first send was nevertheless submitted. The coordinator
+checked private SQL and recovered the conversation in a fresh tab rather than
+blindly submitting another mutation request.
+
+The persisted actual ChatGPT response reported two identical commit calls within
+the same tool-use turn, both receipt `BKjar9YK9lWNxG2SRcFiL1SYJc5hrL50` and
+revision 2, followed by an independent read of Probe Chamber / 2. Private SQL
+verified that exact inverse receipt and exactly two receipts overall: one forward
+and one inverse. The replay did not add a revision. No approval reference was
+exposed or reconstructed. This qualifies the observed same-turn host replay;
+the earlier cross-turn attempt remains NOT RUN, not retrospectively green.
+
+A controlled actual-host call reused the inverse request ID with an intentionally
+changed, nonexistent reference. The service returned IDEMPOTENCY_CONFLICT
+(wrapped as INVALID_ARGUMENT). The independent read stayed Probe Chamber / 2.
+The redacted live receipt records the inverse and this denial. No code/SDK/schema
+or test-source change followed the 32-test checkpoint.
+
+The remaining live restart-authority trial requires a new pending human grant,
+deliberately invalidated before commit. It remains NOT RUN until that separately
+disclosed interaction occurs. Native attachment qualification, installed skill
+discovery/invocation, another real principal, full advertised JSON schemas on the
+actual host, exact workspace/build mapping, desktop/Android and independent
+restricted review remain gaps. No merged/product-ready conclusion follows from
+the successful synthetic web lifecycle.
 
 ## 7. Current primary references (retrieved 2026-10-23)
 

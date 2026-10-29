@@ -39,6 +39,23 @@
     "cross_turn_identical_retry": "NOT RUN; model reported original consumed approval reference inaccessible",
     "new_or_substituted_grant_for_retry": false
   },
+  "inverse_and_same_turn_replay": {
+    "human_reported_personal_click": true,
+    "browser_confirmation": "HTML Approval recorded; exact inverse fields verified",
+    "grant_expires_utc": "2026-10-29T01:40:38.315Z",
+    "candidate_id": "cUwmdckdJrSeCDomcmnzy7aqqXCwXqfe",
+    "digest": "dfaea833f0b0c1c3015ce2ec4a9c1f75c316c0dc4753657288522eea47ff8299",
+    "before": "Renamed Chamber",
+    "base_revision": 1,
+    "request_id": "cd0de914ea3442c6b46e9569bab490e8",
+    "first_receipt": "BKjar9YK9lWNxG2SRcFiL1SYJc5hrL50",
+    "identical_same_turn_replay_receipt": "BKjar9YK9lWNxG2SRcFiL1SYJc5hrL50",
+    "actual_chatgpt_report": "two identical calls, same receipt and revision 2; independent read Probe Chamber / 2",
+    "private_SQL": "matching inverse receipt; exactly two receipts overall; final Probe Chamber / 2",
+    "changed_payload_reuse": "IDEMPOTENCY_CONFLICT; host wrapper INVALID_ARGUMENT; state unchanged",
+    "browser_failures": "send/result inspection timed out twice; SQL and fresh conversation tab confirmed original send succeeded; no blind duplicate submission",
+    "raw_approval_reference_retained": false
+  },
   "negative_live_trials": {
     "stale_prepare": "STALE_REVISION; state Renamed Chamber / 1",
     "unapproved_candidate": "89apZYNQ9jEifypAivvduwBRiQCTllFG",
@@ -74,7 +91,7 @@
     "fresh_chat_read": "PASS; Renamed Chamber / 1"
   },
   "remaining": {
-    "separately_approved_inverse": "BLOCKED pending new personal exact-diff approval",
+    "separately_approved_inverse": "PASS; separate exact human approval, commit, identical same-turn replay and readback",
     "full_live_acceptance": "BLOCKED",
     "independent_restricted_review": "UNMET; suitable harness profile unavailable",
     "native_attachment_integration": "BLOCKED; disabled adapter",

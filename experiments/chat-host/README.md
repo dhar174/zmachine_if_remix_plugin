@@ -11,8 +11,9 @@ discovery of all six tools. On 2026-10-28 the owner personally approved the exac
 diff, and actual ChatGPT committed Probe Chamber → Renamed Chamber, revision
 0 → 1, with a durable receipt independently verified in private storage. Stale
 and unapproved writes were denied. Actual ChatGPT inspected the real external
-fixture upload metadata and read state/import after service restart. The inverse
-requires separate human approval. A cross-turn identical retry was NOT RUN
+fixture upload metadata and read state/import after service restart. The separately
+approved inverse restored Probe Chamber / 2; an immediate identical same-turn
+replay returned the same receipt, and changed-payload reuse was denied. A cross-turn identical retry was NOT RUN
 because the model reported its original consumed approval reference inaccessible.
 Native attachment import, unconsumed human-grant restart invalidation, the original
 desktop Work target, installed skill and Android remain unverified. External
@@ -266,8 +267,9 @@ response later loaded; preserve that failure/recovery, not just its final state.
    request: require the same receipt and no revision increment. Test an unapproved
    candidate and a stale revision, confirming unchanged state.
    The observed host model could not recover the original consumed reference
-   across turns. Try an immediate identical replay within the same tool-use turn;
-   qualify that separately. Never replace a missing reference, issue a new grant,
+   across turns. Immediate identical replay within the same tool-use turn passed
+   in the inverse trial; qualify it separately from cross-turn recovery. Never
+   replace a missing reference, issue a new grant,
    or copy a grant secret into ordinary chat merely to obtain a retry result.
 8. Ask to restore “Probe Chamber” using a new inverse candidate. The user approves
    separately; verify revision increments once more. No generic undo tool exists.
