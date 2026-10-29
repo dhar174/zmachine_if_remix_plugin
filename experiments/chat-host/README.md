@@ -30,11 +30,24 @@ fixture upload/deletion was agent-operated and is not native attachment evidence
 
 On 2026-10-29, Classic also passed candidate staging, unapproved/stale write
 denials and inspection/deletion checks for a new actual-byte external fixture
-upload. Two candidates expired before the owner completed personal review;
-Classic human approval/commit/replay/inverse remain BLOCKED/NOT RUN. Wait for
-owner readiness before staging another short-lived candidate. See the
-[separate Classic continuation](evidence/live-classic-2026-10-29.json); no expiry
-or approval requirement was weakened, and the room remains Probe Chamber / 2.
+upload. Two initial candidates expired before review. A later personal forward
+approval and exact durable commit reached Classic Chamber / 3, although Classic
+initially falsely reported no commit; a fresh read reconciled state. Forward
+identical replay remains unverified/NOT RUN. The personal inverse handoff failed
+with browser sign-in/expiry, so that human test remains unverified. Under the
+owner's explicit delegated cleanup authorization, the agent operated a fresh
+exact browser approval; actual Classic committed/restored **Probe Chamber / 4**
+and reported an identical same-turn replay returning the same receipt. Private
+SQL verified four logical edits and no imports. This agent-operated cleanup does
+not qualify personal inverse approval. See the [separate Classic continuation](evidence/live-classic-2026-10-29.json).
+No expiry or authorization requirement was weakened. No more timed owner prompts
+are needed for the completed cleanup; future personal-approval trials require an
+interactive owner window and fresh exact candidates.
+
+The final private check found four receipts, zero pending candidates and zero
+imports. The owned local service and tunnel processes were then stopped and
+their probe listeners verified absent; the private database and existing account
+configuration were preserved. Restart and reauthenticate before another live run.
 
 The authentication follow-up corrects bounded issued-at skew (five seconds only;
 strict expiry/not-before and 900-second age), adds private fixed-category rejection
