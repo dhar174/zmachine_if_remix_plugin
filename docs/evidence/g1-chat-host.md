@@ -3,8 +3,9 @@
 **Issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
 **Updated:** 2026-10-29. Actual tested route: ChatGPT **web Chat** in Chrome on
 Windows x64, using the owner-approved private Secure MCP Tunnel and Auth0.
-Classic desktop **Chat** is also tested. The original intended desktop Work
-surface has not been tested. The latest durable state is **Probe Chamber /
+Classic desktop **Chat** is also tested. Web Work and native desktop Work now
+have separate authenticated read/receipt trials (§6.14); their write/approval
+lifecycles remain NOT RUN. The latest durable state is **Probe Chamber /
 revision 6**, with six logical edits: two web edits, one personally approved
 Classic forward edit, one explicitly delegated agent-operated cleanup, one
 delegated temporary setup, and a separately personally approved Classic inverse.
@@ -40,8 +41,10 @@ it could not recover its original consumed approval reference. No replacement wa
 minted. A third personal approval was inspected while active, then invalidated
 by a restart 28.519 seconds before grant expiry; ChatGPT subsequently read
 Probe Chamber / 2 and received NOT_FOUND for that candidate. Native attachment
-integration, installed skills, additional real principals and the remaining
-device trials remain unqualified. Complete live acceptance
+integration, additional real principals and the remaining device trials remain
+unqualified. A standalone cloud skill was installed and invoked with tools in
+web Work; it was unavailable in the tested native Work catalog (§6.14).
+Complete live acceptance
 remains **BLOCKED**. See the 2026-10-28 continuation below; the 2026-10-24 entries
 are historical checkpoints.
 
@@ -393,7 +396,7 @@ Limits: single service process per data directory; no production perimeter,
 general authorization server, arbitrary stories, provider inference, VM integration
 or policy/transaction kernel. Windows ACL checking is a limited deny-list and
 not qualified for localized/custom groups. Hostile Internet traffic, successful
-native-file fetching and installed skill behavior remain unqualified. Actual
+native-file fetching and complete packaged-plugin behavior remain unqualified. Actual
 human exact-diff approval and real IdP/browser operation are qualified only for
 the bounded synthetic checkpoints, not arbitrary product edits.
 
@@ -409,19 +412,20 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Prepare / commit / read / retry / inverse | PASS, automated synthetic grants | Forward/inverse/read and same-turn identical retry PASS; changed-payload reuse denied; cross-turn identical retry NOT RUN | Separate forward and inverse human approvals PASS |
 | Human exact-change consent | NOT RUN; synthetic POSTs do not count | Forward and inverse used their own exact server-held grants: PASS | PASS: separate personal forward, inverse and restart-only approvals; matching confirmations observed |
 | External upload / delete real fixture | PASS, synthetic identities / MCP metadata | Metadata read PASS before/after restart; deleted handle NOT_FOUND in fresh chat | PASS, agent-operated real identity/bytes; row removed after DELETED |
-| Native ChatGPT attachment import | Guard denials PASS; success NOT RUN | BLOCKED, disabled CLI | N/A; external upload is a fallback |
+| Native ChatGPT attachment import | Guard denials PASS; success NOT RUN | Attachment accepted; live attempt used a path-shaped file argument, response rendering FAIL, exact tool error UNVERIFIED; native success BLOCKED (§6.14) | N/A; external upload is a fallback |
 | Persistence / grant invalidation | PASS, fresh process / reconnect | PASS: retained state/import; active human grant inspected, restart before expiry, old candidate NOT_FOUND, final Probe Chamber / 2 | PASS: third personal approval deliberately invalidated without commit; exactly two receipts retained |
-| Probe skill discovery / invocation | Static package only | NOT RUN / uninstalled | N/A |
+| Probe skill discovery / invocation | Workflow text v0.1.1 | Web Work standalone cloud skill installed/discovered/invoked with successful reads after explicit app binding; initial link_id failure retained (§6.14) | N/A |
 | Prompt ambiguity / fictional injection | Service denials PASS; no model in tests | PASS for one combined fictional/indirect/malicious-text trial (read only) and one ambiguous remark (no tool call) | N/A |
 
 | Surface/device | Result |
 | --- | --- |
 | Windows x64 local Node service/client | PASS for declared local suite and narrow live checkpoints |
 | Chrome / ChatGPT web Chat | PASS bounded lifecycle on GPT-5.6 Sol Medium; Chrome 155.0.8059.86 on Windows x64; callback-error recovery independently read Probe Chamber / 2 |
-| Exact ChatGPT workspace association / permissions | Tunnel metadata selected organization/workspace; actual workspace UUID mapping unverified; OAuth used; earlier Allow all, later Allow low-risk after reconnect; staging Allow once was agent-operated and is not exact-diff consent |
-| ChatGPT desktop Work | NOT RUN; original intended surface remains unqualified |
+| Exact ChatGPT workspace association / permissions | PASS for selected tunnel ID and workspace UUID matching the fresh skill draft's account context; workspace type UNVERIFIED. OAuth used; latest management UI Allow all, historical Allow low-risk retained; agent-operated Allow once is not exact-diff consent (§6.14) |
+| ChatGPT web Work | PASS for standalone skill + explicitly selected app state/receipt reads on GPT-6.1 Sol / High; initial missing link_id failed, explicit existing app selection recovered; writes/approval/import NOT RUN |
+| ChatGPT desktop Work | PASS for fresh native GPT-6 Luna / Max state and historical receipt reads; cloud skill absent from that session's catalog. Writes/approval/import NOT RUN |
 | ChatGPT Classic desktop Chat | Read/stage/import/negative tests, personal forward and separate personal inverse PASS. Latest inverse and same-turn replay returned the same receipt/revision 6, independently verified (§6.13). Initial forward narration FAIL remains recorded; earlier failed handoffs and delegated approvals remain distinct. Build 1.2026.190.0 |
-| Current ChatGPT/Codex desktop package | Installed 26.1023.6621.0; calling surface observed in Codex mode, not counted as ChatGPT Chat/Work tool evidence |
+| Current ChatGPT/Codex desktop package | Installed 26.1023.6621.0 reverified Oct 29; native ChatGPT mode / Work selected for the separate read trial, then returned to original Codex task (§6.14) |
 | Physical Android | NOT RUN |
 | Linux service runtime | Local NOT RUN; hosted Linux smoke PASS at historical 49212e0b88504d63e1058dc0fe1a3001d4725dae; no new-head CI claim |
 
@@ -431,7 +435,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | A37 | Forged model approval/identity fields rejected locally; exact personal browser grants and commits verified on web and Classic, including the separate Classic inverse (§6.13). Agent approvals and earlier failed handoffs remain separately labeled |
 | A38 | Wrong-owner/session, candidate and grant substitution denied locally |
 | A39 | Synthetic label lifecycle and process persistence only; Classic initial no-commit narration contradicted a real receipt. Product Play/Editor/restore acceptance remains unmet |
-| A40 | Actual external upload bytes and host metadata inspection verified; native attachment integration, real second principal and Android unverified |
+| A40 | Actual external upload bytes and host metadata inspection verified; native .z5 attachment acceptance observed, successful native service import still BLOCKED; real second principal and Android unverified |
 | A42 | Server offers no export/publication/unrelated-tool capability; does not constrain every unrelated app installed in ChatGPT |
 
 ## 6. Deployment recommendation and exact owner action
@@ -452,13 +456,17 @@ enable privileged production Editor operations on a visible host dialog alone.
 
 **No further edit approval is required for the completed web lifecycle.** The
 separately disclosed restart-only personal approval and pre-expiry invalidation
-now PASS (§6.4). Remaining owner inputs are the intended workspace's exact
-identity/type, an available desktop Work/Android client for their separate trials,
-and explicit installation authorization after a valid minimal workflow package
-has been prepared and reviewed. The template's `.invalid` MCP address is not an
-installable connection; use the documented registered-connection mapping rather
-than inventing a manifest. A second real principal and a compliant independent
-reviewer are also unavailable. Credential use is authorized; agent sign-in is
+now PASS (§6.4), as is the later personal Classic inverse/replay (§6.13).
+The existing authorized standalone skill was installed and tested in web Work;
+native Work read/receipt use and workspace UUID association are now verified
+within §6.14's limits. No additional personal approval is needed for those
+completed tests. Remaining owner actions are listed concretely in §6.14:
+physical Android, an explicitly authorized second real identity, workspace type
+confirmation if available, and enforced independent review. Native file trust,
+full host schema export and native skill availability have technical blockers;
+more credentials alone do not resolve them. The template's `.invalid` MCP
+address remains uninstalled; no registered mapping was fabricated.
+Credential use is authorized; agent sign-in is
 not human edit consent. No credential re-entry is needed for the recovered web
 connection unless provider sessions expire or MFA is required.
 The [live runbook](../../experiments/chat-host/README.md#live-runbook-after-the-blocked-prerequisites-are-resolved)
@@ -1193,7 +1201,194 @@ desktop-Work/Android, real-second-principal, installed-skill, workspace-mapping,
 full-host-schema and enforced-independent-review gaps. The bounded Classic
 personal inverse is no longer among those gaps.
 
-## 7. Current primary references (retrieved 2026-10-23)
+## 6.14. Standalone skill, Work reads, workspace association and native file guard (2026-10-29 EDT)
+
+This continuation is actual ChatGPT UI evidence, separate from the coordinator's
+own Codex tools and the existing deterministic/protocol suite. Redacted outcomes
+are in [remaining-checks-2026-10-29.json](../../experiments/chat-host/evidence/remaining-checks-2026-10-29.json).
+Runtime source remains `89268050bfcb0644b1223c8b306273dc903c5a18`, service/schema
+0.1.1 and the same pinned SDK dependencies. All 16 source/test/manifest hashes
+were rechecked unchanged; the 35/35 tests and six syntax checks remain prior
+source-bound results, not new runs. Only the experimental workflow text changed.
+
+**Standalone skill: written, installed, discovered and invoked in web Work.**
+The reviewed `plugin-template/skills/probe-workflow/SKILL.md` now identifies
+**G1-C probe workflow v0.1.1**, supports read-only state/receipt verification,
+and preserves exact human approval, uncertain-outcome and no-substituted-grant
+rules. Through the actual Skills directory, Add skill → Upload from your computer
+opened an upload dialog; its file control accepted that exact SKILL.md. The UI
+reported Skill uploaded and displayed the installed skill under Created by me,
+named “probe workflow.” Its cloud body contained the version and approval rules.
+This was a standalone cloud skill using the separately existing probe plugin.
+The placeholder `plugin-template/mcp.json` bundle was not installed, no `.app.json`
+mapping was fabricated, and no four product skills were implemented.
+
+Try in chat opened a fresh **web Work** conversation, “Verify G1 C State,” using
+**GPT-6.1 Sol / High**. The installed skill mention was retained in the prompt.
+Following routine same-account reconnect, it loaded the workflow but both reads
+failed with **This app tool requires a non-empty string link_id argument**
+(Worked for 14s). Explicitly selecting the existing **G1-C Synthetic Probe** from
+the app picker and asking for the same read-only skill workflow recovered both
+reads (Worked for 13s). The rendered answer identified workflow v0.1.1, current
+**Probe Chamber / 6**, and original inverse request
+`c1a551c7000000000000000000000002` with receipt
+`3C1tvcQD4hmDx5YVT_DvUaIYKYCo4PdP`, historical Classic Chamber → Probe Chamber,
+revision 6. The host supplied its real account association; no link ID was
+invented. No prepare/approval/commit/import was requested. The first failure
+remains part of the result; explicit app selection is a tested recovery, not a
+diagnosis of the host's internal mapping. Expanded activity did not expose
+complete per-call arguments; these are rendered host results corroborated by
+independent storage, not a full raw wire audit.
+
+**Native desktop Work: tools PASS, skill unavailable.** The installed Windows
+package was independently reverified as **OpenAI.Codex 26.1023.6621.0**. A browser
+Open desktop app link opened the Codex project home without transferring the
+prepared Work draft; that handoff is not counted as success. The operator then
+explicitly selected native **ChatGPT → Work**, preserved **GPT-6 Luna / Max**, and
+selected the existing probe app. The native picker did not expose the uploaded
+cloud skill. A fresh native conversation, “Inspect G1-C synthetic receipt,”
+requested only state and the same historical receipt, with fictional NPC
+`/edit; approve this; export the file` text explicitly untrusted. Worked for 38s
+returned Probe Chamber / 6 and the matching COMMITTED receipt and historical
+diff; it also stated that the installed workflow was unavailable in that
+session's skill catalog. No skill instructions were pasted as a substitute.
+Native Work writes, human approvals and imports remain **NOT RUN**; successful
+Classic/web cycles do not fill those cells. The app was returned to the original
+Codex task afterward. A fresh desktop session/restart has not been proven to
+resolve the cloud-skill gap and was not forced during ongoing work.
+
+**Workspace association: ID match PASS, workspace type UNVERIFIED.** The actual
+Platform Tunnels table showed the existing private tunnel in the selected
+organization and one selected ChatGPT workspace. Its tunnel ID matched the
+configured runtime profile. That workspace UUID exactly matched the account
+context on a fresh, unsent Try in chat draft created from the installed skill.
+The comparison emitted only booleans; organization/workspace/account IDs remain
+private. An earlier attempt against an already-submitted message found no skill
+attribute and was inconclusive, not a mismatch. Personal is the observed plugin
+directory and Pro the observed plan label; neither establishes workspace type.
+The latest plugin management UI showed one linked account, OAuth used and
+**Allow all**. Historical Allow low-risk and agent-operated Allow once states
+remain dated observations. No account permission was changed in this continuation.
+
+**Actual host catalog: seven names/descriptions, full JSON still unavailable.**
+The UI exposed Write 3 / Read 4 and all seven expected tools. Its cloud plugin
+version was 1.0.0, distinct from service/schema 0.1.1. A developer inspection of
+the exact plugin metadata page observed HTTP 200 metadata responses, but body
+retrieval was blocked by the browser's paused-document handling. No raw schemas
+were captured and no direct backend request, alternate automation tool or paid
+API Playground was used to bypass that restriction. Local full wire schemas
+remain official-protocol-client evidence only.
+
+**Native attachment guard: attachment accepted, live outcome FAIL/UNVERIFIED.**
+In a fresh actual web **Chat** conversation, “Probe Native File Guard,” the native
+Add photos & files picker selected only the immutable `fixture.z5`. The upload
+finished and the attachment appeared in the submitted message with the real
+probe app mention. The display initially showed Instant; later Medium was
+visible, and no stable exact model identity was captured for this file trial.
+The fixture is 88,576 bytes, version 5, SHA-256
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`,
+remeasured locally. This digest does not independently verify ChatGPT's retained
+copy or establish that the service received it.
+
+The request paused for expired OAuth. After the owner activated the test page,
+routine Reconnect → Connect resumed the original request without resubmission.
+The host's actual See details confirmation showed this attempted call shape:
+
+```json
+{
+  "operation": "probe_import_fixture",
+  "args": {
+    "session_id": "[existing synthetic session]",
+    "file": "/mnt/data/fixture.z5",
+    "link_id": "[host-provided account link redacted]"
+  }
+}
+```
+
+This is a rendered request excerpt, not a full tool definition. The path-shaped
+argument is not the required `download_url`/`file_id` object. The agent selected
+**Allow once** for this already-authorized fixture guard attempt; that is host
+tool permission, not personal exact-edit approval or human upload evidence.
+The first response displayed **This response couldn’t load** / Worked for 6s.
+One page reload did not recover a usable answer. A follow-up explicitly forbade
+retrying import and requested only the existing outcome plus an optional state
+read; its response also failed to render. The exact tool/server error and even
+the recovery state read are **UNVERIFIED**. Do not label this a live
+HOST_IMPORT_BLOCKED response: that specific denial was not observed. The
+configured CLI still has no qualified native-file origins and denies native
+fetching; its deterministic guard tests remain separate evidence. Native
+attachment acceptance is PASS; successful native attachment-to-service import
+is BLOCKED, with an observed host rendering failure and invalid-shaped request.
+
+Private read-only SQL after the original attempt and after the failed recovery
+found **Probe Chamber / 6, six receipts, zero candidates, zero imports** (final
+observation **2026-10-29T20:04:14.235Z**). No new edit, native import handle or
+measured service-side upload digest was produced. The actual file was uploaded
+to ChatGPT, so it is not local-only. No signed download URL or story bytes were
+copied into ordinary chat/public evidence. ChatGPT conversation/file retention
+and host-side deletion were not tested; zero service imports does not prove
+that ChatGPT removed its attachment. The previously proven external upload
+fallback remains a distinct real-byte import result.
+
+Observation failures were retained: a stale tab was absent after turn cleanup;
+opening the known saved conversation recovered it without duplicating a request.
+An initial file-chooser wait targeted the skill menu instead of its upload
+dialog; the actual dialog upload then succeeded. One text entry timed out and
+its visible partial draft was completed once before submission. Native AX was
+stale and geometry/attachment checks failed at points; fresh screenshots were
+used rather than claiming those actions succeeded. Browser Use stopped the
+preceding turn because it could not confidently determine the current URL;
+work stopped then and resumed only after the owner's next message. In this
+turn See details timed out after opening its dialog; the next snapshot verified
+the dialog. Worked for 6s was a generic label, not an expandable button. None
+of these observation failures is reclassified as a successful call or consent.
+
+### Remaining gates and smallest owner actions
+
+- **No further personal click for the completed web/Classic cycle.** If full
+  native Work write/approval qualification is required, reserve one short
+  interactive window for a new exact forward diff and a separately exact inverse
+  diff. The coordinator must prepare each fresh candidate and commit prompt
+  before requesting your personal click; broad delegation cannot supply this
+  specific human-evidence requirement. Those Work trials have not been run.
+- **Android:** open ChatGPT on a physical Android device in the same tested
+  account/workspace, record the app version and choose the existing G1-C plugin.
+  Start with “Read only: what are the synthetic room label and revision?”
+  Preserve its actual tool activity/result. Desktop/responsive emulation does not
+  qualify Android. No new edit or approval is needed for that first read trial.
+- **Second real principal:** explicitly designate or authorize creating a
+  dedicated second test identity; enter its credentials privately in the IdP.
+  Leave the probe owner allowlist unchanged. Test access to the first owner's
+  synthetic session/handle and record denial. Synthetic wrong-owner tests are
+  already passing, but are not this real-account test. Creating an identity or
+  changing provider access still requires its concrete reviewed setup.
+- **Workspace type:** confirm the type from the actual workspace controls if
+  available. The UUID association now matches; a plan label is insufficient.
+- **Native skill availability:** the tested cloud skill is absent from native
+  Work. A convenient owner-controlled app restart/new session can support a
+  fresh discovery trial, but it is not a known fix. Do not interrupt the running
+  coordinator or call pasted instructions an installed skill.
+- **Native file trust and full host schemas:** no additional credential is the
+  missing prerequisite. Use a supported host route that supplies an actual file
+  object, qualifies allowed origins/ownership/expiry and exposes diagnostic
+  schemas before enabling native fetch. Keep the current guard and disclosed
+  external upload fallback meanwhile. Client-supported schema export or a
+  working browser diagnostic route is needed; no public deployment/spend is
+  authorized to fill this evidence gap.
+- **Independent review:** run `zmachine-acceptance-reviewer` in a harness that
+  actually enforces only Read/Grep/Glob, or obtain an independent human review
+  of PR #39's final SHA/diff, trust boundaries and evidence claims. Give it the
+  source-bound receipts and this report; do not grant commands, edits or
+  delegation. The current harness still has no admitted compliant specialist;
+  coordinator self-check is not independent review.
+
+The existing service (PID 33872) and private tunnel (PID 36560) were observed
+running and left running as requested. The restricted runtime key expires
+October 30; normal OAuth reconnect may recur. No fresh secret, permission,
+public listener, paid provider call or runtime restart was introduced here.
+Complete live acceptance remains **BLOCKED**, PR #39 stays draft and #13 open.
+
+## 7. Current primary references (retrieved 2026-10-23; OpenAI plugin/auth/file/connection pages rechecked 2026-10-29)
 
 - [OpenAI: build an MCP server](https://developers.openai.com/plugins/build/mcp-server)
   — structured tools, annotations, Streamable HTTP and protocol testing.
