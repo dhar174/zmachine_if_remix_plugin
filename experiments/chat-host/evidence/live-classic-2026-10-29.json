@@ -193,7 +193,7 @@
     "source_commit": "89268050bfcb0644b1223c8b306273dc903c5a18",
     "version": "0.1.1",
     "actual_web": "PASS: new read-only tool returned original forward receipt twice, historical revision 3; current-state read revision 4; host corrected prior no-commit narration",
-    "Classic_new_receipt_operation": "NOT RUN; prior native Classic evidence remains separate",
+    "Classic_new_receipt_operation": "Subsequent native Classic trial PASS: historical receipt, nonexistent request NOT_FOUND, current revision 4; see separate recovery receipt Classic_native section",
     "original_forward_commit_replay": "Still unverified/NOT RUN; receipt retrieval is not mutation replay",
     "new_approval_or_mutation": false
   },

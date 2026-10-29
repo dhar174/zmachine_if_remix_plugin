@@ -73,8 +73,10 @@ exact diff and expiry without exposing its server-held approval reference.
 The **0.1.1 receipt-recovery follow-up** passed **35/35** tests and six syntax
 checks; the dedicated official protocol suite passed 4/4. Actual web Chat then
 read the historical Classic forward receipt twice and corrected its earlier
-no-commit report, while a fresh state read remained Probe Chamber / 4. This
-read-only recovery needs no consumed approval reference and does not authorize
+no-commit report, while a fresh state read remained Probe Chamber / 4. Native
+Classic subsequently retrieved that receipt, denied a nonexistent receipt and
+independently read revision 4; expanded activity confirmed receipt/state
+retrieval. This read-only recovery needs no consumed approval reference and does not authorize
 a retry. It does not retrospectively qualify the unobserved commit replay.
 See the [source-bound recovery receipt](evidence/receipt-recovery-2026-10-29.json).
 

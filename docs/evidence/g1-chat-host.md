@@ -1033,8 +1033,9 @@ two receipt reads and one state read; private SQL independently matched the
 receipt and retained four receipts, zero candidates/imports and revision 4.
 No new approval, candidate, commit or import was performed. This is actual
 read-only reconciliation, **not** retrospective proof of the unobserved identical
-commit replay. The new receipt operation in Classic native UI is NOT RUN; earlier
-Classic evidence remains separate. General narration reliability is not proven.
+commit replay. At that web checkpoint the new receipt operation in Classic native
+UI was NOT RUN; the subsequent native trial is recorded below. General narration
+reliability is not proven.
 
 Current OpenAI MCP-server guidance and official MCP tool specifications were
 rechecked **2026-10-29** before this change. They require server authorization and
@@ -1044,6 +1045,39 @@ accurate schemas/annotations; metadata does not supply authority. References:
 The current service and tunnel remain running for owner use under the same
 one-day key and local availability limits. Full acceptance and independent
 restricted review remain BLOCKED/unmet for the previously listed gaps.
+
+## 6.11. Native Classic receipt and missing-request verification (2026-10-29 EDT)
+
+The coordinator entered, visibly verified and submitted a fresh read-only
+request in **Classic desktop Chat 1.2026.190.0**. This was not a browser-counterpart
+submission. Classic retrieved the original forward receipt
+`GzVmOQEPHNLhlCJxn8arg9BvzFCUQgSn` at historical revision **3**, called the new
+receipt tool for nonexistent request `00000000000000000000000000000000`, and
+independently read **Probe Chamber / revision 4**. The missing request returned
+**NOT_FOUND**, wrapped by the host as INVALID_ARGUMENT. The model correctly
+stated that failure to retrieve a receipt does not rule out an in-flight commit.
+It kept historical and current revisions separate and requested no new approval.
+
+Expanded **Worked for 11s** activity displayed **Retrieved receipt details and
+authenticated synthetic state sequentially**. Eleven seconds is the displayed
+host duration, not measured service latency. At **2026-10-29T18:06:56.933Z**, the
+same tunnel instance's tools/call HTTP-200 response count increased from **5 to
+8**, matching the three observed reads. One was the expected application-level
+NOT_FOUND; HTTP 200 is not a claim that every tool result succeeded. Aggregate
+metrics are correlated evidence, not a raw per-tool audit log.
+
+Read-only private SQL still showed exactly **four receipts, zero candidates,
+zero imports and revision 4**, with the same historical receipt. All 16 source
+hashes still matched tested source `89268050bfcb0644b1223c8b306273dc903c5a18`.
+The [recovery receipt](../../experiments/chat-host/evidence/receipt-recovery-2026-10-29.json)
+records this native trial separately from web. No runtime source change or new
+test-suite run is claimed for this evidence update. Both processes remain running.
+
+This closes the native Classic receipt-lookup gap. It does not qualify the
+unobserved original commit replay, the separate personal inverse approval,
+native attachment integration, Android/desktop Work, real second principal,
+installed workflow skill, exact workspace mapping, full host JSON schema capture,
+or unavailable enforced independent review. Those limits remain explicit.
 
 ## 7. Current primary references (retrieved 2026-10-23)
 

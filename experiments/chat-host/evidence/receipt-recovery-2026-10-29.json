@@ -248,11 +248,41 @@
     },
     "new_approval_or_mutation": false,
     "original_commit_replay": "Still UNVERIFIED/NOT RUN; read-only recovery does not qualify mutation replay",
-    "Classic_new_receipt_tool": "NOT RUN; earlier Classic state-read/write/import evidence remains separate",
+    "Classic_new_receipt_tool": "Subsequent native Classic trial PASS; see Classic_native below; initial web checkpoint remains separate",
     "full_acceptance": "BLOCKED; other previously recorded gaps unchanged",
     "warnings": [
       "settings showed multiple same-named connected-account entries, some authentication update required; request-bound reconnect succeeded; no other accounts removed or identity mapping inferred",
       "Browser observation timeout recovered by rebind without duplicate submission"
     ]
+  },
+  "Classic_native": {
+    "observed_utc": "2026-10-29T18:06:56.933Z",
+    "client": "ChatGPT Classic 1.2026.190.0, Windows x64, Chat; High effort visible; exact model ID not captured",
+    "request_origin": "Prompt entered, visibly verified and submitted in native Classic; no browser counterpart submission",
+    "historical_request_id": "c1a551c3000000000000000000000002",
+    "historical_receipt_id": "GzVmOQEPHNLhlCJxn8arg9BvzFCUQgSn",
+    "historical_revision": 3,
+    "missing_request_id": "00000000000000000000000000000000",
+    "missing_result": "NOT_FOUND wrapped by host INVALID_ARGUMENT; transport HTTP 200 is not application success",
+    "current_state": {
+      "room_label": "Probe Chamber",
+      "revision": 4
+    },
+    "activity": "Worked for 11s; expanded Retrieved receipt details and authenticated synthetic state sequentially; displayed duration is not instrumented latency",
+    "interpretation": "Host kept historical revision 3 separate from current 4; correctly stated missing receipt does not rule out an in-flight commit",
+    "transport": {
+      "cumulative_tools_call_HTTP_200": 8,
+      "prior_web_checkpoint": 5,
+      "delta": 3,
+      "expected_application_errors": 1,
+      "limit": "aggregate metrics correlated with two receipt lookups and one state read; not a raw per-tool audit log"
+    },
+    "private_storage": {
+      "receipts": 4,
+      "candidates": 0,
+      "imports": 0
+    },
+    "no_mutation_approval_or_import": true,
+    "source_hashes_unchanged": 16
   }
 }
