@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { setup, owner, proposal, commitArgs, approvalArgs, fixture } from './helpers.js';
+import { setup, owner, other, proposal, commitArgs, approvalArgs, fixture } from './helpers.js';
 import { id, FIXTURE_SHA } from '../src/model.js';
 
 for(const mode of ['legacy','auto'])test(`actual official MCP HTTP client: ${mode} discovery and complete synthetic lifecycle`,async t=>{
@@ -15,7 +15,7 @@ for(const mode of ['legacy','auto'])test(`actual official MCP HTTP client: ${mod
   t.after(()=>client.close());await client.connect(transport);
   const version=client.getNegotiatedProtocolVersion();
   assert.equal(version,mode==='auto'?'2026-07-28':'2025-11-25');
-  const catalog=await client.listTools();assert.equal(catalog.tools.length,6);
+  const catalog=await client.listTools();assert.equal(catalog.tools.length,7);
   assert.ok(Buffer.byteLength(JSON.stringify(catalog))<32768);
   for(const tool of catalog.tools) {
     assert.equal(tool.inputSchema.additionalProperties,false);
@@ -26,6 +26,7 @@ for(const mode of ['legacy','auto'])test(`actual official MCP HTTP client: ${mod
   for(const tool of wireMessage.result.tools)assert.deepEqual(tool.securitySchemes,tool._meta.securitySchemes);
   assert.ok(!catalog.tools.some(x=>/approve|export|execute|shell/.test(x.name)));
   assert.equal(catalog.tools.find(x=>x.name==='probe_prepare_label').annotations.readOnlyHint,false);
+  assert.equal(catalog.tools.find(x=>x.name==='probe_get_receipt').annotations.readOnlyHint,true);
   assert.deepEqual(catalog.tools.find(x=>x.name==='probe_import_fixture')._meta['openai/fileParams'],['file']);
   const trace=[];
   async function call(name,args,expected) {
@@ -56,6 +57,8 @@ for(const mode of ['legacy','auto'])test(`actual official MCP HTTP client: ${mod
   const grant=inspected.approval;assert.ok(grant);assert.ok(!confirmation.includes(grant.approval_ref));
   const args=commitArgs(candidate,grant),receipt=await call('probe_commit_label',args);
   assert.equal(receipt.revision,1);assert.deepEqual(await call('probe_commit_label',args),receipt);
+  assert.equal((await call('probe_get_candidate',{session_id:state.session_id,candidate_id:candidate.candidate_id})).approval,null);
+  assert.deepEqual(await call('probe_get_receipt',{session_id:state.session_id,request_id:args.request_id}),receipt);
   const fresh=await call('probe_get_state',{});assert.equal(fresh.room_label,'Renamed Chamber');assert.equal(fresh.revision,1);
   await call('probe_prepare_label',proposal(state,'Stale'),'STALE_REVISION');
   const inverse=await call('probe_prepare_label',proposal(fresh,'Probe Chamber'));
@@ -91,4 +94,33 @@ test('official client receives denied authentication; HTTP metadata and schema e
   }
   await assert.rejects(client.callTool({name:'approve',arguments:{approved:true}}),/not found/);
   assert.equal(h.probe.store.state(owner).revision,0);
+});
+
+test('official client receipt recovery requires read scope and exact owner/session, rejects extra fields',async t=>{
+  const h=await setup(t),state=h.probe.store.state(owner),c=h.probe.store.prepare(owner,proposal(state));
+  const args=commitArgs(c,h.probe.store.approve(owner,approvalArgs(c)));
+  const receipt=h.probe.store.commit(owner,args);
+  async function connect(claims,options) {
+    const client=new Client({name:'receipt-recovery-client',version:'1'});t.after(()=>client.close());
+    const token=await h.sign(claims,options);
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${h.probe.origin}/mcp`),{requestInit:{headers:{authorization:`Bearer ${token}`}}}));
+    return client;
+  }
+  const reader=await connect({scope:'probe:read'}),lookup={session_id:state.session_id,request_id:args.request_id};
+  const recovered=await reader.callTool({name:'probe_get_receipt',arguments:lookup});
+  assert.ok(!recovered.isError);assert.deepEqual(recovered.structuredContent,receipt);
+  assert.ok(!JSON.stringify(recovered).includes(args.approval_ref));
+  for(const extra of [{owner_id:owner},{approved:true},{approval_ref:args.approval_ref},{operation:'commit'}]) {
+    const denied=await reader.callTool({name:'probe_get_receipt',arguments:{...lookup,...extra}});assert.ok(denied.isError);
+  }
+  const noScope=await connect({scope:''}),bob=await connect({scope:'probe:read'},{subject:'bob'});
+  const denied=await noScope.callTool({name:'probe_get_receipt',arguments:lookup});
+  assert.ok(denied.isError);assert.match(JSON.stringify(denied),/INSUFFICIENT_SCOPE/);
+  for(const foreign of [lookup,{...lookup,session_id:h.probe.store.state(other).session_id}]) {
+    const result=await bob.callTool({name:'probe_get_receipt',arguments:foreign});
+    assert.ok(result.isError);assert.match(JSON.stringify(result),/NOT_FOUND/);
+  }
+  const absent=await reader.callTool({name:'probe_get_receipt',arguments:{...lookup,request_id:id()}});
+  assert.ok(absent.isError);assert.match(JSON.stringify(absent),/NOT_FOUND/);
+  assert.equal(h.probe.store.state(owner).revision,1);assert.equal(h.probe.store.grants.size,0);
 });

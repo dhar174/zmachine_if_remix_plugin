@@ -29,6 +29,12 @@ export class ProbeStore {
     requireThat(row && (!session || row.id === session), 'NOT_FOUND', 404);
     return { session_id: row.id, room_label: row.label, revision: row.revision };
   }
+  receipt(owner, session, request) {
+    this.state(owner, session);
+    const row = this.db.prepare('SELECT value FROM receipts WHERE owner=? AND session=? AND request=?').get(owner, session, request);
+    requireThat(row, 'NOT_FOUND', 404);
+    return JSON.parse(row.value);
+  }
   candidate(owner, session, candidateId) {
     this.state(owner, session);
     const row = this.db.prepare('SELECT value FROM candidates WHERE id=? AND owner=? AND session=? AND expires>?').get(candidateId, owner, session, this.clock());

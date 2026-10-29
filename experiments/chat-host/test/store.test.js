@@ -93,3 +93,34 @@ test('fresh process recovers exact receipt after injected post-commit exit 73 an
   assert.deepEqual(recovered.receipt,previous.receipt);assert.equal(recovered.state.revision,1);
   assert.equal(recovered.pendingStatus,'NOT_FOUND');assert.deepEqual(recovered.imported,previous.imported);
 });
+
+test('receipt lookup recovers a historical commit without consumed approval, after expiry and restart',t=>{
+  const f=local(t),state=f.s.state(owner),candidate=f.s.prepare(owner,proposal(state));
+  const args=commitArgs(candidate,f.s.approve(owner,approvalArgs(candidate)));
+  fails(()=>f.s.receipt(owner,state.session_id,args.request_id),'NOT_FOUND');
+  const committed=f.s.commit(owner,args);
+  assert.equal(f.s.approval(owner,state.session_id,candidate.candidate_id),null);
+  assert.deepEqual(f.s.receipt(owner,state.session_id,args.request_id),committed);
+  assert.equal(f.s.grants.size,0);
+  f.advance(LIMITS.candidateMs);f.restart();
+  assert.deepEqual(f.s.receipt(owner,state.session_id,args.request_id),committed);
+  const inverse=f.s.prepare(owner,proposal(f.s.state(owner),'Probe Chamber'));
+  f.s.commit(owner,commitArgs(inverse,f.s.approve(owner,approvalArgs(inverse))));
+  assert.deepEqual(f.s.receipt(owner,state.session_id,args.request_id),committed);
+  assert.equal(committed.revision,1);assert.equal(f.s.state(owner).revision,2);
+  assert.equal(f.s.db.prepare('SELECT COUNT(*) AS n FROM receipts').get().n,2);
+});
+
+test('receipt lookup denies foreign owner/session and missing handles without revealing authority',t=>{
+  const {s}=local(t),state=s.state(owner),candidate=s.prepare(owner,proposal(state));
+  const grant=s.approve(owner,approvalArgs(candidate)),args=commitArgs(candidate,grant);
+  const committed=s.commit(owner,args),foreign=s.state(other);
+  for(const [principal,session,request] of [[other,state.session_id,args.request_id],
+    [other,foreign.session_id,args.request_id],[owner,foreign.session_id,args.request_id],
+    [owner,state.session_id,id()]])fails(()=>s.receipt(principal,session,request),'NOT_FOUND');
+  const result=s.receipt(owner,state.session_id,args.request_id);
+  assert.deepEqual(result,committed);
+  for(const field of ['approval_ref','payload','owner','request'])assert.ok(!Object.hasOwn(result,field));
+  assert.ok(!JSON.stringify(result).includes(grant.approval_ref));
+  assert.equal(s.grants.size,0);assert.equal(s.state(owner).revision,1);
+});
