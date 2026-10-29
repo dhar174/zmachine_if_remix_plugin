@@ -87,7 +87,18 @@ Private SQL verified five receipts, no inverse receipt and zero imports. The nex
 personal test needs only a fresh Classic Chamber → Probe Chamber inverse at base
 5, with an actual owner click. No additional forward setup is needed. See report
 §6.12 and the [Classic receipt](evidence/live-classic-2026-10-29.json). This is the
-latest state; the revision-4 restoration above remains a historical checkpoint.
+state at that checkpoint; the revision-4 restoration above remains historical.
+
+The next fresh personal inverse **passed**: the owner personally approved its
+exact browser diff; native Classic committed Classic Chamber → Probe Chamber at
+**revision 6** and displayed an immediate identical replay with the same receipt
+`3C1tvcQD4hmDx5YVT_DvUaIYKYCo4PdP` and revision. A separate state read and receipt
+lookup agreed, and private SQL verified six receipts total. A transient native
+Too many requests dialog and an earlier no-receipt snapshot did not prove the
+request had failed; the original request completed without agent resubmission or
+a substituted approval. This is the **latest state**, recorded in report §6.13.
+No further personal click is needed for that completed cycle. Other explicit
+device/native-import/skill/review gaps remain; no full product acceptance claim.
 
 ## Reproduce local evidence
 

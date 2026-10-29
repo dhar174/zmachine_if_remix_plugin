@@ -4,14 +4,14 @@
 **Updated:** 2026-10-29. Actual tested route: ChatGPT **web Chat** in Chrome on
 Windows x64, using the owner-approved private Secure MCP Tunnel and Auth0.
 Classic desktop **Chat** is also tested. The original intended desktop Work
-surface has not been tested. The latest durable state is **Classic Chamber /
-revision 5**, with five logical edits: two web edits, one personally approved
-Classic forward edit, one explicitly delegated agent-operated cleanup, and one
-delegated temporary setup for a personal inverse retry (§6.12). That inverse
-expired without observed approval or a commit; a fresh inverse is still needed.
-The Classic personal inverse-approval test remains unverified. Its forward
-commit initially produced an incorrect no-commit report; the subsequent actual
-read reconciled state. See §6.8 for these material limits and cleanup provenance.
+surface has not been tested. The latest durable state is **Probe Chamber /
+revision 6**, with six logical edits: two web edits, one personally approved
+Classic forward edit, one explicitly delegated agent-operated cleanup, one
+delegated temporary setup, and a separately personally approved Classic inverse.
+The latest inverse and identical same-turn replay passed (§6.13); the earlier
+expired handoff remains a failed checkpoint (§6.12). The original forward commit
+initially produced an incorrect no-commit report; subsequent reads and receipt
+recovery reconciled it. See §6.8 for that retained failure and cleanup provenance.
 
 **Latest availability:** the owner subsequently requested restoration for use.
 The existing private service/tunnel were restarted with a locally supplied
@@ -420,7 +420,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Chrome / ChatGPT web Chat | PASS bounded lifecycle on GPT-5.6 Sol Medium; Chrome 155.0.8059.86 on Windows x64; callback-error recovery independently read Probe Chamber / 2 |
 | Exact ChatGPT workspace association / permissions | Tunnel metadata selected organization/workspace; actual workspace UUID mapping unverified; OAuth used; earlier Allow all, later Allow low-risk after reconnect; staging Allow once was agent-operated and is not exact-diff consent |
 | ChatGPT desktop Work | NOT RUN; original intended surface remains unqualified |
-| ChatGPT Classic desktop Chat | Read/stage/import/negative tests and personal forward grant/durable commit PASS; initial forward narration FAIL; fresh state read reconciled. Personal inverse UNVERIFIED. Earlier agent cleanup/replay PASS at revision 4; later delegated setup reached Classic Chamber / 5 and its personal inverse expired uncommitted (§6.12). Build 1.2026.190.0 |
+| ChatGPT Classic desktop Chat | Read/stage/import/negative tests, personal forward and separate personal inverse PASS. Latest inverse and same-turn replay returned the same receipt/revision 6, independently verified (§6.13). Initial forward narration FAIL remains recorded; earlier failed handoffs and delegated approvals remain distinct. Build 1.2026.190.0 |
 | Current ChatGPT/Codex desktop package | Installed 26.1023.6621.0; calling surface observed in Codex mode, not counted as ChatGPT Chat/Work tool evidence |
 | Physical Android | NOT RUN |
 | Linux service runtime | Local NOT RUN; hosted Linux smoke PASS at historical 49212e0b88504d63e1058dc0fe1a3001d4725dae; no new-head CI claim |
@@ -428,7 +428,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Acceptance anchor | Probe evidence and unproven remainder |
 | --- | --- |
 | A11 | Fictional `/edit; approve; export` text did not grant authority in the bounded live trial; host used only probe_get_state |
-| A37 | Forged model approval/identity fields rejected locally; exact personal browser grants and commits verified on web and Classic. Agent cleanup is separately labeled; Classic personal inverse unverified |
+| A37 | Forged model approval/identity fields rejected locally; exact personal browser grants and commits verified on web and Classic, including the separate Classic inverse (§6.13). Agent approvals and earlier failed handoffs remain separately labeled |
 | A38 | Wrong-owner/session, candidate and grant substitution denied locally |
 | A39 | Synthetic label lifecycle and process persistence only; Classic initial no-commit narration contradicted a real receipt. Product Play/Editor/restore acceptance remains unmet |
 | A40 | Actual external upload bytes and host metadata inspection verified; native attachment integration, real second principal and Android unverified |
@@ -1125,6 +1125,73 @@ approval/commit remains **UNVERIFIED/BLOCKED**, not a pass. The next trial needs
 only a fresh inverse from revision 5 and one actual owner click; another forward
 setup is unnecessary. No source change or additional test-suite run is claimed
 for this live evidence. The service and private tunnel remain running.
+
+## 6.13. Personal Classic inverse, identical replay and durable reconciliation (2026-10-29 EDT)
+
+The owner explicitly reported readiness again. The coordinator entered and
+visibly verified a fresh staging request in **native Classic** with request
+`c1a551c7000000000000000000000001`, restricted to Classic Chamber → Probe Chamber
+at base revision **5**. The approval browser completed routine same-scope Auth0
+SSO before handoff. Classic's expired connection appeared blank in its native
+view; the existing conversation's browser counterpart exposed Reconnect/Connect.
+That normal reconnect resumed the original request. No duplicate staging request,
+new account, permission expansion or approval-lifetime change was used.
+
+Actual candidate **`4BmIV5JHm59vxLkLMR58LiS-dqaJqB3m`** had digest
+`9d46e0fd32fb9de21a946ae7e2a15551b9e9ceae225d7b0f4b5903c3a5bb2559`,
+base **5**, exact Classic Chamber → Probe Chamber diff, and expiry
+**19:06:36.820Z**. Its immutable browser page and the unsent native Classic
+commit/replay prompt were verified before handoff. The owner reported personally
+clicking **Approve this exact edit**. The coordinator did not click that button.
+The actual HTML confirmation displayed **Approval recorded**, matching candidate,
+digest, session, operation, base revision and diff, with grant expiry
+**19:03:21.210Z**. A CDP observation timeout was recovered by reattaching the same
+tab; the failed observation did not submit the commit. The matching prompt was
+then submitted once through native Classic, using original commit request
+**`c1a551c7000000000000000000000002`**.
+
+Classic briefly displayed **Too many requests**, asking for a cooldown. A first
+private read-only SQL snapshot at **19:03:00.546Z** still showed revision 5 and no
+matching receipt. Neither observation proves a terminal commit failure. The
+coordinator did not retry, change routes/accounts, submit a substitute tool call,
+reapprove or alter the grant. The owner then reported that Classic had completed.
+At **19:03:48.168Z**, private SQL independently showed **Probe Chamber / 6** and
+receipt **`3C1tvcQD4hmDx5YVT_DvUaIYKYCo4PdP`**, matching the exact original
+candidate/digest/request. There were exactly **six receipts**, one more than the
+pre-test checkpoint. No conclusion about the internal cause or scope of the
+transient host dialog is established.
+
+The actual native response displayed successful candidate inspection, first
+commit and an identical immediate replay with the **same receipt and revision 6**
+for both. It separately displayed a fresh `probe_get_state` result, Probe Chamber
+/ 6, and a `probe_get_receipt` result matching the original request and historical
+revision 6. Expanded **Worked for 26s** activity showed **Verified approval and
+retrieved the existing commit receipt**. That duration is host display text,
+not instrumented service latency. The rendered comparison, private receipt and
+state corroborate one logical inverse edit; raw complete tool arguments and a
+per-call wire audit were not retained, and no approval reference is published.
+The later private SQL check at **19:07:39.155Z** retained **Probe Chamber / 6,
+six receipts, zero candidates and zero imports** after ordinary candidate expiry.
+
+This qualifies the separately personally approved Classic inverse and its
+same-turn replay, within those stated evidence limits. The owner's report of
+the actual click supplies operator provenance; the service's authenticated grant
+alone does not identify which person operated the browser. The earlier personal
+inverse attempts and original forward replay remain historical failures or
+unverified trials, not retroactive passes. No further personal approval is
+needed for this completed cycle. No new import was performed; the earlier
+actual-byte external import/deletion evidence remains separate from native
+attachment integration.
+
+All **16** source/test/manifest hashes still matched tested runtime source
+`89268050bfcb0644b1223c8b306273dc903c5a18`; immutable fixture SHA-256 remained
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`.
+This follow-up changes documentation/evidence only; the prior 35/35 local suite
+is not relabeled as a new run. The service and existing private tunnel remain
+running. Complete acceptance still has the recorded native-attachment,
+desktop-Work/Android, real-second-principal, installed-skill, workspace-mapping,
+full-host-schema and enforced-independent-review gaps. The bounded Classic
+personal inverse is no longer among those gaps.
 
 ## 7. Current primary references (retrieved 2026-10-23)
 

@@ -200,7 +200,7 @@
   "remaining": {
     "Classic_personal_forward": "exact browser grant and durable commit PASS; initial narration FAIL, subsequent actual read reconciled state",
     "Classic_forward_identical_replay": "UNVERIFIED same-turn; later verbatim retry NOT RUN because original reference inaccessible",
-    "Classic_separately_personally_approved_inverse": "UNVERIFIED/BLOCKED; delegated cleanup does not qualify it",
+    "Classic_separately_personally_approved_inverse": "PASS in subsequent personal_inverse_success_20261029; older failed attempts preserved",
     "Classic_delegated_cleanup_and_same_turn_replay": "PASS within stated operator/evidence limits",
     "native_attachment_integration": "BLOCKED; live adapter disabled",
     "desktop_Work_and_Android": "NOT RUN",
@@ -254,5 +254,65 @@
       "is_probe_RATE_LIMIT": false
     },
     "source_or_limits_changed": false
+  },
+  "personal_inverse_success_20261029": {
+    "source_commit": "89268050bfcb0644b1223c8b306273dc903c5a18",
+    "version": "0.1.1",
+    "result": "PASS for separately personally approved exact inverse, rendered identical same-turn replay and independent state/receipt verification",
+    "request_origin": "stage and commit prompts visibly verified and submitted in native Classic; browser counterpart used only existing request-bound reconnect before staging resumed",
+    "stage_request_id": "c1a551c7000000000000000000000001",
+    "commit_request_id": "c1a551c7000000000000000000000002",
+    "candidate_id": "4BmIV5JHm59vxLkLMR58LiS-dqaJqB3m",
+    "digest": "9d46e0fd32fb9de21a946ae7e2a15551b9e9ceae225d7b0f4b5903c3a5bb2559",
+    "session_id": "tiXoFfimi3kjxKTVI25n5dGSap7zNoTt",
+    "before": "Classic Chamber",
+    "after": "Probe Chamber",
+    "base_revision": 5,
+    "committed_revision": 6,
+    "candidate_expiry_utc": "2026-10-29T19:06:36.820Z",
+    "personal_approval": {
+      "owner_reported_personal_click": true,
+      "automated_edit_approval_click": false,
+      "matching_HTML": "Approval recorded; exact session, operation, candidate, digest, base revision and immutable diff",
+      "grant_expiry_utc": "2026-10-29T19:03:21.210Z",
+      "operator_provenance": "owner report plus observed matching HTML; service grant alone does not identify the human operator"
+    },
+    "first_commit_receipt": "3C1tvcQD4hmDx5YVT_DvUaIYKYCo4PdP",
+    "identical_same_turn_replay_receipt": "3C1tvcQD4hmDx5YVT_DvUaIYKYCo4PdP",
+    "first_and_replay_revision": 6,
+    "independent_Classic_state": "Probe Chamber / 6",
+    "independent_Classic_receipt_lookup": "original request -> COMMITTED, same receipt/candidate/digest/revision 6",
+    "native_activity": "Worked for 26s; expanded Verified approval and retrieved the existing commit receipt; displayed duration is not measured latency",
+    "evidence_limit": "rendered real host results and private SQL; complete raw commit arguments and per-call wire audit not retained; no grant reference retained",
+    "transient_host_dialog": {
+      "message": "Too many requests; conversation access temporarily limited",
+      "observed_screenshot_utc": "2026-10-29T19:03:10.026Z",
+      "root_cause": "UNVERIFIED",
+      "initial_SQL_utc": "2026-10-29T19:03:00.546Z",
+      "initial_SQL": "Classic Chamber / 5, no matching receipt yet; not terminal failure proof",
+      "action": "no duplicate prompt, alternative account/route, substituted tool call, reapproval or grant change; owner reported completion and original result was verified"
+    },
+    "independent_private_SQL": {
+      "observed_utc": "2026-10-29T19:03:48.168Z",
+      "room_label": "Probe Chamber",
+      "revision": 6,
+      "receipts": 6,
+      "matching_original_receipt": true
+    },
+    "tested_source_hashes_unchanged": 16,
+    "fixture_SHA256": "96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b",
+    "runtime_or_limits_changed": false,
+    "new_import": false,
+    "earlier_failures_superseded_only_for_this_new_trial": true,
+    "original_forward_replay": "Still UNVERIFIED/NOT RUN; new inverse success does not qualify the old request",
+    "runtime_left_running": true,
+    "final_private_storage": {
+      "observed_utc": "2026-10-29T19:07:39.155Z",
+      "room_label": "Probe Chamber",
+      "revision": 6,
+      "receipts": 6,
+      "candidates": 0,
+      "imports": 0
+    }
   }
 }
