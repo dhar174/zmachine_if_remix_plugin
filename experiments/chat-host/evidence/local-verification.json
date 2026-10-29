@@ -1,0 +1,72 @@
+{
+  "evidence_layer": "LOCAL_ONLY",
+  "source": "2790bd77a9790e91d3ee1b795abe6ace98e303bd",
+  "base": "73e7a6ebc86263201e7a2cdcc21ddd05304e5506",
+  "node": "v24.13.0",
+  "npm": "11.12.1",
+  "platform": "win32",
+  "arch": "x64",
+  "fixture": {
+    "size": 88576,
+    "sha256": "96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b"
+  },
+  "lockfile_sha256": "fe60029b90cd078490b74ec77f3df3a0e7234d1291a70d8fd53c1ed66c33d979",
+  "runs": [
+    {
+      "name": "syntax",
+      "command": "node --check src/model.js",
+      "exit_code": 0,
+      "signal": null,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "store-syntax",
+      "command": "node --check src/store.js",
+      "exit_code": 0,
+      "signal": null,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "service-syntax",
+      "command": "node --check src/service.js",
+      "exit_code": 0,
+      "signal": null,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "auth-syntax",
+      "command": "node --check src/auth.js",
+      "exit_code": 0,
+      "signal": null,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "host-file-syntax",
+      "command": "node --check src/host-file.js",
+      "exit_code": 0,
+      "signal": null,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "cli-syntax",
+      "command": "node --check src/cli.js",
+      "exit_code": 0,
+      "signal": null,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "suite",
+      "command": "node --test --test-concurrency=1 test/concurrency.test.js test/protocol.test.js test/security.test.js test/store.test.js",
+      "exit_code": 0,
+      "signal": null,
+      "stdout": "(node:60412) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ concurrent identical HTTP commits and a reconnected client observe one logical edit (224.9076ms)\n(node:30436) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ actual official MCP HTTP client: legacy discovery and complete synthetic lifecycle (338.8396ms)\n✔ actual official MCP HTTP client: auto discovery and complete synthetic lifecycle (238.3262ms)\n✔ official client receives denied authentication; HTTP metadata and schema errors are real protocol responses (82.7393ms)\n(node:67188) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ JWT signature, issuer, audience, expiry, subject, scope and model owner forgery (117.9341ms)\n✔ MCP bearer cannot approve; browser cookie, exact CSRF, origin and immutable form are required (100.2742ms)\n✔ OIDC callback rejects missing binding, wrong issuer, duplicate cookie and replay; sessions expire (66.018ms)\n✔ real HTTP fixture upload requires cookie/CSRF/type and denies foreign handles (98.5976ms)\n✔ request byte limit, rate window and output bound fail without world mutations (230.9215ms)\n✔ ordinary and upload body deadlines bound hanging inputs and clean listeners (64.3385ms)\n✔ actual hanging HTTP request terminates with 408 and closes connection (77.4818ms)\n✔ native host fetch is disabled; URL and DNS controls reject before network access (28.7781ms)\n✔ bounded identity-provider response rejects oversize and errors (0.5066ms)\n✔ the actual 16 KiB output budget rejects larger results (0.2316ms)\n✔ production ordinary/upload deadline values are exercised without indefinite operations (15025.2997ms)\n✔ strict schemas reject claimed consent, paths, base64 and instruction payloads (2.6536ms)\n✔ CLI without explicit configuration fails closed and has no test-grant switches (385.6823ms)\n✔ OIDC nonce substitution fails and public-key configuration rejects signing secrets (35.2228ms)\n✔ OAuth flow and browser-session capacities are bounded (231.1028ms)\n(node:31060) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n✔ immutable proposal, exact commit, identical retry, separate inverse approval (57.4694ms)\n✔ owner/session/digest/revision substitution, stale candidates and revocation preserve state (44.7435ms)\n✔ expiry boundaries, candidate quota, no-op and 64-character labels (78.7406ms)\n✔ restart retains receipts and real bytes but invalidates candidates and grants (63.1763ms)\n✔ import bytes, ownership, quotas, expiry, deletion and malformed fixtures (52.7952ms)\n✔ rollback when durable receipt insertion fails leaves state and grant intact (44.6545ms)\n✔ fresh process recovers exact receipt after injected post-commit exit 73 and rejects old authority (848.943ms)\nℹ tests 26\nℹ suites 0\nℹ pass 26\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 20200.4998\n",
+      "stderr": ""
+    }
+  ]
+}
