@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createAuth } from './auth.js';
 import { createProbe } from './service.js';
-import { requireThat } from './model.js';
+import { requireThat, VERSION } from './model.js';
 
 try {
   requireThat(/^24\.13\./.test(process.versions.node), 'NODE_24_13_REQUIRED');
@@ -39,7 +39,7 @@ try {
   requireThat(Number.isInteger(port) && port >= 1024 && port <= 65535,'INVALID_PORT');
   const probe = await createProbe({ directory:actual,auth,port,publicOrigin:auth.origin });
   // Local binding only; no tunneling, proxy setup, or integration installation.
-  console.log(JSON.stringify({status:'LISTENING_LOCAL_ONLY',port,version:'0.1.0',host_import:'BLOCKED'}));
+  console.log(JSON.stringify({status:'LISTENING_LOCAL_ONLY',port,version:VERSION,host_import:'BLOCKED'}));
   let stopping=false;
   for(const signal of ['SIGINT','SIGTERM']) process.on(signal,async()=>{if(stopping)return;stopping=true;await probe.close();process.exitCode=0;});
 } catch(error) {
