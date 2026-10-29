@@ -5,12 +5,14 @@
   "source_published_head": "5d16299b6cccfe0f22954f896c094b7c9fa324b8",
   "host": {
     "surface": "ChatGPT web Chat",
-    "browser": "Chrome on Windows x64; exact build unverified",
+    "browser": "Chrome 155.0.8059.86 on Windows x64",
     "model": "GPT-5.6 Sol / Medium, observed UI selection",
     "route": "existing owner-approved private Secure MCP Tunnel; scoped Auth0 OAuth",
-    "permission_ui": "Allow all observed; not changed by this continuation",
+    "permission_ui": "Earlier Allow all; later Allow low-risk after reconnect; persisted staging Allow once was agent-operated, not exact-diff human consent",
     "workspace_type": "unverified; Personal directory is not proof",
     "desktop_Work": "NOT RUN",
+    "desktop_Classic_Chat": "FAIL read; expired connection then link_id must identify an eligible linked account after successful web recovery; build 1.2026.190.0; reload left blank conversation",
+    "current_desktop_package": "26.1023.6621.0; calling surface Codex mode, not substituted for ChatGPT evidence",
     "physical_Android": "NOT RUN",
     "installed_skill": "NOT RUN"
   },
@@ -87,14 +89,51 @@
     "actual_chatgpt_state_and_import_read": "PASS; Renamed Chamber / 1; same metadata",
     "independent_private_SQL": "same receipt, same BLOB digest, zero pending candidates",
     "previous_pending_candidate": "NOT_FOUND; host wrapper INVALID_ARGUMENT",
-    "unconsumed_human_grant_invalidation": "NOT RUN live; no pending human grant during restart",
+    "unconsumed_human_grant_invalidation": "PASS in subsequent separately approved restart-only trial; see active_human_grant_restart",
     "fresh_chat_read": "PASS; Renamed Chamber / 1"
+  },
+  "active_human_grant_restart": {
+    "result": "PASS; active human authorization inspected, restart before expiry, old candidate unavailable without commit",
+    "human_reported_personal_click": true,
+    "automated_approval_click": false,
+    "candidate_id": "OseLl23B5dv8Mys4xBLw7bViecU2lUxe",
+    "digest": "de9f2f01a0b0ca8c3e08a713805d89c7ec217501ca66147bb491f66eb40318a5",
+    "before": "Probe Chamber",
+    "proposed_after": "Restart Check",
+    "base_revision": 2,
+    "candidate_expires_epoch_ms": 1793239479367,
+    "grant_expires_utc": "2026-10-29T02:03:38.626Z",
+    "actual_chatgpt_before_restart": "matching candidate/digest/base revision; existing authorization present; no commit or reference output",
+    "replacement_started_utc": "2026-10-29T02:03:10.1071503Z",
+    "independent_Windows_process_creation_utc": "2026-10-29T02:03:10.1004320Z",
+    "milliseconds_before_grant_expiry": 28519,
+    "old_process_absent": true,
+    "initial_timing_verification": "FAILED; PowerShell JSON DateTime auto-conversion then reparsing lost UTC designation; raw JSON Node comparison and Windows process creation independently corrected it",
+    "browser_send_failure": "stale accessibility index; no send occurred; refreshed state before actual submission",
+    "actual_chatgpt_after_restart": "Probe Chamber / 2; exact old candidate NOT_FOUND; no new stage/approve/commit/export",
+    "private_SQL_after_restart": "zero candidates, two receipts, zero imports; same session Probe Chamber / 2",
+    "raw_approval_reference_retained": false,
+    "restart_check_edit_committed": false
+  },
+  "oauth_callback_recovery": {
+    "observed_error": "Missing OAuth callback data; exact toast on Chrome Skills page",
+    "root_cause": "UNVERIFIED",
+    "probe_auth_diagnostics_during_expired_link_failures": "empty; no rejected service token established",
+    "recovery": "existing private plugin Try in chat; preserved explicit mention; fresh request Reconnect then Connect G1-C Synthetic Probe",
+    "actual_chatgpt_read_after_reconnect": "PASS; Probe Chamber / 2, same session; response reported both connected links returned same state",
+    "expanded_activity": "Read authenticated synthetic state",
+    "security_settings_changed": false,
+    "missing_callback_data_fabricated": false,
+    "desktop_result": "separate FAIL; does not invalidate recovered web read or prove desktop compatibility"
   },
   "remaining": {
     "separately_approved_inverse": "PASS; separate exact human approval, commit, identical same-turn replay and readback",
     "full_live_acceptance": "BLOCKED",
     "independent_restricted_review": "UNMET; suitable harness profile unavailable",
     "native_attachment_integration": "BLOCKED; disabled adapter",
-    "exact_client_build_and_workspace_mapping": "UNVERIFIED"
+    "exact_workspace_mapping": "UNVERIFIED; browser and installed desktop builds measured separately",
+    "installed_skill": "NOT RUN; static template has placeholder MCP URL; valid registered mapping and authorized installation unavailable",
+    "another_real_principal": "NOT RUN",
+    "full_advertised_host_JSON_schemas": "NOT CAPTURED"
   }
 }

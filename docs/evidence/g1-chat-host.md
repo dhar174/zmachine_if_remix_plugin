@@ -21,9 +21,11 @@ tool-use turn returned the same receipt and revision; private SQL found exactly
 two receipts total. Changed-payload reuse returned IDEMPOTENCY_CONFLICT. The
 earlier cross-turn identical retry remains **NOT RUN**: the model reported that
 it could not recover its original consumed approval reference. No replacement was
-minted. Native attachment integration,
-unconsumed human-grant invalidation across restart, installed skills, additional
-real principals and device trials remain unqualified. Complete live acceptance
+minted. A third personal approval was inspected while active, then invalidated
+by a restart 28.519 seconds before grant expiry; ChatGPT subsequently read
+Probe Chamber / 2 and received NOT_FOUND for that candidate. Native attachment
+integration, installed skills, additional real principals and the remaining
+device trials remain unqualified. Complete live acceptance
 remains **BLOCKED**. See the 2026-10-28 continuation below; the 2026-10-24 entries
 are historical checkpoints.
 
@@ -300,7 +302,8 @@ ID does not supply that missing proof. Option A remains **unverified**, not
 declared impossible across every current product surface.
 
 **Option B: separate authenticated approval page.** Implemented and tested using
-synthetic identities. The server verifies JWT issuer, audience, signature,
+synthetic identities, then exercised with the actual configured owner (§6.2–6.4).
+The server verifies JWT issuer, audience, signature,
 expiry/issued-at and configured subject. Browser login independently validates
 OIDC code/PKCE, state cookie, nonce, audience and callback issuer. Exact `(iss,sub)`
 identity must agree across channels. There is no email-based mapping.
@@ -318,9 +321,10 @@ Negative tests cover forged JWTs/identity/scopes, approval claims, changed diff,
 wrong owner/session, stale target, expiry/revocation, duplicate/change-payload
 reuse, CSRF/origin, login callback replay/nonce substitution, quotas and deadlines.
 A receipt-insertion fault rolls back the label and preserves the usable grant.
-**Actual human approval remains BLOCKED**: automated synthetic POSTs are only
-deterministic integration tests. Real browser sign-in, upload and native deletion
-were exercised; no agent action is labeled human exact-diff approval.
+Automated synthetic POSTs remain deterministic integration tests. Actual personal
+forward, inverse and restart-only approvals are separately recorded in §6.2–6.4;
+no agent action is labeled human exact-diff approval. The complete product/live
+acceptance gate remains BLOCKED for the explicit matrix gaps.
 
 ## 4. Private import, limits and remaining gaps
 
@@ -358,9 +362,10 @@ fits the protocol ceiling. These are **test-only**, not product defaults.
 Limits: single service process per data directory; no production perimeter,
 general authorization server, arbitrary stories, provider inference, VM integration
 or policy/transaction kernel. Windows ACL checking is a limited deny-list and
-not qualified for localized/custom groups. Human exact-diff approval, hostile Internet traffic, successful native-file fetching
-and installed skill behavior remain unqualified. Real IdP/browser operation is
-qualified only for the narrow current checkpoint above.
+not qualified for localized/custom groups. Hostile Internet traffic, successful
+native-file fetching and installed skill behavior remain unqualified. Actual
+human exact-diff approval and real IdP/browser operation are qualified only for
+the bounded synthetic checkpoints, not arbitrary product edits.
 
 ## 5. Capability and acceptance matrix
 
@@ -372,20 +377,21 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Discovery / advertised definitions | PASS, both protocol eras, full wire schemas | PASS, six names/descriptions; full JSON schemas not captured | N/A |
 | Authenticated state read | PASS, synthetic identities | PASS, real owner; independent final read Probe Chamber / revision 2 | PASS, same configured owner/session |
 | Prepare / commit / read / retry / inverse | PASS, automated synthetic grants | Forward/inverse/read and same-turn identical retry PASS; changed-payload reuse denied; cross-turn identical retry NOT RUN | Separate forward and inverse human approvals PASS |
-| Human exact-change consent | NOT RUN; synthetic POSTs do not count | Forward and inverse used their own exact server-held grants: PASS | PASS: owner personally clicked twice; matching HTML confirmations observed |
+| Human exact-change consent | NOT RUN; synthetic POSTs do not count | Forward and inverse used their own exact server-held grants: PASS | PASS: separate personal forward, inverse and restart-only approvals; matching confirmations observed |
 | External upload / delete real fixture | PASS, synthetic identities / MCP metadata | Metadata read PASS before/after restart; deleted handle NOT_FOUND in fresh chat | PASS, agent-operated real identity/bytes; row removed after DELETED |
 | Native ChatGPT attachment import | Guard denials PASS; success NOT RUN | BLOCKED, disabled CLI | N/A; external upload is a fallback |
-| Persistence / grant invalidation | PASS, fresh process / reconnect | State/import read after restart and fresh-chat state read PASS; prior pending candidate NOT_FOUND; unconsumed human grant invalidation NOT RUN | Reauthentication PASS; committed receipt and bytes retained; pending human grant NOT RUN live |
+| Persistence / grant invalidation | PASS, fresh process / reconnect | PASS: retained state/import; active human grant inspected, restart before expiry, old candidate NOT_FOUND, final Probe Chamber / 2 | PASS: third personal approval deliberately invalidated without commit; exactly two receipts retained |
 | Probe skill discovery / invocation | Static package only | NOT RUN / uninstalled | N/A |
 | Prompt ambiguity / fictional injection | Service denials PASS; no model in tests | PASS for one combined fictional/indirect/malicious-text trial (read only) and one ambiguous remark (no tool call) | N/A |
 
 | Surface/device | Result |
 | --- | --- |
 | Windows x64 local Node service/client | PASS for declared local suite and narrow live checkpoints |
-| Chrome / ChatGPT web Chat | PASS discovery/read/forward write; browser/app build not captured; successful write on GPT-5.6 Sol Medium |
-| Exact ChatGPT workspace association / permissions | Tunnel metadata selected organization/workspace; actual workspace UUID mapping unverified; OAuth used; Allow all observed in the Oct 28 settings UI, unchanged by this continuation |
+| Chrome / ChatGPT web Chat | PASS bounded lifecycle on GPT-5.6 Sol Medium; Chrome 155.0.8059.86 on Windows x64; callback-error recovery independently read Probe Chamber / 2 |
+| Exact ChatGPT workspace association / permissions | Tunnel metadata selected organization/workspace; actual workspace UUID mapping unverified; OAuth used; earlier Allow all, later Allow low-risk after reconnect; staging Allow once was agent-operated and is not exact-diff consent |
 | ChatGPT desktop Work | NOT RUN; original intended surface remains unqualified |
-| ChatGPT desktop Chat | NOT RUN |
+| ChatGPT Classic desktop Chat | FAIL read trial: expired connection, then link_id must identify an eligible linked account after web recovery; build 1.2026.190.0; reload left blank conversation; compatibility BLOCKED |
+| Current ChatGPT/Codex desktop package | Installed 26.1023.6621.0; calling surface observed in Codex mode, not counted as ChatGPT Chat/Work tool evidence |
 | Physical Android | NOT RUN |
 | Linux service runtime | Local NOT RUN; hosted Linux smoke PASS at historical 49212e0b88504d63e1058dc0fe1a3001d4725dae; no new-head CI claim |
 
@@ -414,13 +420,17 @@ history did not provide it in this trial. Prefer the documented native file mech
 qualification; otherwise use the disclosed authenticated external upload. Do not
 enable privileged production Editor operations on a visible host dialog alone.
 
-**Smallest remaining live-authority action:** one fresh personal approval for a
-clearly disclosed restart-invalidation candidate. The coordinator must observe
-its active exact grant, restart before expiry without committing, and show that
-the old candidate/authority is unusable while revision 2 persists. This is separate
-from the two successful edits; no pending human grant existed at the previous
-restart. Credential use is authorized; agent sign-in is not human edit consent.
-No credential re-entry is needed unless provider sessions expire or MFA is required.
+**No further edit approval is required for the completed web lifecycle.** The
+separately disclosed restart-only personal approval and pre-expiry invalidation
+now PASS (§6.4). Remaining owner inputs are the intended workspace's exact
+identity/type, an available desktop Work/Android client for their separate trials,
+and explicit installation authorization after a valid minimal workflow package
+has been prepared and reviewed. The template's `.invalid` MCP address is not an
+installable connection; use the documented registered-connection mapping rather
+than inventing a manifest. A second real principal and a compliant independent
+reviewer are also unavailable. Credential use is authorized; agent sign-in is
+not human edit consent. No credential re-entry is needed for the recovered web
+connection unless provider sessions expire or MFA is required.
 The [live runbook](../../experiments/chat-host/README.md#live-runbook-after-the-blocked-prerequisites-are-resolved)
 preserves separate host, consent, import and restart-authority gates.
 The terminal recovered and the coordinator committed the source-bound follow-up.
@@ -431,11 +441,17 @@ extracted from a running process.
 
 Independent trust/evidence review remains **unmet**: the named Zcode definitions
 exist, but no compliant reviewer was available in this Codex harness. The separately
-authorized conversion produced [draft PR #38](https://github.com/dhar174/zmachine_if_remix_plugin/pull/38),
+authorized conversion produced [PR #38](https://github.com/dhar174/zmachine_if_remix_plugin/pull/38),
 which reports that shell suppression still leaves mutation/delegation tools and
 no native Read/Grep/Glob surface in its tested environment. That result is a
 blocker, not independent acceptance of this implementation. No conversion changes
-are included here. Author verification is not independent review.
+are included here. A fresh main fetch on 2026-10-28 EDT found that PR merged at
+`8d5e443484f2c2dc1c1fdef826487c5f2936af65`; PR #36 is still an ancestor
+(verified exit 0). This probe remains based on
+`73e7a6ebc86263201e7a2cdcc21ddd05304e5506` without rebasing or overwriting
+either checkout. The running harness still does not advertise those named
+restricted profiles; merged source does not prove reload or invocation. Author
+verification is not independent review.
 
 ## 6.1. Recovery and approval confirmation follow-up (2026-10-28)
 
@@ -610,13 +626,83 @@ changed, nonexistent reference. The service returned IDEMPOTENCY_CONFLICT
 The redacted live receipt records the inverse and this denial. No code/SDK/schema
 or test-source change followed the 32-test checkpoint.
 
-The remaining live restart-authority trial requires a new pending human grant,
-deliberately invalidated before commit. It remains NOT RUN until that separately
-disclosed interaction occurs. Native attachment qualification, installed skill
+At this inverse checkpoint the pending-grant restart trial was NOT RUN; §6.4
+records its subsequent completion. Native attachment qualification, installed skill
 discovery/invocation, another real principal, full advertised JSON schemas on the
 actual host, exact workspace/build mapping, desktop/Android and independent
 restricted review remain gaps. No merged/product-ready conclusion follows from
 the successful synthetic web lifecycle.
+
+## 6.4. Active human grant invalidated before expiry (2026-10-28 EDT)
+
+The owner personally approved the explicitly disposable restart-only candidate
+`OseLl23B5dv8Mys4xBLw7bViecU2lUxe`, digest
+`de9f2f01a0b0ca8c3e08a713805d89c7ec217501ca66147bb491f66eb40318a5`,
+Probe Chamber → Restart Check, base revision 2. The HTML confirmation matched
+those fields and grant expiry **2026-10-29T02:03:38.626Z**. Actual ChatGPT
+inspected that existing active authorization without committing or displaying
+its reference. The replacement service started at
+**2026-10-29T02:03:10.1071503Z**, **28.519 seconds before expiry**. Windows
+process creation independently reported 02:03:10.1004320Z and the old process
+was absent. The same private storage directory was used.
+
+The first timing verification failed: PowerShell deserialized the UTC JSON value
+as DateTime, and reparsing its string representation lost its UTC designation
+and applied the local offset. That failed check is retained. Reading the raw
+JSON UTC string with Node and comparing Windows process creation resolved the
+measurement; no clock, expiry or approval lifetime was changed. A first browser
+send also targeted a stale accessibility index and sent nothing; fresh state
+identified the current send control before submission.
+
+Post-restart actual ChatGPT returned **Probe Chamber, revision 2**, and
+**NOT_FOUND** for that exact candidate. Independent private SQL found zero
+pending candidates, exactly two committed receipts and zero imports. There was
+no Restart Check commit. This proves the active pending candidate/authority was
+discarded while durable synthetic state and the two prior edits persisted.
+It does not prove safe restoration of credentials or pending grants; neither is
+restored. One earlier unapproved replacement candidate expired and was discarded
+without extending its lifetime.
+
+## 6.5. Callback-error recovery and separate desktop failure (2026-10-28 EDT)
+
+The owner reported **Missing OAuth callback data**. The coordinator observed
+that exact toast on the actual Chrome Skills page. It is a ChatGPT connection
+flow failure, not an approval denial. The probe's fixed-category authentication
+diagnostic file was empty during failed expired-link attempts, so no service
+token rejection was established. The underlying callback failure cause remains
+unproven; no missing callback parameters were fabricated and no OAuth redirect,
+permission, token lifetime or security validation was weakened.
+
+The coordinator used the existing private plugin's official **Try in chat**
+route, preserved its plugin mention, and followed the fresh request's
+**Reconnect → Connect G1-C Synthetic Probe** flow. Actual GPT-5.6 Sol / Medium
+then performed a read and reported **Probe Chamber / 2**, the same session, and
+that both connected probe links returned the same state. Its expanded activity
+showed Read authenticated synthetic state. This verifies recovered web use,
+not just a Connected setting. Earlier reconnect recovery also exposed a stale
+duplicate account marked Authentication update required; only that verified
+stale account was disconnected. No general account cleanup was performed.
+
+Installed Chrome was measured as **155.0.8059.86**. ChatGPT Classic
+**1.2026.190.0** was separately launched on Windows x64 without installing an
+upgrade. Its actual read initially requested reconnection. Retrying after web
+recovery returned **link_id must identify an eligible linked account**; a
+client refresh left the conversation blank. This observed read failure remains
+separate from web PASS and leaves desktop compatibility BLOCKED. The current
+desktop package **26.1023.6621.0** was observed in Codex mode; its own MCP access
+is not substituted for ChatGPT evidence. Desktop Work and physical Android were
+not run. Personal plugin-directory placement and a profile plan label do not
+establish the exact workspace type or association.
+
+The existing minimal workflow template remains static and uninstalled. Current
+official packaging instructions require a registered connection mapping and
+installation followed by discovery in a fresh chat. The advertised harness has
+no plugin-creator skill, and no valid mapping was fabricated. An attempted read
+of a nonexistent template README failed; the actual template contains
+plugin.json, mcp.json and skills/probe-workflow/SKILL.md. Server-only success is
+not complete installed skill-plus-tool behavior. These documentation/evidence
+updates do not change the 16 tested source/test/manifest files or add a new suite
+result.
 
 ## 7. Current primary references (retrieved 2026-10-23)
 
@@ -652,3 +738,11 @@ checking a vendor field only after SDK-client normalization. Final receipts repo
 zero test failures; none of those exploratory runs is presented as a pass.
 
 Follow-up references retrieved/inspected 2026-10-24: [Fetch request Origin rules](https://fetch.spec.whatwg.org/#append-a-request-origin-header), installed JOSE 6.2.13 JWT claim-validation source, and the current OpenAI authentication/connect/tunnel references above. The Python public-metadata fetch failed certificate validation; OS-trust PowerShell retrieval succeeded. No TLS bypass was used.
+
+The four OpenAI starting pages above were checked again on 2026-10-28 EDT
+(2026-10-29 UTC during the late continuation). Authentication instructions require
+the actual management-page redirect URI to match the provider; packaging and
+connect instructions distinguish registered MCP connections from installed
+workflow skills. No documented diagnosis for the exact callback toast was
+established. The unrelated third-party search result was not used as technical
+authority.

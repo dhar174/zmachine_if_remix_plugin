@@ -15,8 +15,13 @@ fixture upload metadata and read state/import after service restart. The separat
 approved inverse restored Probe Chamber / 2; an immediate identical same-turn
 replay returned the same receipt, and changed-payload reuse was denied. A cross-turn identical retry was NOT RUN
 because the model reported its original consumed approval reference inaccessible.
-Native attachment import, unconsumed human-grant restart invalidation, the original
-desktop Work target, installed skill and Android remain unverified. External
+An active third human approval was inspected and deliberately invalidated by a
+restart 28.519 seconds before expiry; post-restart ChatGPT returned Probe Chamber
+/ 2 and NOT_FOUND for that candidate, with two durable receipts and no imports.
+Native attachment import, the original desktop Work target, installed skill and
+Android remain unverified. A separate ChatGPT Classic desktop read failed with
+an ineligible linked-account error. A fresh request-bound reconnect recovered web
+use after the observed Missing OAuth callback data toast. External
 fixture upload/deletion was agent-operated and is not native attachment evidence.
 
 The authentication follow-up corrects bounded issued-at skew (five seconds only;
@@ -222,12 +227,24 @@ Stop with Ctrl+C; SIGINT/SIGTERM closes connections, sessions, grants and the DB
 
 ## Live runbook after the blocked prerequisites are resolved
 
-Current checkpoint: steps 1–5 have narrow **web Chat** discovery/read evidence,
-not desktop Work qualification. The external byte upload/deletion and service
-restart are separate browser evidence. Resume with a fresh candidate and human
-approval; do not repeat resource creation or automate the approval click. The
+Current checkpoint: the bounded **web Chat** forward/inverse/identical same-turn
+retry, real external byte upload/deletion, persistence and active human-grant
+restart-invalidation sequence PASS. This is not desktop Work qualification.
+No further edit approval is needed to reproduce the recorded final read. For a
+new edit trial, use a fresh candidate and human approval; do not repeat resource
+creation or automate the approval click. The
 900-second API token may require routine reconnection. An initial empty host
 response later loaded; preserve that failure/recovery, not just its final state.
+
+If the host reports an expired link or Missing OAuth callback data, preserve the
+error and use the existing plugin's Try in chat entry with its explicit mention,
+then that fresh request's Reconnect flow. A setting that says Connected alone is
+insufficient: verify an actual probe_get_state result. Refresh tools may reveal
+a stale duplicate explicitly marked Authentication update required; only remove
+an identified stale link. Do not invent callback data, change OAuth allowlists,
+extend lifetimes or weaken approvals to recover a demo. The current web recovery
+returned Probe Chamber / 2; the separate Classic desktop trial still failed with
+link_id must identify an eligible linked account. Record those outcomes by client.
 
 
 1. Record redacted account/workspace, ChatGPT desktop build, Work mode, model
