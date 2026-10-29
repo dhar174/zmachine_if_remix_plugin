@@ -7,23 +7,31 @@ no provider API dependency or call back into a ChatGPT subscription.
 
 **Privileged live acceptance remains BLOCKED.** The owner-approved private
 Secure MCP Tunnel and Auth0 route now supports actual ChatGPT **web Chat**
-discovery of all six tools and a natural authenticated read: Probe Chamber,
-revision 0. The original desktop Work target, human exact-diff approval, live
-commit/inverse, native attachment import, installed skill and Android trials
-remain unverified. Separate real-identity external upload received the exact
-fixture bytes, measured the expected digest, survived service restart, and was
-deleted; its old handle returned NOT_FOUND. That browser flow was agent-operated,
-not native ChatGPT attachment integration or human edit consent.
+discovery of all six tools. On 2026-10-28 the owner personally approved the exact
+diff, and actual ChatGPT committed Probe Chamber → Renamed Chamber, revision
+0 → 1, with a durable receipt independently verified in private storage. Stale
+and unapproved writes were denied. Actual ChatGPT inspected the real external
+fixture upload metadata and read state/import after service restart. The inverse
+requires separate human approval. A cross-turn identical retry was NOT RUN
+because the model reported its original consumed approval reference inaccessible.
+Native attachment import, unconsumed human-grant restart invalidation, the original
+desktop Work target, installed skill and Android remain unverified. External
+fixture upload/deletion was agent-operated and is not native attachment evidence.
 
 The authentication follow-up corrects bounded issued-at skew (five seconds only;
 strict expiry/not-before and 900-second age), adds private fixed-category rejection
 diagnostics, and uses strict-origin on HTML so native form Origin/CSRF protection
-works. The dedicated suite passed **31/31**, with earlier failed runs preserved in
+works. The original follow-up suite passed **31/31**, with earlier failed runs preserved in
 [the source-bound follow-up receipt](evidence/local-follow-up-2026-10-24.json).
 The terminal bridge stalled temporarily, then recovered. Tested source follow-up
 98a9751863f8ef872b10398f18c2566cd8e22ba4 preserves the original scope; hosted
 CI and final publication are separate evidence gates. See
 [the evidence report](../../docs/evidence/g1-chat-host.md) for all layers/failures.
+
+The HTML approval-confirmation follow-up passed **32/32** with six syntax checks;
+[its source-bound receipt](evidence/approval-confirmation-2026-10-28.json) preserves
+the exact source hashes and test result. The browser success page displays the
+exact diff and expiry without exposing its server-held approval reference.
 
 ## Reproduce local evidence
 
@@ -247,6 +255,9 @@ response later loaded; preserve that failure/recovery, not just its final state.
    and use only its existing, unexpired server-held grant to commit the exact
    candidate. Prepare that conditional chat prompt before asking the user to
    click; do not spend the one-minute grant on setup, tests or documentation.
+   Validate every request ID against the actual schema: exactly 32 characters
+   from `[A-Za-z0-9_-]`. A shorter coordinator-supplied ID was rejected in the
+   live trial; a corrected ID succeeded while the same grant remained valid.
    If it expires, stop and prepare a fresh candidate for new personal consent.
    Capture a redacted server grant/result and subsequent commit
    receipt. An agent must not click approval and call it human consent. A host
@@ -254,6 +265,10 @@ response later loaded; preserve that failure/recovery, not just its final state.
 7. Ask ChatGPT to independently read state/revision. Retry the identical commit
    request: require the same receipt and no revision increment. Test an unapproved
    candidate and a stale revision, confirming unchanged state.
+   The observed host model could not recover the original consumed reference
+   across turns. Try an immediate identical replay within the same tool-use turn;
+   qualify that separately. Never replace a missing reference, issue a new grant,
+   or copy a grant secret into ordinary chat merely to obtain a retry result.
 8. Ask to restore “Probe Chamber” using a new inverse candidate. The user approves
    separately; verify revision increments once more. No generic undo tool exists.
 9. Prefer a documented, ownership-checked native host file mechanism only after

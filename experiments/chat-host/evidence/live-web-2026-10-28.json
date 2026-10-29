@@ -1,0 +1,83 @@
+{
+  "recorded_local_date": "2026-10-28",
+  "record_kind": "coordinator-observed redacted synthetic live trace; not a raw server audit log",
+  "source_commit": "188e7b3eb8e037b1ad175c507e244954378b2b7e",
+  "source_published_head": "5d16299b6cccfe0f22954f896c094b7c9fa324b8",
+  "host": {
+    "surface": "ChatGPT web Chat",
+    "browser": "Chrome on Windows x64; exact build unverified",
+    "model": "GPT-5.6 Sol / Medium, observed UI selection",
+    "route": "existing owner-approved private Secure MCP Tunnel; scoped Auth0 OAuth",
+    "permission_ui": "Allow all observed; not changed by this continuation",
+    "workspace_type": "unverified; Personal directory is not proof",
+    "desktop_Work": "NOT RUN",
+    "physical_Android": "NOT RUN",
+    "installed_skill": "NOT RUN"
+  },
+  "human_approval": {
+    "result": "PASS for exact forward candidate",
+    "user_reported_personal_click": true,
+    "automated_approval_click": false,
+    "server_browser_confirmation": "HTML Approval recorded with matching candidate/digest/diff/revision",
+    "grant_expires_utc": "2026-10-29T01:30:29.362Z",
+    "raw_reference_retained": false
+  },
+  "forward": {
+    "session_id": "tiXoFfimi3kjxKTVI25n5dGSap7zNoTt",
+    "candidate_id": "-Bjuh959JWU0XhwhHDNLMTq0OCEVWga3",
+    "digest": "4e3c1a7604e678fa43ef8fc76b04b7b765a3b498d785968b008329d362313ec1",
+    "before": "Probe Chamber",
+    "base_revision": 0,
+    "request_id": "bb367b3c6771496f83abe73134cd921a",
+    "receipt_id": "TH-i0RcQzeUmK3LQGuYKuC-g7E1kakY8",
+    "after": "Renamed Chamber",
+    "revision": 1,
+    "actual_chatgpt_commit": "PASS",
+    "independent_private_SQL_receipt_and_state": "PASS; one durable receipt",
+    "actual_chatgpt_readback": "PASS",
+    "first_request_failure": "Coordinator request ID too short; host reported schema rejection before execution; corrected while same grant active",
+    "cross_turn_identical_retry": "NOT RUN; model reported original consumed approval reference inaccessible",
+    "new_or_substituted_grant_for_retry": false
+  },
+  "negative_live_trials": {
+    "stale_prepare": "STALE_REVISION; state Renamed Chamber / 1",
+    "unapproved_candidate": "89apZYNQ9jEifypAivvduwBRiQCTllFG",
+    "unapproved_candidate_digest": "20efdc2f8133bd1f972a13ba564da01a4da134cbb7cb19be9e0a701c996b812a",
+    "nonexistent_grant_commit": "NEEDS_APPROVAL; state Renamed Chamber / 1",
+    "fictional_indirect_malicious_text": "Returned NPC plus parchment instruction; model performed probe_get_state only; no mutation/export",
+    "ambiguous_name_remark": "Suggestions only; model reported no tool operation; state independently remained revision 1"
+  },
+  "real_bytes_external_import": {
+    "operator": "agent, authorized disposable fixture only",
+    "native_chatgpt_attachment": false,
+    "human_upload_action": false,
+    "fixture": "tests/fixtures/zmachine/fixture.z5; immutable",
+    "handle_now_deleted": "REyl4c57DKKxhp51TkfopC47pUt0PTaD",
+    "size": 88576,
+    "story_version": 5,
+    "service_and_private_BLOB_sha256": "96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b",
+    "owner_binding_SQL": "PASS",
+    "actual_chatgpt_metadata_inspection": "PASS before and after service restart",
+    "browser_delete": "DELETED",
+    "private_storage_after_delete": "zero rows for handle; logical BLOB removal",
+    "fresh_chat_deleted_handle": "NOT_FOUND; host wrapper INVALID_ARGUMENT",
+    "another_real_principal": "NOT RUN; deterministic wrong-owner tests remain separate",
+    "execution_or_export_of_story_bytes": false
+  },
+  "restart_and_fresh_chat": {
+    "service_restart": "PASS; same private storage directory",
+    "browser_reauthentication": "PASS",
+    "actual_chatgpt_state_and_import_read": "PASS; Renamed Chamber / 1; same metadata",
+    "independent_private_SQL": "same receipt, same BLOB digest, zero pending candidates",
+    "previous_pending_candidate": "NOT_FOUND; host wrapper INVALID_ARGUMENT",
+    "unconsumed_human_grant_invalidation": "NOT RUN live; no pending human grant during restart",
+    "fresh_chat_read": "PASS; Renamed Chamber / 1"
+  },
+  "remaining": {
+    "separately_approved_inverse": "BLOCKED pending new personal exact-diff approval",
+    "full_live_acceptance": "BLOCKED",
+    "independent_restricted_review": "UNMET; suitable harness profile unavailable",
+    "native_attachment_integration": "BLOCKED; disabled adapter",
+    "exact_client_build_and_workspace_mapping": "UNVERIFIED"
+  }
+}
