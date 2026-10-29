@@ -80,6 +80,15 @@ retrieval. This read-only recovery needs no consumed approval reference and does
 a retry. It does not retrospectively qualify the unobserved commit replay.
 See the [source-bound recovery receipt](evidence/receipt-recovery-2026-10-29.json).
 
+The later personal-inverse retry reached **Classic Chamber / 5** using a clearly
+labeled, agent-approved delegated temporary setup. Its separate personal inverse
+expired without observed approval or a sent commit; the stale draft was cleared.
+Private SQL verified five receipts, no inverse receipt and zero imports. The next
+personal test needs only a fresh Classic Chamber → Probe Chamber inverse at base
+5, with an actual owner click. No additional forward setup is needed. See report
+§6.12 and the [Classic receipt](evidence/live-classic-2026-10-29.json). This is the
+latest state; the revision-4 restoration above remains a historical checkpoint.
+
 ## Reproduce local evidence
 
 Use Node **24.13.0**, npm **11.12.1** (the tested environment). From this directory:

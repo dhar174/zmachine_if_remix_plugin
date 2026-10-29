@@ -4,9 +4,11 @@
 **Updated:** 2026-10-29. Actual tested route: ChatGPT **web Chat** in Chrome on
 Windows x64, using the owner-approved private Secure MCP Tunnel and Auth0.
 Classic desktop **Chat** is also tested. The original intended desktop Work
-surface has not been tested. The latest durable state is **Probe Chamber /
-revision 4**, with four logical edits: two web edits, one personally approved
-Classic forward edit and one explicitly delegated, agent-operated cleanup.
+surface has not been tested. The latest durable state is **Classic Chamber /
+revision 5**, with five logical edits: two web edits, one personally approved
+Classic forward edit, one explicitly delegated agent-operated cleanup, and one
+delegated temporary setup for a personal inverse retry (§6.12). That inverse
+expired without observed approval or a commit; a fresh inverse is still needed.
 The Classic personal inverse-approval test remains unverified. Its forward
 commit initially produced an incorrect no-commit report; the subsequent actual
 read reconciled state. See §6.8 for these material limits and cleanup provenance.
@@ -418,7 +420,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Chrome / ChatGPT web Chat | PASS bounded lifecycle on GPT-5.6 Sol Medium; Chrome 155.0.8059.86 on Windows x64; callback-error recovery independently read Probe Chamber / 2 |
 | Exact ChatGPT workspace association / permissions | Tunnel metadata selected organization/workspace; actual workspace UUID mapping unverified; OAuth used; earlier Allow all, later Allow low-risk after reconnect; staging Allow once was agent-operated and is not exact-diff consent |
 | ChatGPT desktop Work | NOT RUN; original intended surface remains unqualified |
-| ChatGPT Classic desktop Chat | Read/stage/import/negative tests and personal forward grant/durable commit PASS; initial forward narration FAIL; fresh state read reconciled. Personal inverse UNVERIFIED. Agent-operated cleanup and same-turn replay PASS; final Probe Chamber / 4. Build 1.2026.190.0 |
+| ChatGPT Classic desktop Chat | Read/stage/import/negative tests and personal forward grant/durable commit PASS; initial forward narration FAIL; fresh state read reconciled. Personal inverse UNVERIFIED. Earlier agent cleanup/replay PASS at revision 4; later delegated setup reached Classic Chamber / 5 and its personal inverse expired uncommitted (§6.12). Build 1.2026.190.0 |
 | Current ChatGPT/Codex desktop package | Installed 26.1023.6621.0; calling surface observed in Codex mode, not counted as ChatGPT Chat/Work tool evidence |
 | Physical Android | NOT RUN |
 | Linux service runtime | Local NOT RUN; hosted Linux smoke PASS at historical 49212e0b88504d63e1058dc0fe1a3001d4725dae; no new-head CI claim |
@@ -1078,6 +1080,51 @@ unobserved original commit replay, the separate personal inverse approval,
 native attachment integration, Android/desktop Work, real second principal,
 installed workflow skill, exact workspace mapping, full host JSON schema capture,
 or unavailable enforced independent review. Those limits remain explicit.
+
+## 6.12. Classic personal-inverse retry setup (2026-10-29 EDT)
+
+After the owner explicitly reported readiness for the personal inverse test,
+the coordinator prepared a temporary forward setup under the owner's delegated
+scope. This forward approval is **agent-operated**, not personal-human evidence.
+An initial setup attempt encountered an expired host connection and a native
+ChatGPT **Too many requests** conversation-access dialog at **18:14:37.031Z**.
+The exact internal cause is UNVERIFIED; this was not the probe's RATE_LIMIT.
+No commit was sent for that initial candidate. Its browser approval was revoked,
+state remained Probe Chamber / 4, and ordinary expiry later removed it. After
+about three minutes and one normal refresh, the host dialog cleared. One fresh
+native Classic staging request then succeeded; no account or route was changed
+to bypass the host limit.
+
+Fresh candidate `t5nh12_MmNMvBcon7iIj-NswHEdVt7Or` proposed Probe Chamber →
+Classic Chamber at base revision **4**, digest
+`b3272b53cb948486a0bd94030f0c8927a3c0287773463bd1754223e2cb689871`.
+The existing browser login was renewed, the exact immutable diff inspected,
+and the matching native Classic commit prompt visibly verified before the
+coordinator clicked its delegated setup approval. The browser recorded a grant
+expiring **18:23:58.928Z**. Actual Classic committed original request
+`c1a551c6000000000000000000000002` with receipt
+**`6Cg4CS-QMnSfRS25AnW2KVPPu8jRdm_j`**, then independently read Classic Chamber /
+**5** and staged a separate inverse. Read-only private SQL at **18:23:30.589Z**
+independently matched the receipt and revision.
+
+The inverse candidate **`7-XB0xpMiIG_ySRHPg08RHjYueAbzC13`** proposes
+Classic Chamber → Probe Chamber at base revision **5**, digest
+`e9e7ea67968e2961360b90dc5e5e411de59c8ca1a5a9efc13e097bb5d4f23e85`,
+and expired **18:28:23.377Z**. Its commit and identical replay prompt was prepared
+but left unsent in native Classic with request
+`c1a551c6000000000000000000000004`. The minimized dedicated approval window was
+restored and its exact diff screenshot saved privately. At **18:25:59.245Z**,
+the page still showed the approval button without recorded approval. The owner
+was asked to personally approve this inverse. No recorded approval was observed
+through **18:28:21.511Z**; a page reload at **18:28:25.224Z** returned NOT_FOUND
+after expiry. No inverse commit prompt was sent. The stale agent-authored draft
+was removed and the empty Classic composer visibly verified. At **18:28:59.820Z**,
+read-only private SQL showed **Classic Chamber / 5, five receipts, no inverse
+receipt, no expired inverse candidate and zero imports**. Personal inverse
+approval/commit remains **UNVERIFIED/BLOCKED**, not a pass. The next trial needs
+only a fresh inverse from revision 5 and one actual owner click; another forward
+setup is unnecessary. No source change or additional test-suite run is claimed
+for this live evidence. The service and private tunnel remain running.
 
 ## 7. Current primary references (retrieved 2026-10-23)
 

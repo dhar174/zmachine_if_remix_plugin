@@ -207,5 +207,52 @@
     "installed_workflow_skill": "NOT RUN",
     "independent_restricted_review": "UNMET; suitable enforced profile unavailable",
     "new_runtime_test_suite": "Earlier continuation was documentation only at 188e7b3; subsequent v0.1.1 receipt-recovery source 8926805 passed 35/35, with four official protocol tests included; see separate source-bound receipt"
+  },
+  "personal_inverse_retry_20261029": {
+    "source": "89268050bfcb0644b1223c8b306273dc903c5a18",
+    "setup": {
+      "approval_actor": "agent under explicit owner delegation; not personal consent",
+      "candidate_id": "t5nh12_MmNMvBcon7iIj-NswHEdVt7Or",
+      "digest": "b3272b53cb948486a0bd94030f0c8927a3c0287773463bd1754223e2cb689871",
+      "request_id": "c1a551c6000000000000000000000002",
+      "receipt_id": "6Cg4CS-QMnSfRS25AnW2KVPPu8jRdm_j",
+      "before": "Probe Chamber",
+      "after": "Classic Chamber",
+      "base_revision": 4,
+      "committed_revision": 5,
+      "independent_SQL_observation": "2026-10-29T18:23:30.589Z"
+    },
+    "inverse": {
+      "candidate_id": "7-XB0xpMiIG_ySRHPg08RHjYueAbzC13",
+      "digest": "e9e7ea67968e2961360b90dc5e5e411de59c8ca1a5a9efc13e097bb5d4f23e85",
+      "request_id": "c1a551c6000000000000000000000004",
+      "before": "Classic Chamber",
+      "after": "Probe Chamber",
+      "base_revision": 5,
+      "candidate_expiry_utc": "2026-10-29T18:28:23.377Z",
+      "personal_approval": "UNVERIFIED; no Approval recorded observed",
+      "commit": "NOT SENT; no receipt",
+      "last_page_observation_utc": "2026-10-29T18:28:25.224Z",
+      "last_page_result": "NOT_FOUND after expiry",
+      "draft": "removed; empty native composer visibly verified",
+      "independent_SQL": {
+        "observed_utc": "2026-10-29T18:28:59.820Z",
+        "room_label": "Classic Chamber",
+        "revision": 5,
+        "receipts": 5,
+        "inverse_receipt_count": 0,
+        "inverse_candidate_count": 0,
+        "imports": 0
+      },
+      "next_action": "fresh inverse from base revision 5 plus actual owner click; do not repeat forward setup"
+    },
+    "host_limit": {
+      "observed_utc": "2026-10-29T18:14:37.031Z",
+      "message": "Too many requests; temporary conversation access limit",
+      "root_cause": "UNVERIFIED",
+      "recovery": "about three minutes cooldown, one normal refresh, then one fresh setup request",
+      "is_probe_RATE_LIMIT": false
+    },
+    "source_or_limits_changed": false
   }
 }
