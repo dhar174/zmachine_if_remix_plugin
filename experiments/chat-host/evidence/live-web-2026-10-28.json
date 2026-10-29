@@ -11,7 +11,7 @@
     "permission_ui": "Earlier Allow all; later Allow low-risk after reconnect; persisted staging Allow once was agent-operated, not exact-diff human consent",
     "workspace_type": "unverified; Personal directory is not proof",
     "desktop_Work": "NOT RUN",
-    "desktop_Classic_Chat": "FAIL read; expired connection then link_id must identify an eligible linked account after successful web recovery; build 1.2026.190.0; reload left blank conversation",
+    "desktop_Classic_Chat": "Initial FAIL with expired/ineligible linked account; subsequent fresh explicitly bound Chat conversation PASS, two authenticated state reads; build 1.2026.190.0; writes/approval/import NOT RUN",
     "current_desktop_package": "26.1023.6621.0; calling surface Codex mode, not substituted for ChatGPT evidence",
     "physical_Android": "NOT RUN",
     "installed_skill": "NOT RUN"
@@ -124,7 +124,26 @@
     "expanded_activity": "Read authenticated synthetic state",
     "security_settings_changed": false,
     "missing_callback_data_fabricated": false,
-    "desktop_result": "separate FAIL; does not invalidate recovered web read or prove desktop compatibility"
+    "desktop_result": "initial separate FAIL; subsequent Classic read recovery recorded separately below"
+  },
+  "classic_desktop_recovery": {
+    "result": "PASS for two actual authenticated read-only calls in fresh Classic desktop Chat",
+    "client": "ChatGPT Classic 1.2026.190.0 on Windows x64",
+    "mode": "Chat selected before submission; Try in chat initially opened Work composer, no Work request sent",
+    "model": "High effort observed; exact model identifier not captured",
+    "route": "Classic Plugins / Personal / existing G1-C Synthetic Probe / Try in chat; explicit mention retained",
+    "first_activity": "Read synthetic probe state",
+    "second_activity": "Checked authenticated synthetic state; prompt explicitly required a new probe_get_state call",
+    "both_results": "Probe Chamber / 2; session tiXoFfimi3kjxKTVI25n5dGSap7zNoTt",
+    "displayed_host_durations_seconds": [11, 5],
+    "private_storage": "two receipts, zero candidates, zero imports",
+    "credential_entry_or_account_disconnection": false,
+    "security_settings_changed": false,
+    "automated_edit_approval_or_mutation": false,
+    "old_conversation_repaired_or_retested": false,
+    "internal_root_cause": "UNVERIFIED; stale/unusable older conversation link is an inference",
+    "native_accessibility_limitation": "stale text; current screenshot observations used for navigation and verification",
+    "desktop_writes_approval_import": "NOT RUN"
   },
   "remaining": {
     "separately_approved_inverse": "PASS; separate exact human approval, commit, identical same-turn replay and readback",

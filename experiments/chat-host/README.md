@@ -19,9 +19,12 @@ An active third human approval was inspected and deliberately invalidated by a
 restart 28.519 seconds before expiry; post-restart ChatGPT returned Probe Chamber
 / 2 and NOT_FOUND for that candidate, with two durable receipts and no imports.
 Native attachment import, the original desktop Work target, installed skill and
-Android remain unverified. A separate ChatGPT Classic desktop read failed with
-an ineligible linked-account error. A fresh request-bound reconnect recovered web
-use after the observed Missing OAuth callback data toast. External
+Android remain unverified. A separate ChatGPT Classic desktop read initially
+failed with an ineligible linked-account error; a subsequent fresh Chat conversation
+with the existing probe explicitly selected passed two authenticated reads of
+Probe Chamber / 2. Desktop writes/approval/import remain NOT RUN. A fresh
+request-bound reconnect recovered web use after the observed Missing OAuth
+callback data toast. External
 fixture upload/deletion was agent-operated and is not native attachment evidence.
 
 The authentication follow-up corrects bounded issued-at skew (five seconds only;
@@ -243,8 +246,14 @@ insufficient: verify an actual probe_get_state result. Refresh tools may reveal
 a stale duplicate explicitly marked Authentication update required; only remove
 an identified stale link. Do not invent callback data, change OAuth allowlists,
 extend lifetimes or weaken approvals to recover a demo. The current web recovery
-returned Probe Chamber / 2; the separate Classic desktop trial still failed with
-link_id must identify an eligible linked account. Record those outcomes by client.
+returned Probe Chamber / 2. Classic initially failed with link_id must identify
+an eligible linked account, then recovered using Plugins → Personal → G1-C
+Synthetic Probe → Try in chat, selecting Chat before submission and preserving
+the explicit probe mention. Two new authenticated reads passed in that fresh
+Classic conversation; the old failed chat was not independently repaired. This
+recovery needed no credential entry or security-setting change. Record those
+outcomes by client, mode and conversation; do not recreate the plugin or reset a
+password based only on an old conversation's link error.
 
 
 1. Record redacted account/workspace, ChatGPT desktop build, Work mode, model

@@ -29,6 +29,11 @@ device trials remain unqualified. Complete live acceptance
 remains **BLOCKED**. See the 2026-10-28 continuation below; the 2026-10-24 entries
 are historical checkpoints.
 
+The subsequent Classic recovery (§6.6) verified two authenticated reads in a
+fresh **ChatGPT Classic desktop Chat** conversation explicitly bound to the
+existing probe. This supersedes its earlier blocked read status, not the unrun
+desktop write/approval/import or Work trials.
+
 ## Historical live checkpoint (2026-10-24)
 
 - The dedicated real Auth0 subject is the sole configured owner. Both public JWKs
@@ -390,7 +395,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Chrome / ChatGPT web Chat | PASS bounded lifecycle on GPT-5.6 Sol Medium; Chrome 155.0.8059.86 on Windows x64; callback-error recovery independently read Probe Chamber / 2 |
 | Exact ChatGPT workspace association / permissions | Tunnel metadata selected organization/workspace; actual workspace UUID mapping unverified; OAuth used; earlier Allow all, later Allow low-risk after reconnect; staging Allow once was agent-operated and is not exact-diff consent |
 | ChatGPT desktop Work | NOT RUN; original intended surface remains unqualified |
-| ChatGPT Classic desktop Chat | FAIL read trial: expired connection, then link_id must identify an eligible linked account after web recovery; build 1.2026.190.0; reload left blank conversation; compatibility BLOCKED |
+| ChatGPT Classic desktop Chat | Initial read FAIL with ineligible linked-account error; subsequent fresh explicitly bound Chat conversation PASS, two authenticated reads of Probe Chamber / 2; build 1.2026.190.0. Desktop writes/approval/import NOT RUN |
 | Current ChatGPT/Codex desktop package | Installed 26.1023.6621.0; calling surface observed in Codex mode, not counted as ChatGPT Chat/Work tool evidence |
 | Physical Android | NOT RUN |
 | Linux service runtime | Local NOT RUN; hosted Linux smoke PASS at historical 49212e0b88504d63e1058dc0fe1a3001d4725dae; no new-head CI claim |
@@ -687,9 +692,9 @@ Installed Chrome was measured as **155.0.8059.86**. ChatGPT Classic
 **1.2026.190.0** was separately launched on Windows x64 without installing an
 upgrade. Its actual read initially requested reconnection. Retrying after web
 recovery returned **link_id must identify an eligible linked account**; a
-client refresh left the conversation blank. This observed read failure remains
-separate from web PASS and leaves desktop compatibility BLOCKED. The current
-desktop package **26.1023.6621.0** was observed in Codex mode; its own MCP access
+client refresh temporarily left the conversation blank. This observed read
+failure remains separate from web PASS; §6.6 records later Classic read recovery.
+The current desktop package **26.1023.6621.0** was observed in Codex mode; its own MCP access
 is not substituted for ChatGPT evidence. Desktop Work and physical Android were
 not run. Personal plugin-directory placement and a profile plan label do not
 establish the exact workspace type or association.
@@ -703,6 +708,59 @@ plugin.json, mcp.json and skills/probe-workflow/SKILL.md. Server-only success is
 not complete installed skill-plus-tool behavior. These documentation/evidence
 updates do not change the 16 tested source/test/manifest files or add a new suite
 result.
+
+## 6.6. Classic desktop Chat connection recovered (2026-10-28 EDT)
+
+The owner explicitly requested investigation and authorized continued use of
+existing credentials. The coordinator verified the same local service and tunnel
+processes were running and the service authentication-rejection diagnostic list
+was empty. No new credential, permission, callback, installation or deployment
+was created. The earlier Classic conversation retained the observed
+`link_id must identify an eligible linked account` failure.
+
+Inside **ChatGPT Classic 1.2026.190.0**, the coordinator opened **Plugins →
+Personal → G1-C Synthetic Probe → Try in chat**. That entry initially opened a
+Work composer. Before sending anything, the coordinator selected **Chat**,
+verified the explicit G1-C probe mention remained, and appended a bounded
+read-only request. This is actual Classic desktop Chat evidence, not desktop
+Work, browser execution or Codex's own MCP tools. The UI displayed High effort;
+the exact underlying model identifier was not captured.
+
+The first request completed with **Read synthetic probe state** in expanded
+activity and returned **Probe Chamber / revision 2**, session
+`tiXoFfimi3kjxKTVI25n5dGSap7zNoTt`. A second request explicitly required a new
+`probe_get_state` call rather than reuse of the previous answer. Expanded
+activity showed **Checked authenticated synthetic state**; it again returned
+Probe Chamber / 2 with no error. The UI reported Worked for 11s and Worked for
+5s respectively; those are displayed host durations, not instrumented latency.
+Private storage checks found two receipts, zero candidates and zero imports.
+No mutation, story upload or human approval interaction was performed.
+
+Native accessibility text remained stale while screenshots showed current
+navigation and results; the coordinator refreshed observations and used visible
+controls. Private local screenshots preserve both successful read results and
+expanded activity. No screenshots or private conversation transcripts are added
+to the public repository.
+
+**Narrow diagnosis:** a fresh explicitly bound Classic Chat can resolve an
+eligible connection using the existing setup. An unusable/stale link in the older
+conversation is an inference, not a proven internal root cause. The old
+conversation was not independently repaired or retested, and no claim of fixing
+all Classic sessions follows. The working conversation was left open; if an old
+chat retains this error, start through the existing probe's Try in chat entry,
+select Chat and keep the explicit mention. A routine token-expiry reconnect may
+still be required later. Do not recreate the plugin or reset credentials merely
+because an old conversation fails.
+
+Current official [account-management guidance](https://help.openai.com/en/articles/20001494-connecting-and-managing-app-accounts-in-chatgpt)
+and [troubleshooting guidance](https://help.openai.com/en/articles/20001497-troubleshooting-plugins-and-apps-in-chatgpt),
+retrieved 2026-10-28 EDT, distinguish connected accounts from availability in a
+particular chat/model/surface and recommend a new chat using explicit app
+controls. They did not establish a documented cause for this exact link_id
+error. The verified recovery required no credential entry, account disconnection
+or security-setting change. Complete acceptance remains BLOCKED for the other
+matrix gaps; this documentation-only continuation leaves the 16 tested source
+hashes and prior 32-test checkpoint unchanged.
 
 ## 7. Current primary references (retrieved 2026-10-23)
 
