@@ -1,7 +1,7 @@
 # G1-C: approved live web edits/replay verified; complete acceptance BLOCKED
 
 **Issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
-**Updated:** 2026-10-28. Actual tested route: ChatGPT **web Chat** in Chrome on
+**Updated:** 2026-10-29. Actual tested route: ChatGPT **web Chat** in Chrome on
 Windows x64, using the owner-approved private Secure MCP Tunnel and Auth0.
 The original intended desktop Work surface has not been tested.
 
@@ -33,6 +33,11 @@ The subsequent Classic recovery (§6.6) verified two authenticated reads in a
 fresh **ChatGPT Classic desktop Chat** conversation explicitly bound to the
 existing probe. This supersedes its earlier blocked read status, not the unrun
 desktop write/approval/import or Work trials.
+
+On 2026-10-29, Classic additionally passed candidate staging, unapproved/stale
+write denials and external-fixture metadata/deletion checks (§6.7). The actual
+personal approval and successful Classic commit/replay/inverse remain BLOCKED
+after two candidates expired before the owner could complete review.
 
 ## Historical live checkpoint (2026-10-24)
 
@@ -395,7 +400,7 @@ BLOCKED means a missing prerequisite; NOT RUN means no trial occurred.
 | Chrome / ChatGPT web Chat | PASS bounded lifecycle on GPT-5.6 Sol Medium; Chrome 155.0.8059.86 on Windows x64; callback-error recovery independently read Probe Chamber / 2 |
 | Exact ChatGPT workspace association / permissions | Tunnel metadata selected organization/workspace; actual workspace UUID mapping unverified; OAuth used; earlier Allow all, later Allow low-risk after reconnect; staging Allow once was agent-operated and is not exact-diff consent |
 | ChatGPT desktop Work | NOT RUN; original intended surface remains unqualified |
-| ChatGPT Classic desktop Chat | Initial read FAIL with ineligible linked-account error; subsequent fresh explicitly bound Chat conversation PASS, two authenticated reads of Probe Chamber / 2; build 1.2026.190.0. Desktop writes/approval/import NOT RUN |
+| ChatGPT Classic desktop Chat | Initial link failure, then read recovery PASS; Oct 29 staging, unapproved/stale denials and external-import metadata/deletion PASS. Actual human approval/commit/replay BLOCKED; inverse NOT RUN. Build 1.2026.190.0 |
 | Current ChatGPT/Codex desktop package | Installed 26.1023.6621.0; calling surface observed in Codex mode, not counted as ChatGPT Chat/Work tool evidence |
 | Physical Android | NOT RUN |
 | Linux service runtime | Local NOT RUN; hosted Linux smoke PASS at historical 49212e0b88504d63e1058dc0fe1a3001d4725dae; no new-head CI claim |
@@ -761,6 +766,63 @@ error. The verified recovery required no credential entry, account disconnection
 or security-setting change. Complete acceptance remains BLOCKED for the other
 matrix gaps; this documentation-only continuation leaves the 16 tested source
 hashes and prior 32-test checkpoint unchanged.
+
+## 6.7. Classic import and negative writes; personal approval still pending (2026-10-29 EDT)
+
+The owner authorized the remaining Classic write, approval and import trials,
+retaining the requirement to personally approve each actual edit. The existing
+service and tunnel remained running. Routine same-scope browser SSO and expired
+MCP-link reconnections were needed. Classic sometimes rendered the expired-link
+response as a blank area; inspecting the same conversation in Chrome exposed the
+reconnect control. Browser authentication resumed Classic-originated requests;
+it is recorded as an auxiliary browser operation, not a replacement Classic test.
+
+The authenticated external upload received the immutable fixture's actual
+**88,576 bytes**, measured SHA-256
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`,
+and issued handle `m2uV06d8EjTVKdvgdwQhIAYoI2HgCJtQ`. A private read-only
+SQL query independently hashed the stored BLOB and matched its length/digest.
+Actual Classic `probe_inspect_import` returned the measured digest, size, v5
+header metadata and expiry. The host also displayed a date/time-conversion
+activity during the first answer; this is not described as exclusively one host
+tool. Only metadata went through this service to chat. This agent-operated
+external upload is neither native attachment integration nor a human upload
+interaction. Browser deletion returned DELETED; Classic then returned NOT_FOUND
+for the old handle (host wrapper INVALID_ARGUMENT) and independently read
+Probe Chamber / 2. Private storage had zero import rows.
+
+Actual Classic staged exactly one **Probe Chamber → Classic Chamber** proposal
+at base revision 2, candidate `Y8N_zpL91y2_Wpn-3TLWSj2igUaxtFQr`, digest
+`596385b4f39ebde73e24a5d442e323f3bfd1ad98ef46dac2159eb72dfd9dbefc`.
+The host accurately labeled staging WRITE, but also displayed Suspicious
+Instruction because the tool description asks the user to review an approval
+URL. The coordinator inspected the scoped synthetic staging arguments and chose
+**Allow once**. That generic host confirmation is not personal exact-diff
+authorization, and no persistent permission change was selected. Candidate
+inspection returned matching immutable fields and approval null. The controlled
+nonexistent-reference commit returned **NEEDS_APPROVAL**, and a prepare using
+stale revision 1 returned **STALE_REVISION**. Both were wrapped as INVALID_ARGUMENT.
+A subsequent actual Classic read and private SQL remained Probe Chamber / 2,
+with the two preexisting web receipts and no Classic commit.
+
+The first candidate expired at 2026-10-29T15:10:33.296Z while the owner could not
+find the page. A replacement, `EvNjS_pvWvkgdeGauBzaoEbDwgYHOgPY`, digest
+`89cfbefdb9b602dd88888bc8164f1012820c841c46ed3bd66e735faa5761ae60`,
+was staged with a new request ID and shown in a separate Chrome window. Its
+expiry was 15:25:14.996Z. The owner returned after a few minutes and reported
+NOT_FOUND; the checkpoint at **15:26:58Z** found Probe Chamber / 2, exactly two
+receipts, zero candidates and zero imports. No personal approval or successful
+Classic commit is claimed. The matching commit/replay prompts were prepared but
+unsent; an expired prompt must not be submitted.
+
+The next step is an owner readiness acknowledgment before creating another
+five-minute candidate, followed by the actual exact-diff click and immediate
+Classic commit/replay/read. An inverse still needs its own personal approval.
+Neither candidate nor grant lifetime was extended. The prior successful web
+lifecycle and the completed Classic import/negative trials are retained without
+turning the pending human gate green. The [redacted Classic continuation](../../experiments/chat-host/evidence/live-classic-2026-10-29.json)
+records the individual results. Complete acceptance and independent review remain
+BLOCKED/unmet for the explicit matrix gaps; no runtime source change is included.
 
 ## 7. Current primary references (retrieved 2026-10-23)
 

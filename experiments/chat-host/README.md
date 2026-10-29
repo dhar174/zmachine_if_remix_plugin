@@ -22,10 +22,19 @@ Native attachment import, the original desktop Work target, installed skill and
 Android remain unverified. A separate ChatGPT Classic desktop read initially
 failed with an ineligible linked-account error; a subsequent fresh Chat conversation
 with the existing probe explicitly selected passed two authenticated reads of
-Probe Chamber / 2. Desktop writes/approval/import remain NOT RUN. A fresh
+Probe Chamber / 2. At that read-recovery checkpoint, desktop writes/approval/import
+were NOT RUN; the Oct 29 continuation below records later progress. A fresh
 request-bound reconnect recovered web use after the observed Missing OAuth
 callback data toast. External
 fixture upload/deletion was agent-operated and is not native attachment evidence.
+
+On 2026-10-29, Classic also passed candidate staging, unapproved/stale write
+denials and inspection/deletion checks for a new actual-byte external fixture
+upload. Two candidates expired before the owner completed personal review;
+Classic human approval/commit/replay/inverse remain BLOCKED/NOT RUN. Wait for
+owner readiness before staging another short-lived candidate. See the
+[separate Classic continuation](evidence/live-classic-2026-10-29.json); no expiry
+or approval requirement was weakened, and the room remains Probe Chamber / 2.
 
 The authentication follow-up corrects bounded issued-at skew (five seconds only;
 strict expiry/not-before and 900-second age), adds private fixed-category rejection
