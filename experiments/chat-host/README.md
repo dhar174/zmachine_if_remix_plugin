@@ -44,10 +44,16 @@ No expiry or authorization requirement was weakened. No more timed owner prompts
 are needed for the completed cleanup; future personal-approval trials require an
 interactive owner window and fresh exact candidates.
 
-The final private check found four receipts, zero pending candidates and zero
+The closeout private check found four receipts, zero pending candidates and zero
 imports. The owned local service and tunnel processes were then stopped and
 their probe listeners verified absent; the private database and existing account
-configuration were preserved. Restart and reauthenticate before another live run.
+configuration were preserved. At the owner's subsequent request, the existing
+service/tunnel were restarted using a personally created restricted one-day key.
+Fresh actual web Chat and Classic desktop Chat reads both returned Probe Chamber
+/ 4, correlated with two successful tunnel tools/call responses. The processes
+are now left running for owner use; the computer/processes must remain running,
+the replacement key expires October 30, and OAuth may need normal reconnect.
+See evidence report §6.9 for observation failures and exact evidence limits.
 
 The authentication follow-up corrects bounded issued-at skew (five seconds only;
 strict expiry/not-before and 900-second age), adds private fixed-category rejection

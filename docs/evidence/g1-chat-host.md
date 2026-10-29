@@ -11,6 +11,12 @@ The Classic personal inverse-approval test remains unverified. Its forward
 commit initially produced an incorrect no-commit report; the subsequent actual
 read reconciled state. See §6.8 for these material limits and cleanup provenance.
 
+**Latest availability:** the owner subsequently requested restoration for use.
+The existing private service/tunnel were restarted with a locally supplied
+one-day replacement key, and fresh actual **web Chat and Classic desktop Chat**
+reads both returned Probe Chamber / 4. The processes are intentionally left
+running for the owner (§6.9); the earlier shutdown remains a historical checkpoint.
+
 The actual host advertises all six probe tools. After the owner personally
 approved the immutable diff in the separately authenticated browser, ChatGPT
 committed **Probe Chamber → Renamed Chamber**, revision **0 → 1**. The browser
@@ -915,6 +921,65 @@ incorrect host narration remain material feasibility limits. Full product/live
 acceptance, native import, installed workflow skills, desktop Work/Android,
 another real principal, exact workspace mapping and independent restricted
 review remain unresolved. Source/SDK/schema versions are unchanged.
+
+## 6.9. Connection restored for owner use (2026-10-29 EDT)
+
+After closeout, the owner requested the plugin remain usable. Auth0 Dashboard
+sign-in was personally completed. The coordinator copied only the existing
+approval-browser client secret into the scoped local launcher, without printing
+or saving the secret. The owner created and copied the reviewed replacement
+tunnel key: Default project, Restricted, Tunnels Read + Use only, one-day expiry.
+The key was transferred locally into the existing official client, and the
+clipboard was verified empty afterward. Its account-list expiry is October 30;
+no persistent local credential store, broader permission, public listener, paid service
+or new integration was created.
+
+The service emitted LISTENING_LOCAL_ONLY on port 3213. Bounded local HTTP checks
+returned 401 with an authentication challenge for unauthenticated MCP, and 200
+for protected-resource metadata. Two Windows CIM listener checks failed to
+enumerate that listener; these are retained as failed observations, not passes.
+The official tunnel doctor exited **0**, with optional Codex tunnel-plugin check
+SKIP. That unrelated optional plugin was not installed. The client started its
+control-plane poller; its local UI reported **Health: live / Ready: ready**,
+explicitly recognizing that MCP initialization requires authentication.
+Optional Harpoon auto-registration warnings remained; no access allowlist or
+plaintext policy was relaxed to hide them.
+
+A fresh request was submitted through the existing ChatGPT web conversation.
+Its expired-connection card required the existing Reconnect/Connect flow. No new
+password or permissions were entered. The resulting actual response reported a
+new `probe_get_state` result, Probe Chamber / 4. The model's statement that no
+reauthentication was needed for the call does not erase the observed preceding
+reconnect flow; its internal refresh/redirect sequence was not captured.
+The new tunnel instance independently recorded **one tools/call / HTTP 200**
+after that web request.
+
+A second request was entered and visibly verified in the **Classic desktop**
+composer before submission. Classic returned Probe Chamber / 4, tool
+`probe_get_state`, connection success and no connection error. At
+**2026-10-29T17:32:24.375Z**, the same tunnel instance recorded **two successful
+tools/call responses and 18 polling cycles**. These are aggregate transport
+metrics correlated with the two observed requests, not a raw per-tool audit log.
+The current web UI's Worked disclosure did not expose a named tool trace;
+screenshots, rendered actual responses and transport evidence are recorded with
+that limit. Earlier tool-activity evidence remains separate.
+
+The final read-only SQL check still found **Probe Chamber / 4, four receipts,
+zero candidates and zero imports**; all 16 tested source/test/manifest hashes
+were unchanged. An initial metric verifier falsely read zero polling cycles
+because it failed to accept Prometheus labels on that metric; the corrected
+name parser passed against the same running instance. Browser observation
+timeouts, unsupported tab-activation property and native input-geometry failures
+were recovered by reobserving the existing window; no duplicate runtime or blind
+duplicate prompt was started.
+
+The service and tunnel are **left running for owner use**. This is a temporary
+local availability handoff: the computer/processes must stay running, the key
+expires after one day, and OAuth may require another normal reconnect. No
+unattended hosting or longer credential lifetime is qualified. The working chat
+is left open; no new edit or import was performed. Prior narration failure,
+unverified personal inverse and remaining device/skill/native-import/review gaps
+are unchanged. Complete Issue #13 acceptance remains BLOCKED.
 
 ## 7. Current primary references (retrieved 2026-10-23)
 

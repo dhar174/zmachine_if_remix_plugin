@@ -160,6 +160,34 @@
     "account_resources_revoked_or_deleted": false,
     "resume": "Existing tunnel/plugin/Auth0 configuration retained; restart local service and tunnel with fresh valid runtime credentials and reauthenticate before another live trial"
   },
+  "availability_restore": {
+    "observed_utc": "2026-10-29T17:32:24.375Z",
+    "result": "PASS for fresh actual web Chat and Classic desktop Chat authenticated reads; temporary local service/tunnel left running for owner use",
+    "credential_handling": "owner personally signed into Auth0 and created/copied reviewed restricted one-day tunnel key; existing browser secret and new runtime key transferred locally into process environments; clipboard verified empty; no secret written to local config, repository or logs",
+    "runtime_key": "Default project; Restricted; Tunnels Read + Use only; account UI expiry October 30",
+    "service": "LISTENING_LOCAL_ONLY 3213, version 0.1.0; bounded unauthenticated MCP 401 with challenge, resource metadata 200",
+    "tunnel_doctor_exit": 0,
+    "optional_Codex_tunnel_plugin": "SKIP; not installed",
+    "tunnel_UI": "Health live; Ready ready, MCP initialization requires authentication",
+    "optional_Harpoon_warnings": "auto-registration skipped/not allowed and local HTTP target rejected; no access or plaintext policy weakened",
+    "web": "fresh actual probe_get_state response Probe Chamber / 4 after observed expired-connection Reconnect/Connect flow; internal redirect/refresh not captured; model's no-reauthentication narration does not erase preceding UI flow",
+    "Classic": "fresh prompt verified in native composer before submission; actual response Probe Chamber / 4, probe_get_state, connection success, no connection error",
+    "aggregate_transport_evidence": {
+      "successful_tools_call_HTTP_200": 2,
+      "poll_cycles": 18,
+      "limit": "correlated with two observed host requests on fresh client instance; no raw per-tool audit log; current web Worked disclosure did not expose named tool activity"
+    },
+    "private_SQL": "Probe Chamber / 4; four receipts; zero candidates/imports",
+    "tested_source_hashes_unchanged": 16,
+    "observation_failures": [
+      "Two Windows CIM listener enumerations failed; actual bounded HTTP checks passed separately",
+      "Initial metric parser failed to count polling metric with labels; corrected metric-name parser passed against same running instance",
+      "Browser CDP observation timeouts, unsupported tab activation property and native input geometry errors; reobserved existing targets, no blind duplicate request or runtime"
+    ],
+    "operational_limits": "computer and existing processes must stay running; one-day runtime key; normal OAuth reconnect may recur; no unattended hosting or longer lifetime qualified",
+    "new_mutation_or_import": false,
+    "full_acceptance": "BLOCKED; prior narration/personal inverse/device/skill/native import/review gaps unchanged"
+  },
   "remaining": {
     "Classic_personal_forward": "exact browser grant and durable commit PASS; initial narration FAIL, subsequent actual read reconciled state",
     "Classic_forward_identical_replay": "UNVERIFIED same-turn; later verbatim retry NOT RUN because original reference inaccessible",
