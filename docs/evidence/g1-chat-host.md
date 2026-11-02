@@ -1,6 +1,9 @@
 # G1-C: live web and Classic probe evidence; complete acceptance BLOCKED
 
 **Issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
+**Post-merge audit:** [supported-route acceptance audit](g1-chat-host-acceptance-audit.md)
+prepared November 2 after PR #39 merged. It proposes a narrow target and records
+the remaining evidence/owner gates; #13 stays open and the probe stays offline.
 **Updated:** 2026-11-02 (independent review; no new live trials). Actual tested route: ChatGPT **web Chat** in Chrome on
 Windows x64, using the owner-approved private Secure MCP Tunnel and Auth0.
 Classic desktop **Chat** is also tested. Web Work and native desktop Work now
