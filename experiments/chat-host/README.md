@@ -5,9 +5,16 @@ operate on a synthetic room label and one immutable redistributable Z5 fixture.
 No interpreter is imported or executed. The host model selects tools; there is
 no provider API dependency or call back into a ChatGPT subscription.
 
+**Current availability (2026-11-02): service and private tunnel offline.**
+The independent GUI review found no merge-blocking code defect; its disposition
+is in [report §6.15](../../docs/evidence/g1-chat-host.md#615-independent-gui-review-and-disposition--2026-11-02).
+Running-process statements below describe earlier live-test checkpoints.
+
 **Privileged live acceptance remains BLOCKED.** The owner-approved private
 Secure MCP Tunnel and Auth0 route now supports actual ChatGPT **web Chat**
-discovery of all six tools. On 2026-10-28 the owner personally approved the exact
+discovery of the initial six tools; v0.1.1 subsequently added the seventh,
+read-only receipt tool (see the recovery receipt below). On 2026-10-28 the owner
+personally approved the exact
 diff, and actual ChatGPT committed Probe Chamber → Renamed Chamber, revision
 0 → 1, with a durable receipt independently verified in private storage. Stale
 and unapproved writes were denied. Actual ChatGPT inspected the real external
@@ -72,7 +79,10 @@ the exact source hashes and test result. The browser success page displays the
 exact diff and expiry without exposing its server-held approval reference.
 
 The **0.1.1 receipt-recovery follow-up** passed **35/35** tests and six syntax
-checks; the dedicated official protocol suite passed 4/4. Actual web Chat then
+checks at source `89268050bfcb0644b1223c8b306273dc903c5a18`; the dedicated
+official protocol suite passed 4/4 at `137ebbd`, before the CLI-only startup
+version correction. Those protocol cases are included in the final 35/35 run.
+Actual web Chat then
 read the historical Classic forward receipt twice and corrected its earlier
 no-commit report, while a fresh state read remained Probe Chamber / 4. Native
 Classic subsequently retrieved that receipt, denied a nonexistent receipt and

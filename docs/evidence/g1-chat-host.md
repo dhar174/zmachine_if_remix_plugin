@@ -1,7 +1,7 @@
 # G1-C: live web and Classic probe evidence; complete acceptance BLOCKED
 
 **Issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
-**Updated:** 2026-10-29. Actual tested route: ChatGPT **web Chat** in Chrome on
+**Updated:** 2026-11-02 (independent review; no new live trials). Actual tested route: ChatGPT **web Chat** in Chrome on
 Windows x64, using the owner-approved private Secure MCP Tunnel and Auth0.
 Classic desktop **Chat** is also tested. Web Work and native desktop Work now
 have separate authenticated read/receipt trials (§6.14); their write/approval
@@ -14,11 +14,10 @@ expired handoff remains a failed checkpoint (§6.12). The original forward commi
 initially produced an incorrect no-commit report; subsequent reads and receipt
 recovery reconciled it. See §6.8 for that retained failure and cleanup provenance.
 
-**Latest availability:** the owner subsequently requested restoration for use.
-The existing private service/tunnel were restarted with a locally supplied
-one-day replacement key, and fresh actual **web Chat and Classic desktop Chat**
-reads both returned Probe Chamber / 4. The processes are intentionally left
-running for the owner (§6.9); the earlier shutdown remains a historical checkpoint.
+**Latest availability:** the service and private tunnel are **offline** for the
+independent review. The October 29 restoration and later running-process entries
+below are historical checkpoints. No live credentials, reconnect or probe calls
+were used for this review; the one-day runtime key has expired. See §6.15.
 
 The initial host catalog advertised six probe tools; v0.1.1 adds a read-only
 receipt lookup, discovered through Refresh tools and actually invoked in web
@@ -295,7 +294,12 @@ is not a pass. Existing root VM suites were not executed for this change.
 Seven focused tools (six before v0.1.1) authenticate before dispatch, reject unknown schema fields,
 enforce operation scopes, and return structured results/explicit errors. Preparing
 persists candidate state and is accurately marked **not read-only**. Input/output
-schemas and actual advertised definitions are in the [local protocol receipt](../../experiments/chat-host/evidence/local-protocol.json).
+schemas and actual advertised definitions for the initial v0.1.0 six-tool service
+are in the [local protocol receipt](../../experiments/chat-host/evidence/local-protocol.json).
+The [v0.1.1 recovery receipt](../../experiments/chat-host/evidence/receipt-recovery-2026-10-29.json)
+adds the seventh tool's definition and records the seven-tool protocol assertions.
+It is not a retained complete seven-tool wire catalog or the full actual
+ChatGPT-advertised JSON schemas; that host-schema gap remains NOT CAPTURED.
 The SDK client normalizes away root extension fields in its returned catalog;
 the test additionally captures the real HTTP wire catalog and verifies both
 root `securitySchemes` and `_meta.securitySchemes`, plus `openai/fileParams`.
@@ -1387,6 +1391,77 @@ running and left running as requested. The restricted runtime key expires
 October 30; normal OAuth reconnect may recur. No fresh secret, permission,
 public listener, paid provider call or runtime restart was introduced here.
 Complete live acceptance remains **BLOCKED**, PR #39 stays draft and #13 open.
+
+### 6.15 Independent GUI review and disposition — 2026-11-02
+
+An actual Zcode child reviewer, `zmachine-g1c-reviewer`, completed an independent
+read-only review of **`d35c9bf0183a2db4d77a14f915ecaf2c56dab6c7`** in the
+isolated author worktree. The GUI advertised **Z.ai API / GLM-5.3-Flash / Max**
+in Zcode 3.16.3.8992. The installed profile and GUI permitted Read/Grep/Glob for
+inspection. The child disclosed an additional `RespondToCoordinator` report
+channel, with no command, write, network or memory capability; it reported no
+other tool use. Its command-based verification was explicitly **NOT RUN**:
+source identity, hashes, tests and CI were supplied coordinator evidence.
+This is independent source/evidence review, not a formal GitHub approval or a
+new ChatGPT, human-approval, import or device trial.
+The requested Z.ai review uses contributor provider calls; charges were not
+measured. No external model-provider dependency was added to the probe.
+
+The reviewer found **no merge-blocking defect in the inspected experimental
+code**. The coordinator independently verified the exact local/remote reviewed
+head, clean author worktree and unchanged 16 runtime/test/manifest hashes.
+There are **33 changed paths** at that head; the review's count of 34 was a
+counting error, not an extra repository change. The source and test files
+listed in its report match the supplied scope. The full final report is
+retained privately; this public [review disposition](../../experiments/chat-host/evidence/independent-review-2026-11-02.json)
+contains the reviewed SHA, limitations and findings without a chat transcript.
+
+Two documentation findings are addressed here: the initial six-tool catalog
+is distinguished from v0.1.1's seventh receipt tool, with a pointer to the
+recovery receipt; the dedicated 4/4 protocol run at `137ebbd` is distinguished
+from the final 35/35 run at `8926805`. No service, test, manifest, schema,
+approval lifetime or native-file origin gate changed. No runtime suite was
+rerun for these documentation corrections. The complete seven-tool local wire
+receipt and actual host JSON schemas remain distinct retention gaps.
+
+Four optional recommendations are retained without implementing adjacent work:
+
+- Before enabling native file fetching, bind consent to a server-derived
+  file URL or its origin in addition to `file_id`; the current route remains
+  disabled and the exact fixture digest is still required.
+- Consider an explicit lifetime bound for an open GET `/mcp` SSE response;
+  request-body deadlines do not establish a response-stream deadline.
+- Consider rejecting an expired candidate on an idempotent prepare retry;
+  current approval/commit checks already fail closed.
+- Preserve duplicate response headers if future SDK responses require them;
+  the current per-key `setHeader` behavior was not shown to break this probe.
+
+The previously labeled gaps remain: real second-principal denial, workspace
+type, full actual host schemas, native attachment byte import and exact failure,
+ChatGPT attachment retention/deletion, Work write/approval/import and skill
+availability, physical Android, and the unobserved replay cases. Some are
+unsupported-route limitations rather than necessary trials for a future
+explicitly accepted web/Classic plus external-upload route. That disposition
+and owner acceptance have not occurred; complete Issue #13 acceptance remains
+**BLOCKED**. Earlier unmet-review statements describe their dated checkpoints;
+this completed review supersedes that specific gate only.
+
+The parent Zcode session attempted an additional memory closeout after returning
+the review. The coordinator stopped that extra parent work; it is not part of
+the independent child's read-only review. The author worktree stayed clean
+before these coordinator documentation edits, and the primary checkout retained
+only its existing untracked plan. No memory-write success is asserted. The
+service/tunnel stay offline; PR #39 stays **draft/open** and #13 **open**.
+
+Coordinator follow-up verification passed on November 2: the three changed
+files were read back, the new JSON and review dispositions validated, all
+**23 relative file links** in the two edited Markdown files resolved, credential
+patterns and `git diff --check` passed, the immutable fixture digest matched,
+and all **16 runtime/test/manifest hashes** were unchanged. TCP connections to
+both known probe/tunnel ports were refused. Runtime tests were not rerun for
+this documentation-only correction; historical 35/35 and 4/4 results retain
+their original source bindings. New-head hosted CI is a separate publication
+gate and must be verified on the final PR head.
 
 ## 7. Current primary references (retrieved 2026-10-23; OpenAI plugin/auth/file/connection pages rechecked 2026-10-29)
 
