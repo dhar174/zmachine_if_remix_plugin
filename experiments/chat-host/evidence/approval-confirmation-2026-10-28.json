@@ -1,0 +1,46 @@
+{
+  "recorded": "2026-10-28",
+  "evidence_layer": "LOCAL_DETERMINISTIC_AND_OFFICIAL_PROTOCOL_SYNTHETIC_ONLY",
+  "source_commit": "188e7b3eb8e037b1ad175c507e244954378b2b7e",
+  "tested_source_sha256": {
+    "src/auth.js": "39b3f802a0fdbe04451665df75d374d271b611c4ffaab52d7781a6033688c83e",
+    "src/cli.js": "40d0b86d825823f79aadcf0d0440910425277fb084dcc11970c06df9516ceb20",
+    "src/service.js": "4660a61945886cd186f5f78987a0321d2ec28504540cea6307031a192edc8a00",
+    "src/model.js": "2f8ad627399eba92616fa65e832c9f437b200fec9a260997f5ba7e7a0d0240a0",
+    "src/store.js": "7de81507f9cfc46de3d45767ad4392e683d091cc3165a2e127efa5bf1705da4a",
+    "src/host-file.js": "4f24878e2576b98dec35644c25c8cd71f47ecedf93baee8302437a4ca3042830",
+    "test/auth-diagnostics.test.js": "78b700affdfe576c424d45ca3c437db033d4995f618322c212d6a6f6f42b4760",
+    "test/concurrency.test.js": "78a796900d3490dfd383108bf082b875122022f54cbd3030c6b3eeae1f21c71a",
+    "test/protocol.test.js": "991674bf6123325525e746c0848a386eadb9b9ef2bd91a0fb724f35402a57f55",
+    "test/security.test.js": "7eb335ae8cccdbe7ab77d8e17fc4e05d7fec1a277296068b5e4d878f984583ac",
+    "test/store.test.js": "bb5d758a2aaae8db0fead75a566df21264ffdbfec1e23781982a170386d22302",
+    "test/helpers.js": "a45c691e1acbf1b0e6ab18e92cc41abcb7c13c2d5aa5f62e5d5a66bc63af1079",
+    "test/probe-data.js": "b9e88c5ffa34af384187f8a957f9e056378e5ba7d74ca0e8725706eae6b448ed",
+    "test/restart-child.js": "81aabd3b01913f20df6fcd98e79085d8a386585c333a64012aa5325e56a6e844",
+    "package.json": "92299aeafb5f386366b60dd5f3cea17af42fb01f4959b7a142eb2d6526057c52",
+    "package-lock.json": "fe60029b90cd078490b74ec77f3df3a0e7234d1291a70d8fd53c1ed66c33d979"
+  },
+  "commands": [
+    {
+      "exit_code": 0,
+      "syntax_checks": 6,
+      "command": "npm run check"
+    },
+    {
+      "exit_code": 0,
+      "passed": 32,
+      "skipped": 0,
+      "tests": 32,
+      "command": "npm test",
+      "failed": 0,
+      "duration_ms": 20576.1977
+    }
+  ],
+  "live_browser_fix": "NOT RUN at this source checkpoint",
+  "notes": [
+    "Focused regression failed before HTML change, then passed.",
+    "Three official protocol tests included; separate protocol suite also passed 3/3.",
+    "SQLite ExperimentalWarning informational.",
+    "Earlier inaccessible output is not counted as verification."
+  ]
+}

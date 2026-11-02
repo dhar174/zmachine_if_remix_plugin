@@ -1,0 +1,70 @@
+{
+  "recorded": "2026-11-02",
+  "evidence_layer": "INDEPENDENT_READ_ONLY_SOURCE_AND_RETAINED_EVIDENCE_REVIEW",
+  "reviewed_head": "d35c9bf0183a2db4d77a14f915ecaf2c56dab6c7",
+  "base": "73e7a6ebc86263201e7a2cdcc21ddd05304e5506",
+  "runtime_source": "89268050bfcb0644b1223c8b306273dc903c5a18",
+  "reviewer": {
+    "application": "Zcode GUI",
+    "application_version": "3.16.3.8992",
+    "project": "zmachine_if_remix_plugin",
+    "profile": "zmachine-g1c-reviewer",
+    "child_title": "Independent PR #39 G1-C review",
+    "advertised_provider": "Z.ai API",
+    "advertised_model": "GLM-5.3-Flash",
+    "reasoning": "Max",
+    "configured_and_GUI_verified_inspection_tools": ["Read", "Grep", "Glob"],
+    "child_disclosed_additional_tool": "RespondToCoordinator: report-return channel only; no file, command, network or memory capability",
+    "child_reported_inspection_tools_used": ["Read", "Grep", "Glob"],
+    "commands_executed_by_reviewer": "NOT_RUN",
+    "writes_or_network_or_memory_by_child": "NONE_REPORTED",
+    "formal_GitHub_review": "NOT_SUBMITTED",
+    "private_final_report_sha256": "56f2dc7b5ad413e798624bed646707f1cf5e840373c17de04fb40232db48b9fd"
+  },
+  "result": "NO_MERGE_BLOCKING_CODE_DEFECT_FOUND_IN_INSPECTED_MATERIAL",
+  "scope": "Probe source, tests, manifest/lock, workflow, runbook, template, retained receipts, evidence report and owning contracts; no fixture execution",
+  "coordinator_verified_reviewed_changed_path_count": 33,
+  "review_count_correction": "The report said 34 paths; git and the supplied changed-files packet contain 33. This counting error does not establish an additional changed file.",
+  "documentation_findings": [
+    {
+      "id": "R1",
+      "location": "docs/evidence/g1-chat-host.md section 2; experiments/chat-host/README.md opening",
+      "finding": "The retained local protocol receipt is the initial six-tool v0.1.0 catalog, while the current service has seven tools.",
+      "disposition": "CORRECTED: label historical catalog and point to v0.1.1 recovery receipt for the seventh definition and protocol assertions. A complete retained seven-tool wire catalog and actual host JSON schemas remain distinct gaps."
+    },
+    {
+      "id": "R2",
+      "location": "experiments/chat-host/README.md receipt-recovery paragraph",
+      "finding": "Dedicated 4/4 protocol result predates the CLI-only version correction; final 35/35 covers source 8926805 and includes those cases.",
+      "disposition": "CORRECTED: distinguish the source checkpoints explicitly; do not relabel historical tests as fresh."
+    }
+  ],
+  "optional_recommendations": [
+    {"location": "src/service.js:88-95,209-214", "item": "Bind native-file consent to server-derived URL/origin as well as file_id before enabling the currently disabled route.", "disposition": "DEFERRED; native fetch remains disabled; exact fixture digest still required"},
+    {"location": "src/service.js:100-144,228-229", "item": "Consider an explicit GET MCP SSE response lifetime bound.", "disposition": "DEFERRED; no code change or new response-lifetime claim"},
+    {"location": "src/store.js:47-48", "item": "Consider expiry rejection when returning an idempotently prepared candidate.", "disposition": "DEFERRED; downstream approval/commit checks fail closed"},
+    {"location": "src/service.js:141", "item": "Preserve duplicate headers if future SDK response behavior requires them.", "disposition": "DEFERRED; no observed current SDK failure"}
+  ],
+  "unchanged_issue_closeout_gaps": [
+    "Real second-principal denial NOT_RUN; synthetic denial is separate",
+    "Workspace type UNVERIFIED",
+    "Full actual host JSON schemas NOT_CAPTURED",
+    "Native attachment byte import BLOCKED; exact error and host retention/deletion UNVERIFIED",
+    "Work write/approval/import NOT_RUN and native cloud skill unavailable",
+    "Physical Android NOT_RUN",
+    "Cross-turn lost-reference retry and original Classic forward replay NOT_RUN or UNVERIFIED"
+  ],
+  "coordinator_followup": {
+    "runtime_test_manifest_hashes_reverified_unchanged": 16,
+    "documentation_checks": {"JSON_and_dispositions": "PASS", "relative_file_links": 23, "credential_patterns": "PASS", "git_diff_check": "PASS", "fixture_digest": "PASS", "offline_TCP_ports": [3213, 42111]},
+    "code_changes": false,
+    "runtime_tests_rerun": false,
+    "new_actual_ChatGPT_or_human_approval_or_import_or_device_trials": false,
+    "parent_extra_memory_closeout": "Stopped after child returned report; not part of independent child review; no memory-write success asserted",
+    "substantive_fix_re_review": "NOT_REQUIRED: documentation corrections only; code remains exactly as reviewed",
+    "service_and_tunnel": "OFFLINE_REQUIRED",
+    "complete_Issue_13_acceptance": "BLOCKED",
+    "PR_39": "KEEP_DRAFT_OPEN",
+    "issue_13": "KEEP_OPEN"
+  }
+}

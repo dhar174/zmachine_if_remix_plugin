@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "zirp-probe": {
+      "type": "streamable-http",
+      "url": "https://probe.invalid/mcp",
+      "extensions": { "com.openai": { "auth": { "type": "oauth" } } }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "zirp-chat-host-probe",
+  "version": "0.1.0",
+  "description": "Uninstalled G1-C synthetic probe workflow; requires an explicitly authorized MCP connection."
+}

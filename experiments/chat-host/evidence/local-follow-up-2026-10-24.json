@@ -1,0 +1,82 @@
+{
+  "recorded": "2026-10-24",
+  "evidence_layer": "LOCAL_DETERMINISTIC_AND_OFFICIAL_PROTOCOL_SYNTHETIC_ONLY",
+  "source_base": "c09b073891764b5e4e4cfcd72a6b9bcd96996148",
+  "source_commit": "98a9751863f8ef872b10398f18c2566cd8e22ba4",
+  "tested_source_sha256": {
+    "src/auth.js": "39b3f802a0fdbe04451665df75d374d271b611c4ffaab52d7781a6033688c83e",
+    "src/cli.js": "40d0b86d825823f79aadcf0d0440910425277fb084dcc11970c06df9516ceb20",
+    "src/service.js": "1d8e1eb828d514d4b774847bdae3d93b9df531f3af90bde2e7fe63f2e3284448",
+    "src/model.js": "2f8ad627399eba92616fa65e832c9f437b200fec9a260997f5ba7e7a0d0240a0",
+    "src/store.js": "7de81507f9cfc46de3d45767ad4392e683d091cc3165a2e127efa5bf1705da4a",
+    "src/host-file.js": "4f24878e2576b98dec35644c25c8cd71f47ecedf93baee8302437a4ca3042830",
+    "test/auth-diagnostics.test.js": "78b700affdfe576c424d45ca3c437db033d4995f618322c212d6a6f6f42b4760",
+    "test/concurrency.test.js": "b6cd9b9b2e951929b1e316428eaca0f5ddda95c242ae78c74c8cba4fd0f5cb2f",
+    "test/protocol.test.js": "e337518d88b62860d28a86c4b846a5fdb43052717ac967a021a37a14d06f8d2b",
+    "test/security.test.js": "456b2921e240d2facf584848e39fa05d2f2219cadd30d0f097196d830a353832",
+    "test/store.test.js": "bb5d758a2aaae8db0fead75a566df21264ffdbfec1e23781982a170386d22302",
+    "test/helpers.js": "a45c691e1acbf1b0e6ab18e92cc41abcb7c13c2d5aa5f62e5d5a66bc63af1079",
+    "test/probe-data.js": "b9e88c5ffa34af384187f8a957f9e056378e5ba7d74ca0e8725706eae6b448ed",
+    "test/restart-child.js": "81aabd3b01913f20df6fcd98e79085d8a386585c333a64012aa5325e56a6e844",
+    "package.json": "92299aeafb5f386366b60dd5f3cea17af42fb01f4959b7a142eb2d6526057c52",
+    "package-lock.json": "fe60029b90cd078490b74ec77f3df3a0e7234d1291a70d8fd53c1ed66c33d979"
+  },
+  "node": "v24.13.0",
+  "npm": "11.12.1",
+  "sdk": {
+    "server": "2.4.0",
+    "client": "2.4.0",
+    "core": "2.4.0",
+    "zod": "4.6.7",
+    "jose": "6.2.13"
+  },
+  "syntax": {
+    "command": "npm run check",
+    "checks": 6,
+    "exit_code": 0
+  },
+  "suite": {
+    "command": "node --test --test-concurrency=1 test/auth-diagnostics.test.js test/concurrency.test.js test/protocol.test.js test/security.test.js test/store.test.js",
+    "tests": 31,
+    "pass": 31,
+    "fail": 0,
+    "skipped": 0,
+    "exit_code": 0,
+    "duration_ms": 21423.9291
+  },
+  "protocol": {
+    "command": "npm run test:protocol",
+    "tests": 3,
+    "pass": 3,
+    "fail": 0,
+    "skipped": 0,
+    "exit_code": 0,
+    "duration_ms_approx": 1230
+  },
+  "warning": "Node SQLite ExperimentalWarning",
+  "prior_failures": [
+    {
+      "tests": 30,
+      "pass": 29,
+      "fail": 1,
+      "duration_ms_approx": 151000,
+      "reason": "recovery child timed out at original 5000ms; isolated reproduction ETIMEDOUT/SIGTERM at 5040ms"
+    },
+    {
+      "tests": 30,
+      "pass": 28,
+      "fail": 2,
+      "duration_ms_approx": 188000,
+      "reasons": [
+        "legacy protocol fetch failed: ECONNRESET",
+        "recovery child timed out at revised 15000ms; ETIMEDOUT/SIGTERM"
+      ]
+    }
+  ],
+  "correction": "Recovery child imports shared synthetic data without loading MCP/JOSE; test-only child budget 15000ms. Production transport/body limits unchanged.",
+  "raw_stdout_retained": false,
+  "verification_basis": "Observed completed terminal tool output; summary preserved here. Source unchanged after this passing suite.",
+  "current_git_diff_check": "PASS",
+  "human_approval": false,
+  "chatgpt": false
+}
