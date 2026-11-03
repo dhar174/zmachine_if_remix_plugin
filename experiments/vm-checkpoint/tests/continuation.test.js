@@ -296,7 +296,9 @@ test('a quetzal whose validated memory image is not the applied image rejects wi
 
     // A FORM size field inconsistent with the buffer would fault the
     // vendored parser with an unstructured error before it ever reached a
-    // stable code -- rejected at validation instead (review F7).
+    // stable code -- rejected at validation instead (review F7).  Genuine
+    // save_file output always has FORM area == buffer length exactly, so
+    // both directions of inconsistency reject without over-rejection.
     const badForm = mutatePayload(env, () => {});
     {
         const q = Buffer.from(badForm.payload.quetzalB64, 'base64');
@@ -305,6 +307,35 @@ test('a quetzal whose validated memory image is not the applied image rejects wi
     }
     badForm.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badForm.payload));
     expectCode(() => validateEnvelope(badForm, EXPECTED_STORY), 'E_STRUCTURE');
+    const trailing = mutatePayload(env, () => {});
+    {
+        const q = Buffer.from(trailing.payload.quetzalB64, 'base64');
+        // Appended bytes beyond the declared area are invisible to the
+        // writer but were the raw material for the F8 straddler exploit;
+        // they must not be tolerated.
+        const padded = Buffer.concat([q, Buffer.alloc(8)]);
+        trailing.payload.quetzalB64 = padded.toString('base64');
+    }
+    trailing.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(trailing.payload));
+    expectCode(() => validateEnvelope(trailing, EXPECTED_STORY), 'E_STRUCTURE');
+
+    // Straddling chunk header (review F8): a len-0 chunk landing the next
+    // offset one byte before the declared area end leaves a header the
+    // vendored parser would read ACROSS the area end while a skip-bounded
+    // walk would never see it -- validation must refuse it, never skip it,
+    // or validation and restore could disagree about which memory image is
+    // applied.
+    const straddler = mutatePayload(env, () => {});
+    {
+        const q = Buffer.from(straddler.payload.quetzalB64, 'base64');
+        const filler = Buffer.alloc(8);
+        filler.write('ZZZZ', 0, 'ascii'); // len-0 chunk ends exactly 1 byte before the area end
+        const combined = Buffer.concat([q, filler, Buffer.alloc(1)]);
+        combined.writeUInt32BE(combined.length - 8, 4);
+        straddler.payload.quetzalB64 = combined.toString('base64');
+    }
+    straddler.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(straddler.payload));
+    expectCode(() => validateEnvelope(straddler, EXPECTED_STORY), 'E_STRUCTURE');
 });
 
 // ---------------------------------------------------------------------------
@@ -406,6 +437,19 @@ test('honest-digest continuation-span mutations are rejected by the ordinary chi
         e.payload.quetzalB64 = combined.toString('base64');
         variants['double-umem'] = honest(e);
     }
+    {
+        // Review F8: a straddling chunk header -- validation must refuse
+        // (never skip) a header the vendored parser would read across the
+        // declared FORM area end.
+        const e = JSON.parse(JSON.stringify(baseline.envelope));
+        const q = Buffer.from(e.payload.quetzalB64, 'base64');
+        const filler = Buffer.alloc(8);
+        filler.write('ZZZZ', 0, 'ascii');
+        const combined = Buffer.concat([q, filler, Buffer.alloc(1)]);
+        combined.writeUInt32BE(combined.length - 8, 4);
+        e.payload.quetzalB64 = combined.toString('base64');
+        variants['straddler-header'] = honest(e);
+    }
 
     const expectedCodes = {
         'bufaddr-ffffff': 'E_BOUNDARY',
@@ -417,6 +461,7 @@ test('honest-digest continuation-span mutations are rejected by the ordinary chi
         'static-base-forge': 'E_STRUCTURE',
         'version-forge': 'E_STRUCTURE',
         'double-umem': 'E_STRUCTURE',
+        'straddler-header': 'E_STRUCTURE',
     };
 
     const childProcesses = [];

@@ -53,9 +53,14 @@ honest-digest envelope pointing `bufaddr`/`parseaddr` at 0xFFFFFF used to
 restore `ready:true` and fault on the first input — the continuation's
 text-buffer and parse-table writes must fit writable dynamic memory
 `[0x40, static base)`, with the buffer length tied to the checkpointed
-capacity byte and `parseaddr = 0` kept as the no-tokenise sentinel;
-out-of-range starts, near-end overflowing spans, and truncated tables are
-rejected `E_BOUNDARY`, capacity/header inconsistencies `E_STRUCTURE`),
+capacity byte, `parseaddr = 0` kept as the no-tokenise sentinel, and
+`parseaddr` barred from the text continuation write span; out-of-range
+starts, near-end overflowing spans, and truncated tables are rejected
+`E_BOUNDARY`, capacity/header inconsistencies `E_STRUCTURE`), quetzal
+container validation that makes the validated memory image the image
+restore actually applies (FORM area must equal the buffer exactly — no
+trailing bytes — chunk headers may not straddle the declared area, and
+compressed or multiple memory chunks are refused; `E_STRUCTURE`),
 cross-section transcript↔window consistency after the digest verifies**, and
 **rejection of unseeded RNG payloads — `E_RNG`**); a fresh
 adapter runs its normal startup so windows/origram/stack exist, then

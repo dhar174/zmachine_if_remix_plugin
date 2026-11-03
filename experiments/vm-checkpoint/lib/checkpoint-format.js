@@ -268,32 +268,44 @@ function validateEnvelope(envelope, expected) {
 // cross-checked against the story header.
 // ---------------------------------------------------------------------------
 
-// Extract the UMem chunk bytes from the payload quetzal.  Mirrors the exact
-// walk of the Quetzal parser restore consumes (src/common/file.js: IFF type
-// check, chunks walked only within the DECLARED FORM area
-// [12, formSize + 8), chunk data required to fit it, odd lengths padded) plus
-// format-specific refusals, so the validated memory image IS the image
-// restore applies: a declared FORM area extending past the buffer (which
-// would fault the vendored parser with an unstructured RangeError), an
-// out-of-range chunk header, a compressed CMem memory chunk, MULTIPLE memory
-// chunks (the vendored parser keeps the last CMem/UMem chunk -- a benign
-// first UMem with a hostile second one would otherwise validate one image
-// and restore another, restoring the post-ready fault #41 closes), and a
-// missing UMem chunk all reject E_STRUCTURE.  Returns a Uint8Array VIEW into
-// the decoded quetzal Buffer -- hostile-envelope tests may mutate through it
-// and re-encode; validation itself only reads.
+// Extract the UMem chunk bytes from the payload quetzal.  Mirrors the walk
+// of the Quetzal parser restore consumes (src/common/file.js) with NO
+// divergence window, so the validated memory image IS the image restore
+// applies (review findings F1/F8): the declared FORM area must equal the
+// buffer exactly (genuine save_file output always does -- its writer sets
+// the FORM size to buffer length - 8 -- so this cannot over-reject genuine
+// captures, and it removes any trailing bytes the parser's straddling-
+// header window could otherwise read), the chunk walk uses the parser's own
+// loop condition (off < formEnd) so every offset the parser processes was
+// also processed here, a chunk header extending past the declared area (the
+// parser's straddling-header window) is rejected instead of skipped, chunk
+// data must fit the declared area (stricter than the parser's own quirky
+// bounds check -- we reject rather than mis-accept), and the walk must
+// consume the declared area exactly.  Format-specific refusals: a
+// compressed CMem memory chunk, MULTIPLE memory chunks (the vendored parser
+// keeps the last CMem/UMem chunk -- a benign first UMem with a hostile
+// second one would otherwise validate one image and restore another), and a
+// missing UMem chunk all reject E_STRUCTURE.  Returns a Uint8Array VIEW
+// into the decoded quetzal Buffer -- hostile-envelope tests may mutate
+// through it and re-encode; validation itself only reads.
 function quetzalUmem(quetzalB64) {
     const quetzal = Buffer.from(quetzalB64, 'base64');
     if (quetzal.length < 12 || quetzal.toString('ascii', 0, 4) !== 'FORM' || quetzal.toString('ascii', 8, 12) !== 'IFZS') {
-        throw new CheckpointError('E_STRUCTURE', 'payload quetzal is not a Quetzal FORM/IFZS surface');
+        throw new CheckpointError('E_STRUCTURE', 'payload quetzal is not a Quetzal FORM/IFZS container');
     }
     const formEnd = quetzal.readUInt32BE(4) + 8;
-    if (formEnd > quetzal.length) {
-        throw new CheckpointError('E_STRUCTURE', 'payload quetzal declares a FORM area (' + formEnd + ' bytes) extending past the buffer (' + quetzal.length + ' bytes)');
+    if (formEnd !== quetzal.length) {
+        throw new CheckpointError('E_STRUCTURE', 'payload quetzal declares a FORM area of ' + (formEnd - 8) + ' bytes but carries ' + quetzal.length + ' (must match exactly, as save_file output always does)');
     }
     let off = 12;
     let umem = null;
-    while (off + 8 <= formEnd) {
+    while (off < formEnd) {
+        if (off + 8 > formEnd) {
+            // The parser would read this straddling header across the area
+            // end (and past the buffer, since the area equals the buffer
+            // length); validation must refuse it, never skip it.
+            throw new CheckpointError('E_STRUCTURE', 'payload quetzal has an IFF chunk header at offset ' + off + ' extending past the declared FORM area');
+        }
         const type = quetzal.toString('ascii', off, off + 4);
         const len = quetzal.readUInt32BE(off + 4);
         if (off + 8 + len > formEnd) {
@@ -309,6 +321,9 @@ function quetzalUmem(quetzalB64) {
             throw new CheckpointError('E_STRUCTURE', 'compressed CMem memory chunk: not the uncompressed autosave image the checkpoint format captures');
         }
         off += 8 + len + (len % 2);
+    }
+    if (off !== formEnd) {
+        throw new CheckpointError('E_STRUCTURE', 'payload quetzal chunk walk overruns the declared FORM area (ended at ' + off + ' of ' + formEnd + ')');
     }
     if (umem === null) {
         throw new CheckpointError('E_STRUCTURE', 'payload quetzal carries no UMem chunk');
