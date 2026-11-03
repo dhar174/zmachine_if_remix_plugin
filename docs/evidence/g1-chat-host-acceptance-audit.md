@@ -69,7 +69,7 @@ acceptance case passed.
 | Actual ChatGPT web Chat | PASS bounded forward/inverse, readback, stale/unapproved rejection and same-turn inverse replay | Cross-turn retry lost the consumed reference and is NOT RUN; changed-payload reuse was denied. [Web trace](../../experiments/chat-host/evidence/live-web-2026-10-28.json). |
 | Actual Classic Chat | PASS bounded read/stage/negative writes, personally approved forward and later personal inverse; latest inverse replay returned the same receipt | Initial forward narration incorrectly said no commit: FAIL, reconciled by state/receipt reads. Expired handoffs and delegated cleanup/setup remain distinct. [Classic continuation](../../experiments/chat-host/evidence/live-classic-2026-10-29.json). |
 | Actual human approval | PASS personally approved exact forward/inverse on web and Classic; separately approved restart-only candidate invalidated before expiry | Does not qualify simulated grants, delegated clicks, host Allow once, production leases or a new proposed edit. |
-| Actual fixture import | PASS real external bytes, measured metadata, restart persistence, deletion and old-handle denial | Native service-byte import BLOCKED; second real principal NOT RUN. Never execute the fixture. |
+| Actual fixture import | PASS real external bytes, measured metadata, restart persistence, deletion and old-handle denial | Native service-byte import BLOCKED; live cross-owner import-handle denial NOT RUN. Never execute the fixture. |
 | Actual restart/reconnect | PASS retained committed state/receipts/import and invalidated pending candidates/grants, including active human grant before expiry | One local service process only; not combined VM restore or production crash transactions. |
 | Actual web Work skill | PASS standalone cloud skill plus explicitly selected existing app for state/receipt reads | Initial missing link_id failed; complete packaged-plugin installation and skill-driven edit lifecycle NOT RUN. [Remaining-check receipt](../../experiments/chat-host/evidence/remaining-checks-2026-10-29.json). |
 | Actual native Work | PASS state/receipt reads; cloud skill unavailable in tested catalog | Writes, personal approvals and import NOT RUN; not in the approved write-qualified surface set. |
@@ -104,15 +104,37 @@ does not make its other proposals owner-approved.
 | A42 | Probe exposes no export/publication/arbitrary-tool capability; malicious fictional instruction did not authorize it in the bounded trial | Cannot constrain every unrelated app installed in ChatGPT. No general host-wide disclosure-prevention claim. |
 | S24 | Failures, unsupported surfaces and evidence layers remain explicit | Audit is a proposal; no planned test, model narration, source file or green CI is promoted to runtime proof. |
 
-The following table tracks acceptance for the owner-approved bounded route. R1–R3 remain required observations.
+The following table tracks acceptance for the owner-approved bounded route. The table records which observations are complete and which still need evidence.
 
 | ID | Current status / why it matters | Smallest next action after explicit authorization |
 | --- | --- | --- |
-| R1: host tool definitions | Full actual ChatGPT JSON schemas NOT CAPTURED. Seven names/descriptions and Write 3 / Read 4 were observed; local SDK schemas are a separate layer. | First investigate a supported cached metadata/export or working client diagnostic view. Retain all seven exact host definitions and compare names, fields, strictness, annotations and scopes with the pinned service. If a fresh connection is necessary, request a bounded restart window; no backend bypass or paid Playground substitution. |
-| R2: real second identity | NOT RUN. Single-owner Auth0 operation plus synthetic wrong-owner tests does not establish another real account's denial. | Owner designates an existing second test identity or approves a concrete new disposable identity setup. Keep the service owner allowlist unchanged. Attempt first-owner session/import access with that identity; retain redacted denial and unchanged first-owner state. If the provider itself refuses a token, record that layer separately: it is not service-side denial. |
+| R1: host tool definitions | PARTIAL. ChatGPT showed seven names and descriptions (Write 3 / Read 4). Full host schemas, strictness, annotations and scopes were not captured. | The tested views and plugin ZIP lacked these fields. Capture all seven definitions using a supported ChatGPT diagnostic view, or obtain an explicit owner decision on accepting the documented limit. |
+| R2: real second identity | PASS at the service entry point. Auth0 issued a fresh probe access token to a second real identity. The probe returned HTTP 401 and recorded `OWNER_NOT_ALLOWED`. Owner reads matched before and after. | Live loopback evidence recorded below. Cross-owner object access remains covered by deterministic tests. |
 | R3: workspace identity | Selected tunnel/workspace UUID association matched; actual workspace type UNVERIFIED. Personal plugin placement is insufficient. | Inspect the real workspace controls read-only and record the workspace type and association privately, publishing a redacted fact. If unavailable, retain UNVERIFIED and obtain an explicit disposition before claiming an identified account/workspace selection. |
 | R4: route and resource decision | Owner approved the bounded section 7 route on November 2. | Production hosting, language and budget remain undecided. |
-| R5: audit review and closeout | Independent audit review completed at a413eec. Issue #13 is OPEN. | Resolve R1–R3, review the resulting evidence and obtain separate closure authorization. |
+| R5: audit review and closeout | Independent audit review completed at a413eec. Issue #13 is OPEN. | Resolve outstanding evidence in R1 and R3, review the resulting evidence and obtain separate closure authorization. |
+
+On November 3, 2026, the pinned 0.1.1 service ran on loopback with disposable
+synthetic data and the unchanged single-owner allowlist. The operator signed
+in separately as the owner and a second Auth0 database user through the
+Native test app using authorization code with S256 PKCE and user-delegated
+`probe:read`. The second user's access token produced HTTP 401 and the
+service's MCP authentication diagnostic was `OWNER_NOT_ALLOWED`. The owner's
+authenticated reads matched on session, label and revision (0 before and
+after). The redacted runner receipt reported PASS and an unchanged owner
+configuration. The disposable directory was removed, all four known local
+ports refused connections, and GitHub reported #13 OPEN.
+
+On November 2, the cached ChatGPT Apps dialog exposed the seven names and
+descriptions but no full definitions. During the bounded live window the
+tunnel doctor and local endpoint passed their checks. The inspected ChatGPT
+views did not expose Refresh, and no new discovery was verified. The
+downloaded plugin ZIP contained only `.app.json` and
+`.codex-plugin/plugin.json`, with no input or output schemas. The
+[connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt)
+documents Refresh and a separate API Playground diagnostic path. Neither
+the exported archive nor a direct MCP client establishes the exact schema
+advertised inside the tested ChatGPT surface.
 
 For R2, the current service rejects a valid signed token whose subject is not
 allowlisted before accessing session state (`OWNER_NOT_ALLOWED`, returned as an
@@ -124,7 +146,7 @@ denial also needs a newly authorized disposable import if no handle remains.
 
 ## 5. Limits that need disclosure, not a new green demo
 
-The approved route carries these limits. The observations in R1–R3 remain required.
+The approved route carries these limits. The outstanding observations are tracked in the acceptance table.
 
 - **Native attachment import:** excluded from the bounded target until a valid
   supported host file object, origin/ownership/expiry controls and actual bytes
@@ -201,11 +223,10 @@ On November 2, the owner explicitly approved the following bounded route in this
 > production hosting/language/budget, authorize a restart or credential, approve
 > D38/D39, or start #14.
 
-The decision selects the target for completing G1-C. R1–R3 remain open. No new timed approval
+The decision selects the target for completing G1-C. R2 is verified at the service entry point. R1 remains incomplete. No new timed approval
 handoff is scheduled. If the owner later authorizes live R1/R2 work, first prepare
 one compact run plan and all non-expiring material. Ask only for the actual
-identity/credential or personal action required, with safe local input. Current
-instructions require staying offline, so those dependent trials remain blocked.
+identity/credential or personal action required, with safe local input. The probe and tunnel are offline after the bounded trials.
 
 [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) and its
 [#40](https://github.com/dhar174/zmachine_if_remix_plugin/issues/40) checkpoint
