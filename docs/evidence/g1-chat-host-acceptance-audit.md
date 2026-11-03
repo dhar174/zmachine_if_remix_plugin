@@ -110,9 +110,9 @@ The following table tracks acceptance for the owner-approved bounded route. The 
 | --- | --- | --- |
 | R1: host tool definitions | OWNER ACCEPTED LIMIT (2026-11-03). ChatGPT showed seven names and descriptions (Write 3 / Read 4). Full host schemas, strictness, annotations and scopes were not captured. | The owner accepted the observed catalog for this bounded feasibility probe. Full host definitions remain unverified. |
 | R2: real second identity | PASS at the service entry point. Auth0 issued a fresh probe access token to a second real identity. The probe returned HTTP 401 and recorded `OWNER_NOT_ALLOWED`. Owner reads matched before and after. | Live loopback evidence recorded below. Cross-owner object access remains covered by deterministic tests. |
-| R3: workspace identity | Selected tunnel/workspace UUID association matched; actual workspace type UNVERIFIED. Personal plugin placement is insufficient. | Inspect the real workspace controls read-only and record the workspace type and association privately, publishing a redacted fact. If unavailable, retain UNVERIFIED and obtain an explicit disposition before claiming an identified account/workspace selection. |
+| R3: workspace identity | PASS for the observed route. The signed-in ChatGPT profile showed Personal account on November 2 in the browser context that showed the existing probe. | The October 29 redacted receipt separately records that the configured tunnel matched and its selected workspace UUID matched the fresh skill-draft account context. The November 2 observation supplies the account type. |
 | R4: route and resource decision | Owner approved the bounded section 7 route on November 2. | Production hosting, language and budget remain undecided. |
-| R5: audit review and closeout | Independent audit review completed at a413eec. Issue #13 is OPEN. | Verify and record R3, review the resulting evidence and obtain separate closure authorization. |
+| R5: audit review and closeout | Independent audit review completed at a413eec. Issue #13 is OPEN. | Review the resulting evidence and obtain separate closure authorization. |
 
 On November 3, 2026, the pinned 0.1.1 service ran on loopback with disposable
 synthetic data and the unchanged single-owner allowlist. The operator signed
