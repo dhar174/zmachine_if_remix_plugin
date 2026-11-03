@@ -1,7 +1,9 @@
 'use strict';
 // ==============================================================================
 // continuation.test.js -- read-continuation address/span validation (Issue #41,
-// A34).
+// A34), including the review-finding constructions (validated image must be
+// the applied image; parseaddr must lie outside the text continuation write
+// span).
 // ------------------------------------------------------------------------------
 // The pending read's continuation writes (typed text, parse-table entries)
 // land in VM memory only when input arrives -- after ready:true -- so a
@@ -237,6 +239,74 @@ test('a checkpointed header disagreeing with the trusted story bytes rejects wit
     assert.strictEqual(validateEnvelope(m, EXPECTED), true);
 });
 
+test('a parseaddr inside the text-buffer continuation write span rejects with E_BOUNDARY (review F2)', () => {
+    const env = capturedLineEnvelope();
+    const { bufaddr } = layout(env);
+    // Inside [bufaddr+1, bufaddr+1+bufferLen]: handle_line_input writes the
+    // response there BEFORE tokenise re-reads the parse capacity byte, so
+    // the validated capacity would not be the effective capacity.
+    const m = mutatePayload(env, (p) => { p.readData.parseaddr = bufaddr + 2; });
+    expectCode(() => validateEnvelope(m, EXPECTED_STORY), 'E_BOUNDARY');
+    // The one overlap position that stays safe: parseaddr = bufaddr names
+    // the text buffer's own capacity byte, which the text write never
+    // overwrites -- the validated capacity stays the effective one.
+    const boundaryCase = mutatePayload(env, (p) => { p.readData.parseaddr = bufaddr; });
+    assert.strictEqual(validateEnvelope(boundaryCase, EXPECTED_STORY), true, 'parseaddr = bufaddr (the capacity byte itself) is the modeled-safe overlap boundary');
+});
+
+test('a quetzal whose validated memory image is not the applied image rejects with E_STRUCTURE (review F1/F7)', () => {
+    const env = capturedLineEnvelope();
+    const { staticBase } = layout(env);
+
+    // Two UMem chunks: the vendored parser keeps the LAST CMem/UMem chunk,
+    // so a benign first image with a hostile second one would validate one
+    // image and restore another.
+    const doubleUmem = mutatePayload(env, () => {});
+    {
+        const q = Buffer.from(doubleUmem.payload.quetzalB64, 'base64');
+        const chunk = Buffer.alloc(8 + staticBase + (staticBase % 2));
+        chunk.write('UMem', 0, 'ascii');
+        chunk.writeUInt32BE(staticBase, 4);
+        // Hostile second image: everything-zero dynamic memory -- its header
+        // would not even parse as a Z-machine (this is rejected by the
+        // multiple-chunk rule before its contents matter).
+        chunk.fill(0, 8);
+        const combined = Buffer.concat([q, chunk]);
+        combined.writeUInt32BE(combined.length - 8, 4);
+        doubleUmem.payload.quetzalB64 = combined.toString('base64');
+    }
+    doubleUmem.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(doubleUmem.payload));
+    expectCode(() => validateEnvelope(doubleUmem, EXPECTED_STORY), 'E_STRUCTURE');
+
+    // A compressed CMem memory chunk is not the uncompressed autosave image
+    // (rename the UMem chunk in place -- same byte length).
+    const cmem = mutatePayload(env, () => {});
+    {
+        const q = Buffer.from(cmem.payload.quetzalB64, 'base64');
+        let off = 12;
+        while (off + 8 <= q.length) {
+            const type = q.toString('ascii', off, off + 4);
+            const len = q.readUInt32BE(off + 4);
+            if (type === 'UMem') { q.write('CMem', off, 'ascii'); cmem.payload.quetzalB64 = q.toString('base64'); break; }
+            off += 8 + len + (len % 2);
+        }
+    }
+    cmem.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(cmem.payload));
+    expectCode(() => validateEnvelope(cmem, EXPECTED_STORY), 'E_STRUCTURE');
+
+    // A FORM size field inconsistent with the buffer would fault the
+    // vendored parser with an unstructured error before it ever reached a
+    // stable code -- rejected at validation instead (review F7).
+    const badForm = mutatePayload(env, () => {});
+    {
+        const q = Buffer.from(badForm.payload.quetzalB64, 'base64');
+        q.writeUInt32BE(q.length - 7, 4); // declared area +1 past the buffer
+        badForm.payload.quetzalB64 = q.toString('base64');
+    }
+    badForm.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badForm.payload));
+    expectCode(() => validateEnvelope(badForm, EXPECTED_STORY), 'E_STRUCTURE');
+});
+
 // ---------------------------------------------------------------------------
 // Child-runner negatives: the ordinary restoring child (lib/runner.js, no
 // --selftest) must refuse BEFORE ready:true, exit 2 with the intended code,
@@ -312,15 +382,41 @@ test('honest-digest continuation-span mutations are rejected by the ordinary chi
         }
         variants['version-forge'] = honest(e);
     }
+    {
+        // Review F2: parseaddr inside the text continuation write span --
+        // the response inflates the parse capacity byte before tokenise
+        // reads it, so the validated span is not the effective one.
+        const e = JSON.parse(JSON.stringify(baseline.envelope));
+        e.payload.readData.parseaddr = e.payload.readData.bufaddr + 2;
+        variants['parse-in-text-span'] = honest(e);
+    }
+    {
+        // Review F1: a second UMem chunk -- the vendored parser keeps the
+        // last CMem/UMem chunk, so the validated image must equal the
+        // applied one; multiple memory chunks are refused outright.
+        const e = JSON.parse(JSON.stringify(baseline.envelope));
+        const { staticBase } = layout(e);
+        const q = Buffer.from(e.payload.quetzalB64, 'base64');
+        const chunk = Buffer.alloc(8 + staticBase + (staticBase % 2));
+        chunk.write('UMem', 0, 'ascii');
+        chunk.writeUInt32BE(staticBase, 4);
+        chunk.fill(0, 8);
+        const combined = Buffer.concat([q, chunk]);
+        combined.writeUInt32BE(combined.length - 8, 4);
+        e.payload.quetzalB64 = combined.toString('base64');
+        variants['double-umem'] = honest(e);
+    }
 
     const expectedCodes = {
         'bufaddr-ffffff': 'E_BOUNDARY',
         'parseaddr-ffffff': 'E_BOUNDARY',
         'bufaddr-near-end': 'E_BOUNDARY',
         'parse-table-overflow': 'E_BOUNDARY',
+        'parse-in-text-span': 'E_BOUNDARY',
         'capacity-mismatch': 'E_STRUCTURE',
         'static-base-forge': 'E_STRUCTURE',
         'version-forge': 'E_STRUCTURE',
+        'double-umem': 'E_STRUCTURE',
     };
 
     const childProcesses = [];

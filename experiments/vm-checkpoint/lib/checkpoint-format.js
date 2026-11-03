@@ -244,11 +244,15 @@ function validateEnvelope(envelope, expected) {
 //     checkpoint deliberately writes back verbatim -- buffer objects do not
 //     live there.
 //   - Line completion (v5+) writes the count byte at bufaddr+1 and up to
-//     `len` ZSCII bytes at bufaddr+2.., where len is clamped by glksim to
-//     payload.readData.buffer.length; tokenise() then writes the count byte
-//     at parseaddr+1 and up to memory[parseaddr] four-byte entries.  v1-4
-//     write the response plus its zero terminator from bufaddr+1, which
-//     yields the same bound under the capacity tie below.
+//     `len` bytes at bufaddr+2.., where len is clamped by glksim to
+//     payload.readData.buffer.length and is one byte per typed character
+//     for the ASCII input the supported surface uses (astral code points
+//     expand through the vendored UTF-16 text_to_zscii path -- an input-
+//     space residual of the vendored VM, identical live vs restored,
+//     outside the checkpoint-mutation classes); tokenise() then writes the
+//     count byte at parseaddr+1 and up to memory[parseaddr] four-byte
+//     entries.  v1-4 write the response plus its zero terminator from
+//     bufaddr+1, which yields the same bound under the capacity tie below.
 //   - readData.buffer was created as Array(memory[bufaddr]) at opcode issue
 //     (v1-4: Array(memory[bufaddr] - 1)), tying its length to the
 //     checkpointed capacity byte at bufaddr.  memory[parseaddr] (max words)
@@ -264,29 +268,52 @@ function validateEnvelope(envelope, expected) {
 // cross-checked against the story header.
 // ---------------------------------------------------------------------------
 
-// Extract the UMem chunk bytes from the payload quetzal.  Walks the IFF
-// chunk list (4-byte type + 4-byte big-endian length per chunk header, data
-// padded to even) bounded by the decoded buffer.  Returns a Uint8Array VIEW
-// into the decoded quetzal Buffer -- hostile-envelope tests may mutate
-// through it and re-encode; validation itself only reads.
+// Extract the UMem chunk bytes from the payload quetzal.  Mirrors the exact
+// walk of the Quetzal parser restore consumes (src/common/file.js: IFF type
+// check, chunks walked only within the DECLARED FORM area
+// [12, formSize + 8), chunk data required to fit it, odd lengths padded) plus
+// format-specific refusals, so the validated memory image IS the image
+// restore applies: a declared FORM area extending past the buffer (which
+// would fault the vendored parser with an unstructured RangeError), an
+// out-of-range chunk header, a compressed CMem memory chunk, MULTIPLE memory
+// chunks (the vendored parser keeps the last CMem/UMem chunk -- a benign
+// first UMem with a hostile second one would otherwise validate one image
+// and restore another, restoring the post-ready fault #41 closes), and a
+// missing UMem chunk all reject E_STRUCTURE.  Returns a Uint8Array VIEW into
+// the decoded quetzal Buffer -- hostile-envelope tests may mutate through it
+// and re-encode; validation itself only reads.
 function quetzalUmem(quetzalB64) {
     const quetzal = Buffer.from(quetzalB64, 'base64');
     if (quetzal.length < 12 || quetzal.toString('ascii', 0, 4) !== 'FORM' || quetzal.toString('ascii', 8, 12) !== 'IFZS') {
-        throw new CheckpointError('E_STRUCTURE', 'payload quetzal is not a Quetzal FORM/IFZS container');
+        throw new CheckpointError('E_STRUCTURE', 'payload quetzal is not a Quetzal FORM/IFZS surface');
+    }
+    const formEnd = quetzal.readUInt32BE(4) + 8;
+    if (formEnd > quetzal.length) {
+        throw new CheckpointError('E_STRUCTURE', 'payload quetzal declares a FORM area (' + formEnd + ' bytes) extending past the buffer (' + quetzal.length + ' bytes)');
     }
     let off = 12;
-    while (off + 8 <= quetzal.length) {
+    let umem = null;
+    while (off + 8 <= formEnd) {
         const type = quetzal.toString('ascii', off, off + 4);
         const len = quetzal.readUInt32BE(off + 4);
+        if (off + 8 + len > formEnd) {
+            throw new CheckpointError('E_STRUCTURE', 'payload quetzal declares an IFF chunk out of range (type ' + type + ' at offset ' + off + ')');
+        }
         if (type === 'UMem') {
-            if (off + 8 + len > quetzal.length) {
-                throw new CheckpointError('E_STRUCTURE', 'payload quetzal declares a truncated UMem chunk');
+            if (umem !== null) {
+                throw new CheckpointError('E_STRUCTURE', 'payload quetzal carries multiple memory chunks: the validated memory image must be the image restore applies');
             }
-            return quetzal.subarray(off + 8, off + 8 + len);
+            umem = quetzal.subarray(off + 8, off + 8 + len);
+        }
+        if (type === 'CMem') {
+            throw new CheckpointError('E_STRUCTURE', 'compressed CMem memory chunk: not the uncompressed autosave image the checkpoint format captures');
         }
         off += 8 + len + (len % 2);
     }
-    throw new CheckpointError('E_STRUCTURE', 'payload quetzal carries no UMem chunk');
+    if (umem === null) {
+        throw new CheckpointError('E_STRUCTURE', 'payload quetzal carries no UMem chunk');
+    }
+    return umem;
 }
 
 // The single rulebook for line-boundary continuation spans.  Codes: an
@@ -350,6 +377,18 @@ function validateReadContinuation(p, boundary, expected) {
     // maxWords <= UMem[parseaddr]:
     //   parseaddr >= 0x40 and parseaddr + 2 + 4*UMem[parseaddr] <= staticBase.
     if (rd.parseaddr !== 0) {
+        // The typed text is written BEFORE tokenise re-reads the parse
+        // capacity (io.js handle_line_input -> text.js tokenise): a parse
+        // table inside the text write span would have its capacity byte
+        // inflated by the response itself, so the validated capacity is not
+        // the effective capacity and the parse writes could exceed the
+        // validated span (review finding F2).  Genuine captures keep the
+        // buffer objects disjoint; parseaddr = bufaddr itself stays safe
+        // (the byte it names is the text buffer's own capacity byte, which
+        // the text write never overwrites).
+        if (rd.parseaddr >= rd.bufaddr + 1 && rd.parseaddr <= rd.bufaddr + 1 + rd.buffer.length) {
+            throw new CheckpointError('E_BOUNDARY', 'line readData.parseaddr (' + rd.parseaddr + ') lies inside the text-buffer continuation write span [bufaddr+1, bufaddr+1+' + rd.buffer.length + ']: the response would inflate the parse capacity byte before tokenise reads it');
+        }
         if (rd.parseaddr < 0x40 || rd.parseaddr >= staticBase) {
             throw new CheckpointError('E_BOUNDARY', 'line readData.parseaddr (' + rd.parseaddr + ') lies outside writable dynamic memory [0x40, ' + staticBase + ')');
         }
