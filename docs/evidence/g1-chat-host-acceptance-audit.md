@@ -108,11 +108,11 @@ The following table tracks acceptance for the owner-approved bounded route. The 
 
 | ID | Current status / why it matters | Smallest next action after explicit authorization |
 | --- | --- | --- |
-| R1: host tool definitions | PARTIAL. ChatGPT showed seven names and descriptions (Write 3 / Read 4). Full host schemas, strictness, annotations and scopes were not captured. | The tested views and plugin ZIP lacked these fields. Capture all seven definitions using a supported ChatGPT diagnostic view, or obtain an explicit owner decision on accepting the documented limit. |
+| R1: host tool definitions | OWNER ACCEPTED LIMIT (2026-11-03). ChatGPT showed seven names and descriptions (Write 3 / Read 4). Full host schemas, strictness, annotations and scopes were not captured. | The owner accepted the observed catalog for this bounded feasibility probe. Full host definitions remain unverified. |
 | R2: real second identity | PASS at the service entry point. Auth0 issued a fresh probe access token to a second real identity. The probe returned HTTP 401 and recorded `OWNER_NOT_ALLOWED`. Owner reads matched before and after. | Live loopback evidence recorded below. Cross-owner object access remains covered by deterministic tests. |
 | R3: workspace identity | Selected tunnel/workspace UUID association matched; actual workspace type UNVERIFIED. Personal plugin placement is insufficient. | Inspect the real workspace controls read-only and record the workspace type and association privately, publishing a redacted fact. If unavailable, retain UNVERIFIED and obtain an explicit disposition before claiming an identified account/workspace selection. |
 | R4: route and resource decision | Owner approved the bounded section 7 route on November 2. | Production hosting, language and budget remain undecided. |
-| R5: audit review and closeout | Independent audit review completed at a413eec. Issue #13 is OPEN. | Resolve outstanding evidence in R1 and R3, review the resulting evidence and obtain separate closure authorization. |
+| R5: audit review and closeout | Independent audit review completed at a413eec. Issue #13 is OPEN. | Verify and record R3, review the resulting evidence and obtain separate closure authorization. |
 
 On November 3, 2026, the pinned 0.1.1 service ran on loopback with disposable
 synthetic data and the unchanged single-owner allowlist. The operator signed
@@ -223,7 +223,7 @@ On November 2, the owner explicitly approved the following bounded route in this
 > production hosting/language/budget, authorize a restart or credential, approve
 > D38/D39, or start #14.
 
-The decision selects the target for completing G1-C. R2 is verified at the service entry point. R1 remains incomplete. No new timed approval
+The decision selects the target for completing G1-C. R2 is verified at the service entry point. The owner accepted the R1 evidence limit for this probe on November 3, 2026. Full host definitions remain unverified. No new timed approval
 handoff is scheduled. If the owner later authorizes live R1/R2 work, first prepare
 one compact run plan and all non-expiring material. Ask only for the actual
 identity/credential or personal action required, with safe local input. The probe and tunnel are offline after the bounded trials.
