@@ -165,7 +165,7 @@ function capabilityStatement() {
             interpreterHeaderFields: 'serialized (header block [0x00..0x40) written back verbatim after restore_file; update_header() recomputation is window-set-dependent and must not stand in for the source values)',
             rng: 'seeded mode only (xorshift seed serialized and re-applied after restore_file); unseeded capture and restore are REJECTED with E_RNG -- host Math.random state can be neither captured nor reconstructed (bridge section 8), and Issue #12 requires unsupported modes to fail explicitly',
             ioStreamsAndFlags: 'serialized (plain-data clone); the input stream must be keyboard (slot 0 = 0) and the memory-output-stream stack (slot 3) must be empty — pending output_stream 3 writes, file-backed transcript/command streams (mode 2 / open Glk references), and redirected input are rejected at capture and validation with E_STRUCTURE',
-            pendingInput: 'serialized (read_data + re-issued Glk request)',
+            pendingInput: 'serialized (read_data + re-issued Glk request); line-continuation buffer addresses and spans are validated against the checkpointed dynamic-memory layout (static base, buffer/parse capacity bytes, trusted story header) before any interpreter is constructed -- out-of-range or overflowing continuation spans are rejected with E_BOUNDARY, capacity inconsistencies with E_STRUCTURE (Issue #41)',
             windowTextAndCursor: 'serialized (main/upper/status window objects)',
             publishedTranscript: 'serialized (buffer + grid window text)',
             jittedCodeCache: 'reconstructed (rebuilt lazily per pc; never serialized)',
@@ -189,7 +189,10 @@ function capabilityStatement() {
 // constructed, so an invalid checkpoint cannot disturb an active baseline.
 // Returns the restored adapter (same interface as createIfvmsAdapter).
 function restoreCheckpoint(envelope, storyBytes, expected) {
-    validateEnvelope(envelope, expected);
+    // The trusted story bytes ride along with the expected identity so the
+    // continuation-span validation can cross-check the checkpointed header
+    // (version, static memory base) against the real story file header.
+    validateEnvelope(envelope, { ...expected, storyBytes });
 
     // The vendored ZVM mutates the story buffer in place: ZVM.prepare wraps
     // the given bytes in the live MemoryView (this.m) and every dynamic-memory

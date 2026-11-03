@@ -220,13 +220,12 @@ test('halted checkpoints must carry quit=true and no readData', () => {
     expectCode(() => validateEnvelope({ ...env, payload: { ...env.payload, readData: { routine: 0, storer: 0, time: 0 } } }, EXPECTED), 'E_STRUCTURE');
 });
 
-test('a checkpoint whose quetzal belongs to a different story is rejected by the VM identity check', () => {
-    // Build an envelope that PASSES envelope-level identity validation (it
-    // claims the loopstory digest and a recomputed honest digest) but whose
-    // quetzal IFhd belongs to the fixture.  restoreCheckpoint against the
-    // loopstory bytes must reject via restore_file's release/serial/checksum
-    // verification -- the second, VM-level identity gate behind the envelope
-    // digest.
+test('a checkpoint whose quetzal IFhd claims a different story is rejected by the VM identity gate', () => {
+    // Build an envelope that claims the loopstory digest and size with an
+    // honestly recomputed payload digest: the envelope-level identity gate
+    // must refuse it against the fixture bytes (E_STORY) before anything
+    // else runs.  The payload quetzal is the fixture's own, so the payload
+    // sections stay coherent.
     const fixtureEnv = capturedEnvelope();
     const hostile = JSON.parse(JSON.stringify(fixtureEnv));
     hostile.identity.storySha256 = LOOPSTORY_SHA256;
@@ -240,10 +239,29 @@ test('a checkpoint whose quetzal belongs to a different story is rejected by the
         'E_STORY',
     ); // envelope identity claims loopstory; active story is the fixture.
 
-    // Now fully impersonate: expected identity = loopstory, story bytes = loopstory.
-    const loopExpected = { storySha256: LOOPSTORY_SHA256, storySize: loopBytes.length, runtimeRevision: REVISION };
+    // The second, VM-level identity gate behind the envelope: a checkpoint
+    // whose PAYLOAD is fully fixture-consistent (checkpointed header matches
+    // the trusted story header, so the #41 trusted-story cross-check passes)
+    // but whose Quetzal IFhd chunk claims a different release must be
+    // refused by restore_file's release/serial/checksum verification -- a
+    // gate the envelope layer cannot substitute for.
+    const ifhdForged = JSON.parse(JSON.stringify(fixtureEnv));
+    const q = Buffer.from(ifhdForged.payload.quetzalB64, 'base64');
+    const storyRelease = (STORY[0x02] << 8) | STORY[0x03];
+    let off = 12;
+    while (off + 8 <= q.length) {
+        const type = q.toString('ascii', off, off + 4);
+        const len = q.readUInt32BE(off + 4);
+        if (type === 'IFhd') {
+            q.writeUInt16BE((storyRelease + 1) & 0xFFFF, off + 8);
+            ifhdForged.payload.quetzalB64 = q.toString('base64');
+            break;
+        }
+        off += 8 + len + (len % 2);
+    }
+    ifhdForged.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(ifhdForged.payload));
     expectCode(
-        () => restoreCheckpoint(hostile, loopBytes, loopExpected),
+        () => restoreCheckpoint(ifhdForged, STORY, EXPECTED),
         'E_STORY_QUETZAL',
     );
 });
