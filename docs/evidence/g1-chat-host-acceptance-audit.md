@@ -1,7 +1,7 @@
 # G1-C supported-route acceptance audit
 
 **Prepared:** 2026-11-02. **Owner issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
-**Status: DRAFT / OWNER DECISION PENDING. Complete #13 acceptance remains BLOCKED.**
+**Status: DRAFT / BOUNDED ROUTE OWNER-APPROVED. Complete #13 acceptance remains BLOCKED.**
 This is an audit of retained evidence, with proposed dispositions. It records
 no new ChatGPT invocation, personal approval, file import or device trial.
 
@@ -16,7 +16,7 @@ later roadmap gate.
 - [PR #39](https://github.com/dhar174/zmachine_if_remix_plugin/pull/39) merged
   on November 2 at **`6beaebf70450fdc24603a6992f4793dcb26f5892`**.
 - Exact merged PR head: **`0d06ea3d49949e334470bcdd6dfc292fd2ab5670`**;
-  all **11 reported checks SUCCESS**, zero pending/failed, verified before merge.
+  all **11 reported checks SUCCESS**, zero pending/failed, verified before merge and rechecked against the [PR #39 check rollup](https://github.com/dhar174/zmachine_if_remix_plugin/pull/39/checks) on November 2.
 - Independent Zcode GUI source/evidence review covered
   **`d35c9bf0183a2db4d77a14f915ecaf2c56dab6c7`**. The subsequent three-file
   documentation correction changed no runtime, tests, manifest or schema.
@@ -38,7 +38,7 @@ substituted for the exact PR-head checks above; this audit's checks are separate
 
 ## 2. Proposed acceptance target
 
-**Recommendation, not owner acceptance:** retain the following combination as
+**Owner-approved bounded target (November 2):** retain the following combination as
 the target for completing the bounded G1-C feasibility decision.
 
 | Part | Proposed boundary | Evidence and limit |
@@ -72,10 +72,10 @@ acceptance case passed.
 | Actual fixture import | PASS real external bytes, measured metadata, restart persistence, deletion and old-handle denial | Native service-byte import BLOCKED; second real principal NOT RUN. Never execute the fixture. |
 | Actual restart/reconnect | PASS retained committed state/receipts/import and invalidated pending candidates/grants, including active human grant before expiry | One local service process only; not combined VM restore or production crash transactions. |
 | Actual web Work skill | PASS standalone cloud skill plus explicitly selected existing app for state/receipt reads | Initial missing link_id failed; complete packaged-plugin installation and skill-driven edit lifecycle NOT RUN. [Remaining-check receipt](../../experiments/chat-host/evidence/remaining-checks-2026-10-29.json). |
-| Actual native Work | PASS state/receipt reads; cloud skill unavailable in tested catalog | Writes, personal approvals and import NOT RUN; not in the proposed write-qualified surface set. |
+| Actual native Work | PASS state/receipt reads; cloud skill unavailable in tested catalog | Writes, personal approvals and import NOT RUN; not in the approved write-qualified surface set. |
 | Actual native attachment | Attachment picker acceptance PASS; path-shaped tool argument observed; response rendering FAIL | Valid host file object, service byte receipt, exact tool error and ChatGPT copy retention/deletion UNVERIFIED. Do not claim a specific live HOST_IMPORT_BLOCKED error. |
 | Actual physical Android | NOT RUN | Explicitly unverified; no desktop/emulator substitution. |
-| Independent review | Completed actual Z.ai API / GLM-5.3-Flash / Max child source/evidence review; no merge-blocking code defect found | Read/Grep/Glob inspection plus disclosed report-only return channel; commands NOT RUN. This new audit's dispositions have not had their own independent review. |
+| Independent review | Completed actual Z.ai API / GLM-5.3-Flash / Max child source/evidence review; no merge-blocking code defect found | Read/Grep/Glob inspection plus disclosed report-only return channel; commands NOT RUN. The separate PR #53 audit review is recorded in section 8. |
 | Hosted CI | PASS 11/11 at merged PR head 0d06ea3 | CI uses synthetic tests, not live credentials or actual user approvals. It does not complete #13. |
 
 The latest retained private-state observation is **Probe Chamber / revision 6**,
@@ -104,17 +104,15 @@ does not make its other proposals owner-approved.
 | A42 | Probe exposes no export/publication/arbitrary-tool capability; malicious fictional instruction did not authorize it in the bounded trial | Cannot constrain every unrelated app installed in ChatGPT. No general host-wide disclosure-prevention claim. |
 | S24 | Failures, unsupported surfaces and evidence layers remain explicit | Audit is a proposal; no planned test, model narration, source file or green CI is promoted to runtime proof. |
 
-The following are **open acceptance items for the proposed route**, not requests
-to restart anything now. The coordinator's classification is proposed for owner
-review; it does not waive the original task's required observations.
+The following table tracks acceptance for the owner-approved bounded route. R1–R3 remain required observations.
 
 | ID | Current status / why it matters | Smallest next action after explicit authorization |
 | --- | --- | --- |
 | R1: host tool definitions | Full actual ChatGPT JSON schemas NOT CAPTURED. Seven names/descriptions and Write 3 / Read 4 were observed; local SDK schemas are a separate layer. | First investigate a supported cached metadata/export or working client diagnostic view. Retain all seven exact host definitions and compare names, fields, strictness, annotations and scopes with the pinned service. If a fresh connection is necessary, request a bounded restart window; no backend bypass or paid Playground substitution. |
 | R2: real second identity | NOT RUN. Single-owner Auth0 operation plus synthetic wrong-owner tests does not establish another real account's denial. | Owner designates an existing second test identity or approves a concrete new disposable identity setup. Keep the service owner allowlist unchanged. Attempt first-owner session/import access with that identity; retain redacted denial and unchanged first-owner state. If the provider itself refuses a token, record that layer separately: it is not service-side denial. |
 | R3: workspace identity | Selected tunnel/workspace UUID association matched; actual workspace type UNVERIFIED. Personal plugin placement is insufficient. | Inspect the real workspace controls read-only and record the workspace type and association privately, publishing a redacted fact. If unavailable, retain UNVERIFIED and obtain an explicit disposition before claiming an identified account/workspace selection. |
-| R4: route and resource decision | PROPOSED; publication/merge is not acceptance of deployment/approval/import choices or a resource budget. | Owner reviews this audit and selects the bounded target, unsupported surfaces and retention/availability limits. Production budget stays undecided; no new infrastructure follows implicitly. |
-| R5: audit review and closeout | This audit's own classification/decisions have not had independent review; #13 remains OPEN. | Review the final audit revision and evidence, resolve R1-R4 or record a new explicit task-scope decision, then separately authorize any issue closure. Do not silently convert BLOCKED/NOT RUN to PASS. |
+| R4: route and resource decision | Owner approved the bounded section 7 route on November 2. | Production hosting, language and budget remain undecided. |
+| R5: audit review and closeout | Independent audit review completed at a413eec. Issue #13 is OPEN. | Resolve R1–R3, review the resulting evidence and obtain separate closure authorization. |
 
 For R2, the current service rejects a valid signed token whose subject is not
 allowlisted before accessing session state (`OWNER_NOT_ALLOWED`, returned as an
@@ -126,10 +124,9 @@ denial also needs a newly authorized disposable import if no handle remains.
 
 ## 5. Limits that need disclosure, not a new green demo
 
-The following dispositions are **proposed exclusions or narrow claims**, not
-automatic waivers of required observations:
+The approved route carries these limits. The observations in R1–R3 remain required.
 
-- **Native attachment import:** excluded from the proposed target until a valid
+- **Native attachment import:** excluded from the bounded target until a valid
   supported host file object, origin/ownership/expiry controls and actual bytes
   are proven. Keep native fetch disabled. The external-upload result is not
   relabeled native integration.
@@ -191,9 +188,9 @@ items remain in the [review disposition](../../experiments/chat-host/evidence/in
 in particular, native URL-to-consent binding must be resolved before enabling
 that presently disabled route. No changes are made to satisfy them here.
 
-## 7. Owner decision prepared for review
+## 7. Owner decision
 
-The next decision can be made without credentials or another approval click:
+On November 2, the owner explicitly approved the following bounded route in this task:
 
 > Select web Chat and Classic desktop Chat with the existing private tunnel,
 > scoped Auth0 identity, separate exact-diff browser approvals and the disclosed
@@ -204,7 +201,7 @@ The next decision can be made without credentials or another approval click:
 > production hosting/language/budget, authorize a restart or credential, approve
 > D38/D39, or start #14.
 
-This text is **proposed**, not a recorded owner decision. No new timed approval
+The decision selects the target for completing G1-C. R1–R3 remain open. No new timed approval
 handoff is scheduled. If the owner later authorizes live R1/R2 work, first prepare
 one compact run plan and all non-expiring material. Ask only for the actual
 identity/credential or personal action required, with safe local input. Current
@@ -245,13 +242,24 @@ read back changed files, inspect the allowlisted diff, check whitespace and
 credential patterns, and confirm the known service/tunnel ports refuse
 connections. Record actual results in the publication handoff. Do not rerun the
 VM, execute the fixture, start the probe or call a live model to validate prose.
-This audit's independent review and owner acceptance remain pending.
+The independent Zcode review completed on November 2 at
+`a413eec593f41d6e92e81e53a6ff960e95ba4bfc`. GLM-5.3-Flash via Z.ai
+reviewed the documentation with Read, Grep and Glob and a report-return channel.
+The coordinator verified the invocation and profile. The reviewer reported no
+merge defects and two low-severity documentation findings. This follow-up
+clarifies the port observations, links the GitHub check evidence and records
+the owner's decision. The reviewer relied on coordinator-attested revision
+identity and retained evidence for command and live results.
+
+The October shutdown observation covered ports 3213 and 34339. The November 2
+review checkpoint covered 3213 and 42111. These were separate observations.
+During this follow-up a local TCP listener inventory showed no listeners on
+any of those three ports.
 
 Completed coordinator checks on November 2: all three changed documents read
 back; **39 relative file links and 4 heading anchors** resolved; all **16
 runtime/test/manifest hashes** and the fixture/manifest digest matched; only the
 one G1-C status paragraph changed in the decision register; credential-pattern,
-scope and whitespace checks passed; older worktrees were preserved. Both known
-probe/tunnel TCP ports refused connections. Runtime, VM, live-model, human,
+scope and whitespace checks passed; older worktrees were preserved. Ports 3213 and 42111 refused connections at the November 2 checkpoint. Runtime, VM, live-model, human,
 file-import and device trials were **NOT RUN** for this documentation audit.
 Audit publication and hosted CI are separate checks reported on its draft PR.
