@@ -96,9 +96,8 @@ function withUmemByte(env, addr, value) {
     const q = Buffer.from(env.payload.quetzalB64, 'base64');
     let off = 12;
     while (off + 8 <= q.length) {
-        const type = q.toString('ascii', off, off + 4);
         const len = q.readUInt32BE(off + 4);
-        if (type === 'UMem') {
+        if (q[off] === 0x55 && q[off + 1] === 0x4D && q[off + 2] === 0x65 && q[off + 3] === 0x6D) {
             q[off + 8 + addr] = value;
             env.payload.quetzalB64 = q.toString('base64');
             env.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(env.payload));
@@ -107,6 +106,35 @@ function withUmemByte(env, addr, value) {
         off += 8 + len + (len % 2);
     }
     assert.fail('no UMem chunk in the baseline quetzal');
+}
+
+// Hostile construction: flip bit 7 of a FourCC tag's first byte (FORM at
+// buffer offset 0, IFZS at 8, UMem at its chunk-header offset) so the tag
+// no longer equals its ASCII byte sequence, then recompute the digest
+// honestly.  The pinned parser compares tags byte-preservingly
+// (MemoryView.getFourCC -> String.fromCharCode), so the mutated container
+// is a DIFFERENT FourCC to restore while an ASCII-folding validator would
+// still see the original tag.
+function withHighBitTag(env, which) {
+    const q = Buffer.from(env.payload.quetzalB64, 'base64');
+    let off;
+    if (which === 'form') {
+        off = 0;
+    } else if (which === 'ifzs') {
+        off = 8;
+    } else {
+        let p = 12;
+        while (p + 8 <= q.length) {
+            const len = q.readUInt32BE(p + 4);
+            if (q[p] === 0x55 && q[p + 1] === 0x4D && q[p + 2] === 0x65 && q[p + 3] === 0x6D) { off = p; break; }
+            p += 8 + len + (len % 2);
+        }
+        if (off === undefined) assert.fail('no UMem chunk in the baseline quetzal');
+    }
+    q[off] |= 0x80;
+    env.payload.quetzalB64 = q.toString('base64');
+    env.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(env.payload));
+    return env;
 }
 
 // The shared live baseline: a real interpreter at a captured seeded line
@@ -338,6 +366,51 @@ test('a quetzal whose validated memory image is not the applied image rejects wi
     expectCode(() => validateEnvelope(straddler, EXPECTED_STORY), 'E_STRUCTURE');
 });
 
+test('high-bit-mutated FourCC tags reject with E_STRUCTURE (byte-exact comparison, maintainer P2)', () => {
+    // Node's Buffer ascii decoding folds the high bit (0xd5 -> "U"), so an
+    // ASCII-folding validator would accept a container whose FORM/IFZS/UMem
+    // tags the pinned byte-preserving parser (String.fromCharCode) reads as
+    // different FourCCs -- validating one container while restore
+    // interprets another.  The comparisons are byte-exact; each mutated tag
+    // must reject with the stable structure code.
+    for (const which of ['form', 'ifzs', 'umem']) {
+        const env = mutatePayload(capturedLineEnvelope(), () => {});
+        withHighBitTag(env, which);
+        expectCode(() => validateEnvelope(env, EXPECTED_STORY), 'E_STRUCTURE');
+        expectCode(() => validateEnvelope(env, EXPECTED), 'E_STRUCTURE');
+    }
+});
+
+test('capture refuses an invalid live continuation at the source and leaves the baseline recapturable (maintainer P3)', () => {
+    // The import negatives mutate captured envelopes; this one corrupts the
+    // LIVE read_data on a disposable seeded adapter and calls capture, so
+    // it exercises the capture-side self-validation call itself (a call
+    // accidentally removed would leave every import-negative green while
+    // capture hands off unrestorable checkpoints).  The mutation is
+    // restored in finally and the baseline's complete recapture is verified
+    // byte-identical afterwards.
+    const adapter = createInstance();
+    adapter.start();
+    drive(adapter, PREFIX);
+    const good = capture(adapter);
+    const { vm } = adapter.__g1bInternals();
+    const origBufaddr = vm.read_data.bufaddr;
+    const origParseaddr = vm.read_data.parseaddr;
+    try {
+        vm.read_data.bufaddr = 0xFFFFFF;
+        expectCode(() => capture(adapter), 'E_BOUNDARY');
+        vm.read_data.bufaddr = origBufaddr;
+        vm.read_data.parseaddr = 0xFFFFFF;
+        expectCode(() => capture(adapter), 'E_BOUNDARY');
+    } finally {
+        vm.read_data.bufaddr = origBufaddr;
+        vm.read_data.parseaddr = origParseaddr;
+    }
+    const recaptured = capture(adapter);
+    assert.strictEqual(JSON.stringify(recaptured), JSON.stringify(good),
+        'baseline recapture byte-identical after the capture-refusal probes');
+});
+
 // ---------------------------------------------------------------------------
 // Child-runner negatives: the ordinary restoring child (lib/runner.js, no
 // --selftest) must refuse BEFORE ready:true, exit 2 with the intended code,
@@ -450,6 +523,37 @@ test('honest-digest continuation-span mutations are rejected by the ordinary chi
         e.payload.quetzalB64 = combined.toString('base64');
         variants['straddler-header'] = honest(e);
     }
+    {
+        // Maintainer P2: high-bit-mutated FORM tag -- the pinned parser
+        // reads a different FourCC than an ASCII-folding validator would.
+        const e = JSON.parse(JSON.stringify(baseline.envelope));
+        const q = Buffer.from(e.payload.quetzalB64, 'base64');
+        q[0] |= 0x80;
+        e.payload.quetzalB64 = q.toString('base64');
+        variants['fourcc-form'] = honest(e);
+    }
+    {
+        // Maintainer P2: high-bit-mutated IFZS tag.
+        const e = JSON.parse(JSON.stringify(baseline.envelope));
+        const q = Buffer.from(e.payload.quetzalB64, 'base64');
+        q[8] |= 0x80;
+        e.payload.quetzalB64 = q.toString('base64');
+        variants['fourcc-ifzs'] = honest(e);
+    }
+    {
+        // Maintainer P2: high-bit-mutated UMem tag -- the validator must
+        // not bless a memory chunk the pinned parser will not select.
+        const e = JSON.parse(JSON.stringify(baseline.envelope));
+        const q = Buffer.from(e.payload.quetzalB64, 'base64');
+        let off = 12;
+        while (off + 8 <= q.length) {
+            const len = q.readUInt32BE(off + 4);
+            if (q[off] === 0x55 && q[off + 1] === 0x4D && q[off + 2] === 0x65 && q[off + 3] === 0x6D) { q[off] |= 0x80; break; }
+            off += 8 + len + (len % 2);
+        }
+        e.payload.quetzalB64 = q.toString('base64');
+        variants['fourcc-umem'] = honest(e);
+    }
 
     const expectedCodes = {
         'bufaddr-ffffff': 'E_BOUNDARY',
@@ -462,6 +566,9 @@ test('honest-digest continuation-span mutations are rejected by the ordinary chi
         'version-forge': 'E_STRUCTURE',
         'double-umem': 'E_STRUCTURE',
         'straddler-header': 'E_STRUCTURE',
+        'fourcc-form': 'E_STRUCTURE',
+        'fourcc-ifzs': 'E_STRUCTURE',
+        'fourcc-umem': 'E_STRUCTURE',
     };
 
     const childProcesses = [];

@@ -18,7 +18,7 @@ state, ZVM instance, Glk object, and `settle()`; no behavior change).
 
 ```sh
 cd experiments/vm-checkpoint
-node --test          # 47 tests: format validation, continuation spans, round-trip matrix, isolation
+node --test          # 49 tests: format validation, continuation spans, round-trip matrix, isolation
 ```
 
 Node >= 18 (tested on v24.13.0, Windows). Zero npm dependencies. Run from

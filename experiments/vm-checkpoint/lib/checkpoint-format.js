@@ -268,6 +268,31 @@ function validateEnvelope(envelope, expected) {
 // cross-checked against the story header.
 // ---------------------------------------------------------------------------
 
+// FourCC tags are compared BYTE-EXACTLY against their ASCII byte values:
+// the pinned parser's MemoryView.getFourCC() (String.fromCharCode per byte,
+// src/common/utils.js) is byte-preserving, while Buffer's ascii decoding
+// folds the high bit -- Buffer.from([0xd5, 0x4d, 0x65, 0x6d]).toString('ascii')
+// === 'UMem' even though the parser reads 'ÕMem'.  An ASCII-folding
+// comparison would accept a high-bit-mutated FORM/IFZS/UMem tag that the
+// pinned parser interprets as a different FourCC, validating one container
+// while restore interprets another (maintainer review P2 on PR #55).
+const FOURCC = {
+    form: Buffer.from([0x46, 0x4F, 0x52, 0x4D]), // 'FORM'
+    ifzs: Buffer.from([0x49, 0x46, 0x5A, 0x53]), // 'IFZS'
+    umem: Buffer.from([0x55, 0x4D, 0x65, 0x6D]), // 'UMem'
+    cmem: Buffer.from([0x43, 0x4D, 0x65, 0x6D]), // 'CMem'
+};
+
+// Diagnostic renderer for tag bytes: ASCII where printable, \xNN escape
+// otherwise -- never re-folds a high bit into a look-alike tag.
+function renderFourCC(bytes) {
+    let out = '';
+    for (const b of bytes) {
+        out += (b >= 0x20 && b < 0x7F) ? String.fromCharCode(b) : '\\x' + b.toString(16).padStart(2, '0');
+    }
+    return "'" + out + "'";
+}
+
 // Extract the UMem chunk bytes from the payload quetzal.  Mirrors the walk
 // of the Quetzal parser restore consumes (src/common/file.js) with NO
 // divergence window, so the validated memory image IS the image restore
@@ -280,17 +305,18 @@ function validateEnvelope(envelope, expected) {
 // also processed here, a chunk header extending past the declared area (the
 // parser's straddling-header window) is rejected instead of skipped, chunk
 // data must fit the declared area (stricter than the parser's own quirky
-// bounds check -- we reject rather than mis-accept), and the walk must
-// consume the declared area exactly.  Format-specific refusals: a
-// compressed CMem memory chunk, MULTIPLE memory chunks (the vendored parser
-// keeps the last CMem/UMem chunk -- a benign first UMem with a hostile
-// second one would otherwise validate one image and restore another), and a
-// missing UMem chunk all reject E_STRUCTURE.  Returns a Uint8Array VIEW
-// into the decoded quetzal Buffer -- hostile-envelope tests may mutate
-// through it and re-encode; validation itself only reads.
+// bounds check -- we reject rather than mis-accept), the walk must consume
+// the declared area exactly, and all FourCC comparisons are byte-exact (see
+// FOURCC above).  Format-specific refusals: a compressed CMem memory chunk,
+// MULTIPLE memory chunks (the vendored parser keeps the last CMem/UMem
+// chunk -- a benign first UMem with a hostile second one would otherwise
+// validate one image and restore another), and a missing UMem chunk all
+// reject E_STRUCTURE.  Returns a Uint8Array VIEW into the decoded quetzal
+// Buffer -- hostile-envelope tests may mutate through it and re-encode;
+// validation itself only reads.
 function quetzalUmem(quetzalB64) {
     const quetzal = Buffer.from(quetzalB64, 'base64');
-    if (quetzal.length < 12 || quetzal.toString('ascii', 0, 4) !== 'FORM' || quetzal.toString('ascii', 8, 12) !== 'IFZS') {
+    if (quetzal.length < 12 || !quetzal.subarray(0, 4).equals(FOURCC.form) || !quetzal.subarray(8, 12).equals(FOURCC.ifzs)) {
         throw new CheckpointError('E_STRUCTURE', 'payload quetzal is not a Quetzal FORM/IFZS container');
     }
     const formEnd = quetzal.readUInt32BE(4) + 8;
@@ -306,18 +332,18 @@ function quetzalUmem(quetzalB64) {
             // length); validation must refuse it, never skip it.
             throw new CheckpointError('E_STRUCTURE', 'payload quetzal has an IFF chunk header at offset ' + off + ' extending past the declared FORM area');
         }
-        const type = quetzal.toString('ascii', off, off + 4);
+        const typeBytes = quetzal.subarray(off, off + 4);
         const len = quetzal.readUInt32BE(off + 4);
         if (off + 8 + len > formEnd) {
-            throw new CheckpointError('E_STRUCTURE', 'payload quetzal declares an IFF chunk out of range (type ' + type + ' at offset ' + off + ')');
+            throw new CheckpointError('E_STRUCTURE', 'payload quetzal declares an IFF chunk out of range (type ' + renderFourCC(typeBytes) + ' at offset ' + off + ')');
         }
-        if (type === 'UMem') {
+        if (typeBytes.equals(FOURCC.umem)) {
             if (umem !== null) {
                 throw new CheckpointError('E_STRUCTURE', 'payload quetzal carries multiple memory chunks: the validated memory image must be the image restore applies');
             }
             umem = quetzal.subarray(off + 8, off + 8 + len);
         }
-        if (type === 'CMem') {
+        if (typeBytes.equals(FOURCC.cmem)) {
             throw new CheckpointError('E_STRUCTURE', 'compressed CMem memory chunk: not the uncompressed autosave image the checkpoint format captures');
         }
         off += 8 + len + (len % 2);
