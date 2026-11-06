@@ -31,7 +31,7 @@ Each disposition is for the owner-accepted bounded route only. “No additional
 evidence blocker” refers to that route, not a pass for the corresponding
 full-product acceptance case.
 
-| Issue criterion | Source, date and bounded evidence | Exclusion and proposed disposition |
+| Issue criterion | Source, date and bounded evidence | Exclusion and bounded disposition |
 | --- | --- | --- |
 | Real chat read, scoped write and readback | [Audit §3](g1-chat-host-acceptance-audit.md#3-evidence-ledger), [web trace](../../experiments/chat-host/evidence/live-web-2026-10-28.json) (October 28) and [Classic trace](../../experiments/chat-host/evidence/live-classic-2026-10-29.json) (October 29), retained in PR #39: authenticated reads and separately approved synthetic forward/inverse writes with receipts and readback. | The Classic forward answer falsely said no commit; later state and receipt reads reconciled it. The combined installed skill/edit lifecycle and full A39 product sequence were not demonstrated. No additional evidence blocker for the bounded route. |
 | Forged, stale, wrong-session, replayed or modified-diff approvals cannot authorize a write (A37–A38) | [Audit §4](g1-chat-host-acceptance-audit.md#4-acceptance-mapping-and-closure-gates), PRs #39 and #54: deterministic negative cases, actual unapproved/stale rejection and exact personal approvals; on November 3 the real second non-allowlisted identity received HTTP 401 and `OWNER_NOT_ALLOWED` at service entry, with owner state unchanged. | Live two-allowed-principal object authorization and cross-owner import-handle denial were not proven. Same-turn inverse replay is evidenced; cross-turn lost-reference retry and original Classic forward replay are not. No additional evidence blocker for the bounded route. |
@@ -69,7 +69,7 @@ full-product acceptance case.
 - The prior probe and tunnel shutdown observations are dated in the audit. No
   new port check, runtime, live-model, approval, upload or device trial is
   claimed by this documentation closeout. G1-B Issues #12 and #40 remain
-  separate; this recommendation does not approve D39 or start #14.
+  separate; this acceptance does not approve D39 or start #14.
 
 ## Owner decision
 

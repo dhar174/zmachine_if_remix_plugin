@@ -8,7 +8,7 @@ accepted host-definition limit; R2 and R3 have the narrower dispositions in the
 [supported-route audit](g1-chat-host-acceptance-audit.md). The dated
 checkpoints below preserve their then-current gaps and availability observations;
 they do not assert a fresh shutdown check or full product acceptance.
-**Updated:** 2026-11-02 (independent review; no new live trials). Actual tested route: ChatGPT **web Chat** in Chrome on
+**Evidence updated:** 2026-11-02 (independent review; no new live trials). Actual tested route: ChatGPT **web Chat** in Chrome on
 Windows x64, using the owner-approved private Secure MCP Tunnel and Auth0.
 Classic desktop **Chat** is also tested. Web Work and native desktop Work now
 have separate authenticated read/receipt trials (§6.14); their write/approval

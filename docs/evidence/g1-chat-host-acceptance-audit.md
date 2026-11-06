@@ -4,8 +4,9 @@
 **Status: BOUNDED G1-C OWNER-ACCEPTED; ISSUE #13 CLOSED (2026-11-06).**
 Full product acceptance remains unproven. See the [bounded closeout](g1-chat-host-closeout.md)
 for the criterion-by-criterion mapping and retained limits.
-This is an audit of retained evidence, accepted for the bounded route. It records
-no new ChatGPT invocation, personal approval, file import or device trial.
+This audit records retained evidence and earlier proposed dispositions for the
+bounded route. It records no new ChatGPT invocation, personal approval, file
+import or device trial.
 
 ## 1. Authority, baseline and merge receipt
 
