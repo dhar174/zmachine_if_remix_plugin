@@ -127,6 +127,16 @@ after). The redacted runner receipt reported PASS and an unchanged owner
 configuration. The disposable directory was removed, all four known local
 ports refused connections, and GitHub reported #13 OPEN.
 
+**Provenance note (2026-11-06):** The November 3 R2 result above is the
+coordinator's account recorded in the merged audit. The cited redacted runner
+receipt is not in this checkout; its current location and digest have not been
+verified for this closeout. The
+[October 29 workspace receipt](../../experiments/chat-host/evidence/remaining-checks-2026-10-29.json)
+records the tunnel and workspace associations but labels the workspace type
+unverified. The later November 2 Personal-account observation is recorded in
+the merged audit narrative; a separate observation receipt is not in this
+checkout. Neither observation was repeated for this closeout.
+
 On November 2, the cached ChatGPT Apps dialog exposed the seven names and
 descriptions but no full definitions. During the bounded live window the
 tunnel doctor and local endpoint passed their checks. The inspected ChatGPT
