@@ -116,6 +116,26 @@ probe and fixture sources unchanged from PR #55. This is fixture-scoped #41
 evidence, not full A34 or production recovery acceptance. Issues #12, #40 and
 #41 remain open and D39 remains proposed.
 
+**Issue #41 diagnostic follow-up, 2026-11-06:** On Windows with Node v24.13.0,
+using baseline `5e30823` plus the VM-I/O test-harness changes in this follow-up,
+the VM-I/O suite reported 60 passes, 0 failures and 1 skip. The skip was the
+unavailable-Bocfel case, which cannot run when a real WSL Bocfel is installed.
+Expected ifvms diagnostics were matched against the adapter's recorded errors;
+within those checks, unexpected or additional `console.log` calls are forwarded
+and fail the check. `console.error` and other output remain untouched.
+The suite emitted no error traces and stderr was empty. The checkpoint suite
+reported 49 passes with no failures or skips, and fixture integrity reported
+2 passes and 1 skip because the pinned compiler was absent; both had empty
+stderr and no error traces. The fixture SHA-256 remained
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`.
+
+[The last G1-C chat-host CI run](https://github.com/dhar174/zmachine_if_remix_plugin/actions/runs/41506289808)
+reported 35 passes with no skips on each of Ubuntu and Windows on 2026-11-02 at
+`6beaebf`; its relevant source, test, lockfile, workflow and fixture paths are
+unchanged in this follow-up. That is historical CI evidence, not a fresh host
+test or live-client qualification.
+This follow-up does not approve D39 or close #12 or #40.
+
 ## 6. Candidate isolation results
 
 Baseline model: a live in-parent interpreter at a captured checkpoint; candidates are fresh child processes restored from the baseline's checkpoint file; the simulated publication store is a file only the parent ever writes (children structurally never receive its path), asserted unchanged after every phase.

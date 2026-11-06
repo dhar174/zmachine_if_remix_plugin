@@ -4,11 +4,16 @@
 // first input boundary.  For a nonterminating story this never returns --
 // the parent test enforces the deadline with worker.terminate(), which
 // preempts even a busy synchronous loop.  The adapter path is a static
-// require; workerData carries only the story bytes.
+// require; workerData carries the story bytes and the expected-diagnostic flag.
 
 const { parentPort, workerData } = require('node:worker_threads');
 const { createIfvmsAdapter } = require('../adapters/ifvms-adapter.js');
+const { runWithExpectedVmDiagnostic } = require('./expected-vm-diagnostic.js');
 
 const adapter = createIfvmsAdapter(Buffer.from(workerData.story));
-const result = adapter.start();
+const result = workerData.expectDiagnostic
+    ? runWithExpectedVmDiagnostic(() => adapter.start(), {
+        name: 'RangeError', message: /^Offset is outside the bounds of the DataView$/,
+    })
+    : adapter.start();
 parentPort.postMessage({ status: result.status, errors: result.errors });
