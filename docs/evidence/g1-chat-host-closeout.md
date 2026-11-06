@@ -20,7 +20,8 @@ on November 2 at `6beaebf70450fdc24603a6992f4793dcb26f5892`, with head
 `0d06ea3d49949e334470bcdd6dfc292fd2ab5670`. Its final tested runtime source was
 `89268050bfcb0644b1223c8b306273dc903c5a18`. The audit merged in
 [PR #53](https://github.com/dhar174/zmachine_if_remix_plugin/pull/53) on
-November 3 at `6c18134823513978de23ded80d82ded8576c738a`; the R1–R3 update
+November 2 at 7:54 p.m. Eastern (November 3 at 00:54 UTC) at
+`6c18134823513978de23ded80d82ded8576c738a`; the R1–R3 update
 merged in [PR #54](https://github.com/dhar174/zmachine_if_remix_plugin/pull/54)
 on November 3 at `12d1f7bf7a1cf6476d82d5e5d027d607feec3745`. Dates of
 observations below refer to the recorded trials, not these merge dates.
