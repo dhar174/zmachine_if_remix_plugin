@@ -57,8 +57,8 @@ pass for the corresponding full-product acceptance case.
   does not prove the original mutation replay, and a missing receipt does not
   prove that no commit is in flight. The
   [independent probe review](../../experiments/chat-host/evidence/independent-review-2026-11-02.json)
-  is dated November 2; its then-open R1–R3 observations are superseded only by
-  the later, bounded dispositions above.
+  is dated November 2; the observations the audit later numbered R1–R3 were
+  then open and have since received the bounded dispositions above.
 - Native Work reads, the standalone web Work skill and the external upload are
   distinct observations; none establishes a skill-driven edit, native import,
   personal picker, all-client support or deletion of a ChatGPT attachment.
