@@ -1,7 +1,9 @@
 # G1-C supported-route acceptance audit
 
 **Prepared:** 2026-11-02. **Owner issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
-**Status: DRAFT / BOUNDED ROUTE OWNER-APPROVED. Complete #13 acceptance remains BLOCKED.**
+**Status: BOUNDED ROUTE OWNER-APPROVED; FINAL CLOSURE DECISION PENDING.**
+Full product acceptance remains unproven. See the [bounded closeout](g1-chat-host-closeout.md)
+for the current criterion-by-criterion recommendation and retained limits.
 This is an audit of retained evidence, with proposed dispositions. It records
 no new ChatGPT invocation, personal approval, file import or device trial.
 
@@ -98,7 +100,7 @@ does not make its other proposals owner-approved.
 | --- | --- | --- |
 | A11 | One combined fictional/indirect/malicious-text trial used only probe_get_state; one ambiguous remark caused no tool call or revision change | Bounded observation plus server authority checks. No production Play/Editor mode system or general prompt-injection immunity. |
 | A37 | Local forgery negatives plus actual personally approved immutable diffs and committed receipts | Probe exact-change authorization demonstrated; host-provided exact-diff attestation was not established. Full product authority remains future work. |
-| A38 | Deterministic wrong-owner/session, altered candidate/grant, expiry and stale/replay tests pass | Real second-principal rejection remains required live evidence for the narrow route; synthetic principals cannot substitute. |
+| A38 | Deterministic wrong-owner/session, altered candidate/grant, expiry and stale/replay tests pass; on November 3 a real non-allowlisted second identity was rejected at service entry (R2 below). | The real trial did not reach per-object authorization. Two allowed principals and live cross-owner import-handle denial remain unproven; synthetic tests do not become live object-authorization evidence. |
 | A39 | Actual model selected tools for synthetic edits, readback, receipt recovery and process recovery | Full initial-directive/Play/Editor/combined-restore sequence is outside this probe and NOT RUN. Do not require building the remix engine to finish G1-C or mark A39 fully passed. |
 | A40 | Actual authenticated external fixture bytes and opaque-handle metadata, deletion/restart; agent-operated upload explicitly labeled | External fallback is permitted by plugin-contract section 7 and the task. Native import and Android stay unqualified; do not claim human picker use, all-client support or host-side attachment deletion. |
 | A42 | Probe exposes no export/publication/arbitrary-tool capability; malicious fictional instruction did not authorize it in the bounded trial | Cannot constrain every unrelated app installed in ChatGPT. No general host-wide disclosure-prevention claim. |
@@ -124,6 +126,16 @@ authenticated reads matched on session, label and revision (0 before and
 after). The redacted runner receipt reported PASS and an unchanged owner
 configuration. The disposable directory was removed, all four known local
 ports refused connections, and GitHub reported #13 OPEN.
+
+**Provenance note (2026-11-06):** The November 3 R2 result above is the
+coordinator's account recorded in the merged audit. The cited redacted runner
+receipt is not in this checkout; its current location and digest have not been
+verified for this closeout. The
+[October 29 workspace receipt](../../experiments/chat-host/evidence/remaining-checks-2026-10-29.json)
+records the tunnel and workspace associations but labels the workspace type
+unverified. The later November 2 Personal-account observation is recorded in
+the merged audit narrative; a separate observation receipt is not in this
+checkout. Neither observation was repeated for this closeout.
 
 On November 2, the cached ChatGPT Apps dialog exposed the seven names and
 descriptions but no full definitions. During the bounded live window the
