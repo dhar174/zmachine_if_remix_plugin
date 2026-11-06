@@ -110,10 +110,11 @@ reported success using synthetic merge `eeaee322bcb314e9636630139c0d8d204f5c3092
 the VM-I/O suite reported 37 passes / 4 skips on Ubuntu and 39 passes / 2 skips
 on Windows; fixture integrity reported 2 passes / 1 skip on each. Both hosted
 VM-I/O logs also contain error traces from negative tests. This closeout does
-not count either the local run or those hosted VM-I/O runs as a clean pass.
-The hosted jobs used probe and fixture sources unchanged from PR #55. This is
-fixture-scoped #41 evidence, not full A34 or production recovery acceptance.
-Issues #12 and #40 remain open and D39 remains proposed.
+not count either the local run or those hosted VM-I/O runs as a clean pass, so
+it has not verified #41's all-current-G1-tests criterion. The hosted jobs used
+probe and fixture sources unchanged from PR #55. This is fixture-scoped #41
+evidence, not full A34 or production recovery acceptance. Issues #12, #40 and
+#41 remain open and D39 remains proposed.
 
 ## 6. Candidate isolation results
 
