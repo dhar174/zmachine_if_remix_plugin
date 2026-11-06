@@ -1,10 +1,9 @@
-# G1-C bounded-route closeout recommendation
+# G1-C bounded-route closeout and owner decision
 
 **Owner issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
-**Status:** Ready for an owner decision on bounded G1-C closure, subject to
-independent review of this closeout. Issue #13 remains OPEN; R5 is pending that
-separate decision. This recommendation neither changes the original issue's
-checkboxes nor claims full product acceptance.
+**Status:** The owner accepted bounded G1-C on November 6, 2026. Issue #13 was
+closed as completed; R5 is satisfied by that separate decision. This closure
+neither changes the original issue's checkboxes nor claims full product acceptance.
 
 ## Scope and sources
 
@@ -13,7 +12,7 @@ November 2, 2026: the existing private tunnel, scoped Auth0, separate exact-diff
 browser approval and disclosed external fixture upload. The owner accepted the
 R1 host-definition limit on November 3. The [acceptance audit](g1-chat-host-acceptance-audit.md)
 records these decisions and the retained evidence; the [host report](g1-chat-host.md)
-preserves dated trial details. The owner has not yet accepted final closure.
+preserves dated trial details. The November 6 closure decision is recorded below.
 
 The probe merged in [PR #39](https://github.com/dhar174/zmachine_if_remix_plugin/pull/39)
 on November 2 at `6beaebf70450fdc24603a6992f4793dcb26f5892`, with head
@@ -28,9 +27,9 @@ observations below refer to the recorded trials, not these merge dates.
 
 ## Issue #13 acceptance mapping
 
-Each disposition is for the owner-approved bounded route only. “No additional
-evidence blocker” is a recommendation for that route, not an owner waiver or a
-pass for the corresponding full-product acceptance case.
+Each disposition is for the owner-accepted bounded route only. “No additional
+evidence blocker” refers to that route, not a pass for the corresponding
+full-product acceptance case.
 
 | Issue criterion | Source, date and bounded evidence | Exclusion and proposed disposition |
 | --- | --- | --- |
@@ -47,7 +46,8 @@ pass for the corresponding full-product acceptance case.
   service entry only. R3 is a pass for the observed Personal workspace route,
   not other workspaces. R4 approved the bounded route, not production hosting,
   language or budget. The earlier independent audit review is retained; it is
-  not independent review of this new closeout diff.
+  not independent review of the closeout diff. That diff was separately reviewed
+  as recorded in [PR #56](https://github.com/dhar174/zmachine_if_remix_plugin/pull/56).
 - The [audit's provenance note](g1-chat-host-acceptance-audit.md#4-acceptance-mapping-and-closure-gates)
   identifies the R2 runner receipt and the November 2 Personal-account
   observation as not independently available as separate receipts in this
@@ -71,17 +71,17 @@ pass for the corresponding full-product acceptance case.
   claimed by this documentation closeout. G1-B Issues #12 and #40 remain
   separate; this recommendation does not approve D39 or start #14.
 
-## Proposed owner decision
+## Owner decision
 
-If independent review confirms the mapping and the owner accepts these limits,
-the smallest remaining action is the owner's explicit bounded closure decision:
+On November 6, 2026, the owner gave the following decision, recorded on
+[Issue #13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13#issuecomment-6693577279):
 
-> I accept G1-C as complete for the documented synthetic web Chat and Classic
-> desktop Chat route, including the disclosed external fixture-upload and
-> separate exact-diff approval flows, with the retained evidence limitations.
-> This decision does not establish product readiness, approve D39, start Issue
-> #14, qualify broader clients or native attachment import, or authorize
-> restarting the service.
+> I accept G1-C for the documented synthetic web and Classic desktop Chat route,
+> including fixture upload and separate exact-diff approval, with the disclosed
+> limits. Please record my decision and close #13; don’t start #14 or restart the
+> service.
 
-Until that decision is made, leave #13 open. A demand for a broader capability
-would require a separately scoped decision and evidence; it is not inferred here.
+This acceptance does not establish product readiness, approve D39, qualify
+broader clients or native attachment import, or authorize starting #14 or
+restarting the service. Broader capability requires a separately scoped decision
+and evidence.

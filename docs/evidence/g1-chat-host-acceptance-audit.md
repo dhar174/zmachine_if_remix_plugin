@@ -1,10 +1,10 @@
 # G1-C supported-route acceptance audit
 
 **Prepared:** 2026-11-02. **Owner issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
-**Status: BOUNDED ROUTE OWNER-APPROVED; FINAL CLOSURE DECISION PENDING.**
+**Status: BOUNDED G1-C OWNER-ACCEPTED; ISSUE #13 CLOSED (2026-11-06).**
 Full product acceptance remains unproven. See the [bounded closeout](g1-chat-host-closeout.md)
-for the current criterion-by-criterion recommendation and retained limits.
-This is an audit of retained evidence, with proposed dispositions. It records
+for the criterion-by-criterion mapping and retained limits.
+This is an audit of retained evidence, accepted for the bounded route. It records
 no new ChatGPT invocation, personal approval, file import or device trial.
 
 ## 1. Authority, baseline and merge receipt
@@ -114,7 +114,7 @@ The following table tracks acceptance for the owner-approved bounded route. The 
 | R2: real second identity | PASS at the service entry point. Auth0 issued a fresh probe access token to a second real identity. The probe returned HTTP 401 and recorded `OWNER_NOT_ALLOWED`. Owner reads matched before and after. | Live loopback evidence recorded below. Cross-owner object access remains covered by deterministic tests. |
 | R3: workspace identity | PASS for the observed route. The signed-in ChatGPT profile showed Personal account on November 2 in the browser context that showed the existing probe. | The October 29 redacted receipt separately records that the configured tunnel matched and its selected workspace UUID matched the fresh skill-draft account context. The November 2 observation supplies the account type. |
 | R4: route and resource decision | Owner approved the bounded section 7 route on November 2. | Production hosting, language and budget remain undecided. |
-| R5: audit review and closeout | Independent audit review completed at a413eec. Issue #13 is OPEN. | Review the resulting evidence and obtain separate closure authorization. |
+| R5: audit review and closeout | Independent audit review completed at a413eec. The [owner accepted bounded G1-C](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13#issuecomment-6693577279) on November 6; Issue #13 was closed as completed. | Retain the documented evidence limits; this is not full product acceptance. |
 
 On November 3, 2026, the pinned 0.1.1 service ran on loopback with disposable
 synthetic data and the unchanged single-owner allowlist. The operator signed
@@ -235,10 +235,16 @@ On November 2, the owner explicitly approved the following bounded route in this
 > production hosting/language/budget, authorize a restart or credential, approve
 > D38/D39, or start #14.
 
-The decision selects the target for completing G1-C. R2 is verified at the service entry point. The owner accepted the R1 evidence limit for this probe on November 3, 2026. Full host definitions remain unverified. No new timed approval
+The November 2 decision selected the target for completing G1-C. R2 is verified at the service entry point. The owner accepted the R1 evidence limit for this probe on November 3, 2026. Full host definitions remain unverified. No new timed approval
 handoff is scheduled. If the owner later authorizes live R1/R2 work, first prepare
 one compact run plan and all non-expiring material. Ask only for the actual
-identity/credential or personal action required, with safe local input. The probe and tunnel are offline after the bounded trials.
+identity/credential or personal action required, with safe local input. The November 2 record reported the probe and tunnel offline after the bounded trials; no new shutdown check is asserted.
+
+On November 6, the owner separately [accepted bounded G1-C and directed
+closure](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13#issuecomment-6693577279).
+The exact decision and its retained limits are recorded in the [bounded
+closeout](g1-chat-host-closeout.md#owner-decision). This did not approve D39,
+start #14, qualify native attachment import or authorize a service restart.
 
 [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) and its
 [#40](https://github.com/dhar174/zmachine_if_remix_plugin/issues/40) checkpoint
