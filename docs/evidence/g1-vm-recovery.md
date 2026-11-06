@@ -103,16 +103,17 @@ character round trips. The fixture SHA-256 remained
 `96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`.
 The local fixture-integrity suite passed 2 tests and skipped recompilation
 because the pinned compiler was absent. The local VM-I/O runner reported 56
-passes, 0 failed and 1 skip, but emitted
-error traces during malformed-story negative tests; this closeout does not
-count it as a clean local pass. The separate
+passes, 0 failed and 1 skip, but emitted error traces during malformed-story
+and runaway-story negative tests. The separate
 [PR #57 probe CI run](https://github.com/dhar174/zmachine_if_remix_plugin/actions/runs/42283459077)
 reported success using synthetic merge `eeaee322bcb314e9636630139c0d8d204f5c3092`:
 the VM-I/O suite reported 37 passes / 4 skips on Ubuntu and 39 passes / 2 skips
-on Windows; fixture integrity reported 2 passes / 1 skip on each. These jobs
-used probe and fixture sources unchanged from PR #55. This is fixture-scoped #41
-evidence, not full A34 or production recovery acceptance. Issues #12 and #40
-remain open and D39 remains proposed.
+on Windows; fixture integrity reported 2 passes / 1 skip on each. Both hosted
+VM-I/O logs also contain error traces from negative tests. This closeout does
+not count either the local run or those hosted VM-I/O runs as a clean pass.
+The hosted jobs used probe and fixture sources unchanged from PR #55. This is
+fixture-scoped #41 evidence, not full A34 or production recovery acceptance.
+Issues #12 and #40 remain open and D39 remains proposed.
 
 ## 6. Candidate isolation results
 
