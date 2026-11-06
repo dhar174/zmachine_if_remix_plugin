@@ -22,6 +22,7 @@ const path = require('node:path');
 const { Worker } = require('node:worker_threads');
 const { createIfvmsAdapter } = require('../adapters/ifvms-adapter.js');
 const { createBocfelAdapter, probeBocfelAvailable } = require('../adapters/bocfel-adapter.js');
+const { runWithExpectedVmDiagnostic } = require('./expected-vm-diagnostic.js');
 
 const VM_IO_DIR = __dirname;
 const REPO_ROOT = path.dirname(path.dirname(path.dirname(VM_IO_DIR)));
@@ -93,12 +94,12 @@ function writeStub(fileName, body) {
 // deadline enforced by the parent; worker.terminate() preempts even a busy
 // synchronous loop.
 
-function runIfvmsStoryInWorker(storyPath, timeoutMs) {
+function runIfvmsStoryInWorker(storyPath, timeoutMs, expectDiagnostic = false) {
     return new Promise((resolve) => {
         let settled = false;
         let timedOut = false;
         const worker = new Worker(path.join(__dirname, 'worker-runner.js'), {
-            workerData: { story: fs.readFileSync(storyPath) },
+            workerData: { story: fs.readFileSync(storyPath), expectDiagnostic },
         });
         const timer = setTimeout(() => {
             timedOut = true;
@@ -119,7 +120,7 @@ function runIfvmsStoryInWorker(storyPath, timeoutMs) {
 }
 
 test('ifvms (worker): runaway recursion completes with a classified error under the worker deadline', { timeout: 60000 }, async () => {
-    const r = await runIfvmsStoryInWorker(LOOPSTORY, 30000);
+    const r = await runIfvmsStoryInWorker(LOOPSTORY, 30000, true);
     assert.strictEqual(r.outcome, 'completed', 'the terminating case reports through the worker');
     assert.strictEqual(r.status, 'error', 'stack exhaustion is classified as error');
     assert.ok(r.errors.length > 0);
@@ -136,9 +137,9 @@ test('ifvms (worker): a nonrecursive infinite loop is preempted by the watchdog 
 
 // ---- ifvms (in-process) malformed-story cases -------------------------------
 
-function startExpectError(label, buffer, match) {
+function startExpectError(label, buffer, name, match) {
     const adapter = createIfvmsAdapter(buffer);
-    const r = adapter.start();
+    const r = runWithExpectedVmDiagnostic(() => adapter.start(), { name, message: match });
     assert.strictEqual(r.status, 'error', label + ' must be classified as error, not a successful load');
     assert.ok(r.errors.length > 0, label + ' produced a recorded error');
     if (match) assert.match(r.errors.join(' | '), match, label + ' error is classifiable');
@@ -149,11 +150,11 @@ test('ifvms: empty binary is rejected without a successful load', { timeout: 300
     // Observed: the empty buffer faults inside file.identify (RangeError)
     // rather than reaching the friendly "not a Z-Code file" message; either
     // way the load is classified as an error.
-    startExpectError('empty', Buffer.alloc(0), /not a Z-Code|offset|rangeerror/i);
+    startExpectError('empty', Buffer.alloc(0), 'RangeError', /^Offset is outside the bounds of the DataView$/);
 });
 
 test('ifvms: truncated header (16 bytes) is rejected', { timeout: 30000 }, () => {
-    startExpectError('trunc-header', fs.readFileSync(FIXTURE).subarray(0, 16));
+    startExpectError('trunc-header', fs.readFileSync(FIXTURE).subarray(0, 16), 'RangeError', /^Offset is outside the bounds of the DataView$/);
 });
 
 test('ifvms: unsupported version byte 9 is rejected', { timeout: 30000 }, () => {
@@ -163,7 +164,7 @@ test('ifvms: unsupported version byte 9 is rejected', { timeout: 30000 }, () => 
         const b = Buffer.from(fs.readFileSync(FIXTURE));
         b[0] = 9;
         return b;
-    })(), /not a Z-Code|unsupported/i);
+    })(), 'Error', /^This is not a Z-Code file$/);
 });
 
 test('ifvms: version byte 0 is rejected', { timeout: 30000 }, () => {
@@ -171,12 +172,12 @@ test('ifvms: version byte 0 is rejected', { timeout: 30000 }, () => {
         const b = Buffer.from(fs.readFileSync(FIXTURE));
         b[0] = 0;
         return b;
-    })());
+    })(), 'Error', /^This is not a Z-Code file$/);
 });
 
 test('ifvms: half-truncated valid fixture does not run unbounded', { timeout: 30000 }, () => {
     const full = fs.readFileSync(FIXTURE);
-    startExpectError('truncated', full.subarray(0, Math.floor(full.length / 2)));
+    startExpectError('truncated', full.subarray(0, Math.floor(full.length / 2)), 'RangeError', /^Offset is outside the bounds of the DataView$/);
 });
 
 test('ifvms: inconsistent header file length is bounded and classified', { timeout: 30000 }, () => {
@@ -212,7 +213,9 @@ test('ifvms: parser rejection of an unknown command consumes no turn', { timeout
 test('ifvms: runaway recursion terminates with a classified error, not a hang', { timeout: 60000 }, () => {
     const story = fs.readFileSync(LOOPSTORY);
     const a = createIfvmsAdapter(story);
-    const r = a.start();
+    const r = runWithExpectedVmDiagnostic(() => a.start(), {
+        name: 'RangeError', message: /^Offset is outside the bounds of the DataView$/,
+    });
     assert.strictEqual(r.status, 'error', 'stack exhaustion is classified as error');
     assert.ok(r.errors.length > 0);
 });

@@ -107,6 +107,13 @@ sequence), harness boundary/reconciliation tests, negative tests with bounded
 execution, Bocfel launch-resolution/availability tests, and probe
 failure-injection tests.
 
+For the ifvms malformed-story and runaway-story negative tests, the test
+harness captures the single expected `console.log` error and checks its type,
+message and agreement with the adapter's recorded error. Unexpected or extra
+logs are forwarded and fail the check; other output and the interpreter are
+unchanged. The runaway worker uses the same check without changing the
+watchdog used for a nonterminating story.
+
 `node --test` executes test **files** concurrently. Suites that touch the
 canonical evidence files (`results/probe-*.jsonl`) — the integration tests
 and the failure-injection tests — serialize access with
