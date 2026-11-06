@@ -18,7 +18,7 @@ state, ZVM instance, Glk object, and `settle()`; no behavior change).
 
 ```sh
 cd experiments/vm-checkpoint
-node --test          # 33 tests: format validation, round-trip matrix, isolation
+node --test          # 49 tests: format validation, continuation spans, round-trip matrix, isolation
 ```
 
 Node >= 18 (tested on v24.13.0, Windows). Zero npm dependencies. Run from
@@ -47,9 +47,22 @@ explicit supplement sections above, at a boundary where a request is pending
 consumes — the `io` stream slots are validated down to their contents per
 the vendored runtime's slot semantics (slot 0 = input stream, slot 1 =
 screen flag, slot 2 = transcript state, slot 3 = the memory-output-stream
-stack, slot 4 = command-recording state), cross-section
-transcript↔window consistency after the digest verifies**, and **rejection
-of unseeded RNG payloads — `E_RNG`**); a fresh
+stack, slot 4 = command-recording state), read-continuation address/span
+validation against the checkpointed memory image (Issue #41: an
+honest-digest envelope pointing `bufaddr`/`parseaddr` at 0xFFFFFF used to
+restore `ready:true` and fault on the first input — the continuation's
+text-buffer and parse-table writes must fit writable dynamic memory
+`[0x40, static base)`, with the buffer length tied to the checkpointed
+capacity byte, `parseaddr = 0` kept as the no-tokenise sentinel, and
+`parseaddr` barred from the text continuation write span; out-of-range
+starts, near-end overflowing spans, and truncated tables are rejected
+`E_BOUNDARY`, capacity/header inconsistencies `E_STRUCTURE`), quetzal
+container validation that makes the validated memory image the image
+restore actually applies (FORM area must equal the buffer exactly — no
+trailing bytes — chunk headers may not straddle the declared area, and
+compressed or multiple memory chunks are refused; `E_STRUCTURE`),
+cross-section transcript↔window consistency after the digest verifies**, and
+**rejection of unseeded RNG payloads — `E_RNG`**); a fresh
 adapter runs its normal startup so windows/origram/stack exist, then
 `vm.restore_file(quetzal, 1)` re-verifies story identity
 (release/serial/checksum) and rebuilds memory/stacks/pc; the
@@ -102,6 +115,15 @@ stories cannot be driven to a VM error on demand).
 - `tests/format.test.js` — envelope validation: magic/version/identity/
   boundary/digest/structure/size rejections (A34), and the VM-level Quetzal
   IFhd rejection behind them.
+- `tests/continuation.test.js` — read-continuation address/span validation
+  (Issue #41, A34): the reported `bufaddr`/`parseaddr = 0xFFFFFF` repro and
+  near-end/truncated-span/capacity/header mutants are rejected with
+  `E_BOUNDARY`/`E_STRUCTURE` before any interpreter exists, through the
+  ordinary restoring child (no `--selftest`) with exit 2 and a byte-identical
+  baseline recapture after every rejection; genuine seeded line/char/halted
+  captures stay valid, and `parseaddr = 0` remains the legal no-tokenise
+  sentinel. Spans are derived from the checkpointed UMem image at runtime —
+  no fixture addresses are hardcoded.
 - `tests/roundtrip.test.js` — the boundary matrix, each case run twice and
   compared against an uninterrupted reference run: full output/grid/markers
   equality after every suffix step (never marker-only), machine-state

@@ -306,7 +306,10 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
         variants['bad-boundary'] = JSON.stringify(e);
     }
     // Structurally valid but corrupt quetzal: truncated base64 with a
-    // recomputed honest digest -- must fail at the VM layer.
+    // recomputed honest digest.  Since Issue #41 the envelope's quetzal
+    // container walk (quetzalUmem) rejects this before the interpreter
+    // exists, so it fails at the envelope layer with E_STRUCTURE ("carries
+    // no UMem chunk") instead of surfacing a VM-layer parse error.
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.payload.quetzalB64 = e.payload.quetzalB64.slice(0, 40);
@@ -375,7 +378,7 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
         'windows-main-null': 'E_STRUCTURE',
         'char-readdata-empty': 'E_STRUCTURE',
         'transcript-inconsistent': 'E_STRUCTURE',
-        'corrupt-quetzal': null, // VM-layer failure surfaces as a plain error
+        'corrupt-quetzal': 'E_STRUCTURE', // #41: envelope quetzal walk rejects before the VM layer
     };
 
     const childProcesses = [];

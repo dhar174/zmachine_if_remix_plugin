@@ -210,8 +210,234 @@ function validateEnvelope(envelope, expected) {
         throw new CheckpointError('E_STRUCTURE', 'published grid transcript disagrees with the upper window text');
     }
 
+    // Read-continuation address/span validation (Issue #41, A34), also
+    // post-digest: it interprets the payload's own checkpointed memory image,
+    // which is only trustworthy once the digest has verified.
+    validateReadContinuation(p, b, expected);
+
     if (!isPlainObject(envelope.capabilities)) throw new CheckpointError('E_STRUCTURE', 'capabilities section missing');
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Read-continuation address/span validation (Issue #41, A34).
+//
+// The pending read's continuation writes -- the typed text and the parse
+// table -- land in VM memory only when input ARRIVES, i.e. after ready:true.
+// A hostile or corrupt envelope can therefore point bufaddr/parseaddr
+// anywhere and only fault the child later (observed: bufaddr=0xFFFFFF with an
+// honestly recomputed digest restored ready:true, then threw
+// "RangeError: Offset is outside the bounds of the DataView" on the next
+// input and exited 4).  The 24-bit integer range check cannot see this, so
+// validation derives the spans the continuation will actually write and
+// rejects anything outside writable dynamic memory BEFORE any interpreter is
+// constructed.
+//
+// Semantics of the pinned vendored VM (experiments/vm-io/vendor/ifvms:
+// src/zvm/io.js read/handle_line_input, src/zvm/text.js tokenise,
+// src/zvm.js prepare):
+//
+//   - Continuation writes go through `ram`, a MemoryView over
+//     [0, static base); a write at or above the static base faults with the
+//     RangeError above.  The static base is header 0x0E-0x0F, carried inside
+//     UMem.  Addresses below 0x40 are the interpreter-owned header block the
+//     checkpoint deliberately writes back verbatim -- buffer objects do not
+//     live there.
+//   - Line completion (v5+) writes the count byte at bufaddr+1 and up to
+//     `len` bytes at bufaddr+2.., where len is clamped by glksim to
+//     payload.readData.buffer.length and is one byte per typed character
+//     for the ASCII input the supported surface uses (astral code points
+//     expand through the vendored UTF-16 text_to_zscii path -- an input-
+//     space residual of the vendored VM, identical live vs restored,
+//     outside the checkpoint-mutation classes); tokenise() then writes the
+//     count byte at parseaddr+1 and up to memory[parseaddr] four-byte
+//     entries.  v1-4 write the response plus its zero terminator from
+//     bufaddr+1, which yields the same bound under the capacity tie below.
+//   - readData.buffer was created as Array(memory[bufaddr]) at opcode issue
+//     (v1-4: Array(memory[bufaddr] - 1)), tying its length to the
+//     checkpointed capacity byte at bufaddr.  memory[parseaddr] (max words)
+//     is read at continuation time, so the parse span derives from UMem.
+//   - parseaddr = 0 is a legitimate sentinel meaning no tokenisation.
+//
+// Bounds are read from the CHECKPOINTED memory image (the UMem chunk inside
+// the payload quetzal -- save_file(pc, 1) writes uncompressed dynamic memory
+// of exactly staticmem bytes), not from the virgin story: the game may have
+// rewritten its own capacity bytes, and the checkpoint describes the state
+// at the boundary.  When the caller supplies trusted story bytes
+// (expected.storyBytes), the image's version and static base are also
+// cross-checked against the story header.
+// ---------------------------------------------------------------------------
+
+// FourCC tags are compared BYTE-EXACTLY against their ASCII byte values:
+// the pinned parser's MemoryView.getFourCC() (String.fromCharCode per byte,
+// src/common/utils.js) is byte-preserving, while Buffer's ascii decoding
+// folds the high bit -- Buffer.from([0xd5, 0x4d, 0x65, 0x6d]).toString('ascii')
+// === 'UMem' even though the parser reads 'ÕMem'.  An ASCII-folding
+// comparison would accept a high-bit-mutated FORM/IFZS/UMem tag that the
+// pinned parser interprets as a different FourCC, validating one container
+// while restore interprets another (maintainer review P2 on PR #55).
+const FOURCC = {
+    form: Buffer.from([0x46, 0x4F, 0x52, 0x4D]), // 'FORM'
+    ifzs: Buffer.from([0x49, 0x46, 0x5A, 0x53]), // 'IFZS'
+    umem: Buffer.from([0x55, 0x4D, 0x65, 0x6D]), // 'UMem'
+    cmem: Buffer.from([0x43, 0x4D, 0x65, 0x6D]), // 'CMem'
+};
+
+// Diagnostic renderer for tag bytes: ASCII where printable, \xNN escape
+// otherwise -- never re-folds a high bit into a look-alike tag.
+function renderFourCC(bytes) {
+    let out = '';
+    for (const b of bytes) {
+        out += (b >= 0x20 && b < 0x7F) ? String.fromCharCode(b) : '\\x' + b.toString(16).padStart(2, '0');
+    }
+    return "'" + out + "'";
+}
+
+// Extract the UMem chunk bytes from the payload quetzal.  Mirrors the walk
+// of the Quetzal parser restore consumes (src/common/file.js) with NO
+// divergence window, so the validated memory image IS the image restore
+// applies (review findings F1/F8): the declared FORM area must equal the
+// buffer exactly (genuine save_file output always does -- its writer sets
+// the FORM size to buffer length - 8 -- so this cannot over-reject genuine
+// captures, and it removes any trailing bytes the parser's straddling-
+// header window could otherwise read), the chunk walk uses the parser's own
+// loop condition (off < formEnd) so every offset the parser processes was
+// also processed here, a chunk header extending past the declared area (the
+// parser's straddling-header window) is rejected instead of skipped, chunk
+// data must fit the declared area (stricter than the parser's own quirky
+// bounds check -- we reject rather than mis-accept), the walk must consume
+// the declared area exactly, and all FourCC comparisons are byte-exact (see
+// FOURCC above).  Format-specific refusals: a compressed CMem memory chunk,
+// MULTIPLE memory chunks (the vendored parser keeps the last CMem/UMem
+// chunk -- a benign first UMem with a hostile second one would otherwise
+// validate one image and restore another), and a missing UMem chunk all
+// reject E_STRUCTURE.  Returns a Uint8Array VIEW into the decoded quetzal
+// Buffer -- hostile-envelope tests may mutate through it and re-encode;
+// validation itself only reads.
+function quetzalUmem(quetzalB64) {
+    const quetzal = Buffer.from(quetzalB64, 'base64');
+    if (quetzal.length < 12 || !quetzal.subarray(0, 4).equals(FOURCC.form) || !quetzal.subarray(8, 12).equals(FOURCC.ifzs)) {
+        throw new CheckpointError('E_STRUCTURE', 'payload quetzal is not a Quetzal FORM/IFZS container');
+    }
+    const formEnd = quetzal.readUInt32BE(4) + 8;
+    if (formEnd !== quetzal.length) {
+        throw new CheckpointError('E_STRUCTURE', 'payload quetzal declares a FORM area of ' + (formEnd - 8) + ' bytes but carries ' + quetzal.length + ' (must match exactly, as save_file output always does)');
+    }
+    let off = 12;
+    let umem = null;
+    while (off < formEnd) {
+        if (off + 8 > formEnd) {
+            // The parser would read this straddling header across the area
+            // end (and past the buffer, since the area equals the buffer
+            // length); validation must refuse it, never skip it.
+            throw new CheckpointError('E_STRUCTURE', 'payload quetzal has an IFF chunk header at offset ' + off + ' extending past the declared FORM area');
+        }
+        const typeBytes = quetzal.subarray(off, off + 4);
+        const len = quetzal.readUInt32BE(off + 4);
+        if (off + 8 + len > formEnd) {
+            throw new CheckpointError('E_STRUCTURE', 'payload quetzal declares an IFF chunk out of range (type ' + renderFourCC(typeBytes) + ' at offset ' + off + ')');
+        }
+        if (typeBytes.equals(FOURCC.umem)) {
+            if (umem !== null) {
+                throw new CheckpointError('E_STRUCTURE', 'payload quetzal carries multiple memory chunks: the validated memory image must be the image restore applies');
+            }
+            umem = quetzal.subarray(off + 8, off + 8 + len);
+        }
+        if (typeBytes.equals(FOURCC.cmem)) {
+            throw new CheckpointError('E_STRUCTURE', 'compressed CMem memory chunk: not the uncompressed autosave image the checkpoint format captures');
+        }
+        off += 8 + len + (len % 2);
+    }
+    if (off !== formEnd) {
+        throw new CheckpointError('E_STRUCTURE', 'payload quetzal chunk walk overruns the declared FORM area (ended at ' + off + ' of ' + formEnd + ')');
+    }
+    if (umem === null) {
+        throw new CheckpointError('E_STRUCTURE', 'payload quetzal carries no UMem chunk');
+    }
+    return umem;
+}
+
+// The single rulebook for line-boundary continuation spans.  Codes: an
+// address/span outside writable dynamic memory is E_BOUNDARY (the boundary's
+// continuation cannot land there); a payload whose own capacity fields
+// disagree (with each other or with the trusted story header) is
+// E_STRUCTURE.  parseaddr = 0 is the documented no-tokenise sentinel.
+function validateReadContinuation(p, boundary, expected) {
+    if (boundary.kind !== 'line') return; // char/halted carry no continuation buffers
+    const rd = p.readData;
+    const umem = quetzalUmem(p.quetzalB64);
+
+    // The memory image must be an uncompressed autosave memory image (the
+    // only kind captureCheckpoint emits) carrying a parseable header.
+    if (umem.length < 0x40) {
+        throw new CheckpointError('E_STRUCTURE', 'quetzal UMem chunk too short to carry the Z-machine header (needs 0x40 bytes, got ' + umem.length + ')');
+    }
+    const staticBase = (umem[0x0E] << 8) | umem[0x0F];
+    if (staticBase <= 0x40) {
+        throw new CheckpointError('E_STRUCTURE', 'checkpointed static memory base (header 0x0E) is implausible: ' + staticBase);
+    }
+    if (umem.length !== staticBase) {
+        throw new CheckpointError('E_STRUCTURE', 'UMem chunk length (' + umem.length + ') disagrees with the checkpointed static memory base (' + staticBase + '): the payload quetzal is not an uncompressed autosave memory image');
+    }
+    if (expected.storyBytes) {
+        const storyStaticBase = (expected.storyBytes[0x0E] << 8) | expected.storyBytes[0x0F];
+        if (umem[0] !== expected.storyBytes[0] || staticBase !== storyStaticBase) {
+            throw new CheckpointError('E_STRUCTURE', 'checkpointed header (version ' + umem[0] + ', static base ' + staticBase + ') disagrees with the trusted story file header (version ' + expected.storyBytes[0] + ', static base ' + storyStaticBase + ')');
+        }
+    }
+    const version = umem[0];
+    if (version < 1 || version > 8) {
+        throw new CheckpointError('E_STRUCTURE', 'checkpointed story version byte (UMem[0]) is not a Z-machine version: ' + version);
+    }
+
+    // Text buffer.  Continuation writes cover [bufaddr+1, bufaddr+1+len]
+    // with len <= rd.buffer.length, so the buffer object plus its worst-case
+    // continuation must fit writable dynamic memory exactly:
+    //   bufaddr >= 0x40 and bufaddr + rd.buffer.length + 2 <= staticBase.
+    // (bufaddr + len + 2 <= staticBase subsumes any 24-bit address-space
+    // overflow: staticBase <= 0xFFFF and the pre-digest range check bounds
+    // bufaddr to 24 bits, and Number arithmetic here is exact.)
+    if (rd.bufaddr < 0x40) {
+        throw new CheckpointError('E_BOUNDARY', 'line readData.bufaddr (' + rd.bufaddr + ') lies outside writable dynamic memory [0x40, ' + staticBase + ')');
+    }
+    if (rd.bufaddr + rd.buffer.length + 2 > staticBase) {
+        throw new CheckpointError('E_BOUNDARY', 'line readData text-buffer continuation span (bufaddr ' + rd.bufaddr + ' + ' + rd.buffer.length + ' + 2 bytes) overflows writable dynamic memory (static base ' + staticBase + ')');
+    }
+    // Capacity tie: the buffer array was sized from memory[bufaddr] at
+    // opcode issue, so its length must equal the checkpointed capacity byte
+    // (minus the v1-4 zero terminator).  A disagreement means the payload's
+    // sections describe different states.
+    const capByte = umem[rd.bufaddr];
+    if (rd.buffer.length !== (version < 5 ? capByte - 1 : capByte)) {
+        throw new CheckpointError('E_STRUCTURE', 'readData.buffer length (' + rd.buffer.length + ') disagrees with the checkpointed capacity byte at bufaddr (' + capByte + ')');
+    }
+
+    // Parse table.  parseaddr = 0 is the documented sentinel (the fixture's
+    // parser always passes a table; other stories may not).  Continuation
+    // writes cover [parseaddr+1, parseaddr+1+4*maxWords] with
+    // maxWords <= UMem[parseaddr]:
+    //   parseaddr >= 0x40 and parseaddr + 2 + 4*UMem[parseaddr] <= staticBase.
+    if (rd.parseaddr !== 0) {
+        // The typed text is written BEFORE tokenise re-reads the parse
+        // capacity (io.js handle_line_input -> text.js tokenise): a parse
+        // table inside the text write span would have its capacity byte
+        // inflated by the response itself, so the validated capacity is not
+        // the effective capacity and the parse writes could exceed the
+        // validated span (review finding F2).  Genuine captures keep the
+        // buffer objects disjoint; parseaddr = bufaddr itself stays safe
+        // (the byte it names is the text buffer's own capacity byte, which
+        // the text write never overwrites).
+        if (rd.parseaddr >= rd.bufaddr + 1 && rd.parseaddr <= rd.bufaddr + 1 + rd.buffer.length) {
+            throw new CheckpointError('E_BOUNDARY', 'line readData.parseaddr (' + rd.parseaddr + ') lies inside the text-buffer continuation write span [bufaddr+1, bufaddr+1+' + rd.buffer.length + ']: the response would inflate the parse capacity byte before tokenise reads it');
+        }
+        if (rd.parseaddr < 0x40 || rd.parseaddr >= staticBase) {
+            throw new CheckpointError('E_BOUNDARY', 'line readData.parseaddr (' + rd.parseaddr + ') lies outside writable dynamic memory [0x40, ' + staticBase + ')');
+        }
+        const capWords = umem[rd.parseaddr];
+        if (rd.parseaddr + 2 + 4 * capWords > staticBase) {
+            throw new CheckpointError('E_BOUNDARY', 'line readData parse-table continuation span (parseaddr ' + rd.parseaddr + ' + 2 + 4 x ' + capWords + ' entries) overflows writable dynamic memory (static base ' + staticBase + ')');
+        }
+    }
 }
 
 // Deep validation of the nested io state restore consumes: a missing or
@@ -322,5 +548,6 @@ module.exports = {
     sha256Hex,
     cloneJson,
     canonicalPayloadString,
+    quetzalUmem,
     validateEnvelope,
 };
