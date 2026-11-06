@@ -1,6 +1,6 @@
 # G1-B evidence: native VM checkpoint, recovery, and candidate isolation probe
 
-**Issue:** [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) under #4 (G1 Technical Feasibility). **Probe brief:** `docs/superpowers/plans/2026-10-22-g1-b-checkpoint-probe.md`. **Status:** executed 2026-10-23; draft PR pending independent review. This document records measured evidence and a **proposed** recommendation; it is not an owner-approved runtime decision (roadmap G1 stop gate; decision-register D39 records the proposal).
+**Issue:** [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) under #4 (G1 Technical Feasibility). **Probe brief:** `docs/superpowers/plans/2026-10-22-g1-b-checkpoint-probe.md`. **Status at the 2026-10-23 report:** executed; draft PR pending independent review. This document records measured evidence and a **proposed** recommendation; it is not an owner-approved runtime decision (roadmap G1 stop gate; decision-register D39 records the proposal).
 
 ## 1. Executive findings
 
@@ -21,7 +21,7 @@ Unseeded (random-mode) RNG checkpoints are **rejected outright** (stable code `E
 | Fixture | `tests/fixtures/zmachine/fixture.z5`, SHA-256 `96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`, 88,576 bytes (verified from the checkout; Inform 6.44 + Library 6.12.8, unmodified from G1-A) |
 | Primary candidate | vendored ifvms.js ZVM, revision `6ac63e6b61144d4353a168df16c4ad5c22526f88` (MIT; `experiments/vm-io/vendor/ifvms`) |
 | Bocfel reference | Bocfel 2.6 non-Glk build via WSL2; tarball SHA-1 `319770fc5c50c4824d1b6edea1e9ce2ba0d196da` (`experiments/vm-io/tools/bocfel-2.6.tar.gz`, pinned by G1-A) |
-| Suite | `experiments/vm-checkpoint` — 49 tests (`node --test` from that directory), zero npm dependencies |
+| Suite | `experiments/vm-checkpoint` (`node --test` from that directory), zero npm dependencies: 33 tests at the original report `ca618a5`, 47 at `7935cc8`, and 49 at PR #55 final head `bf71725` |
 
 Baseline verification runs recorded before probe work (actual counts, not assumed): fixture integrity suite 3 tests / 2 pass / 1 machine-dependent skip (pinned Inform compiler absent; digest evidence stands); vm-io harness suite at its then-current size (54 tests) **54 / 52 pass / 1 machine-dependent skip / 1 fail reproduced 5/5 runs** — a pre-existing G1-A defect, fixed in an isolated commit (see §7; the suite grew to 57 tests when the lock-regression tests were added, and post-fix it records 57 / 56 pass / 1 skip / 0 fail).
 
@@ -87,7 +87,34 @@ Every case: independent capture → fresh child restore → identical input suff
 | 9 | Halted (post-`@quit`) | Terminal | seeded | **Demonstrated** — restore succeeds; new input refused with zero output and zero state change (shared halt predicate) | roundtrip: restored halted execution… |
 | 10 | Undo after restore | ≥1 turn | seeded | **Demonstrated** — `undo` handled safely; no undo history; restored depth ≤ source | roundtrip: in-memory undo… |
 
-Reproduce: `cd experiments/vm-checkpoint && node --test` (47 tests, 0 failures, 0 skipped on this machine; CI covers ubuntu + windows via the checkpoint smoke workflow).
+Reproduce: `cd experiments/vm-checkpoint && node --test`. The earlier local
+Windows run recorded 47 tests, 0 failures and 0 skips at `7935cc8`. For the
+final [PR #55](https://github.com/dhar174/zmachine_if_remix_plugin/pull/55)
+head `bf71725`, [checkpoint CI run 41912746842](https://github.com/dhar174/zmachine_if_remix_plugin/actions/runs/41912746842)
+reported 49 passed, 0 failed and 0 skipped on each of Ubuntu and Windows. Its
+checkout was synthetic merge `285b21fd298ebce3117a65ff22eb2d936421ac65`.
+
+**Issue #41 verification, 2026-11-06:** On main baseline `dddc31c`, a local
+Windows / Node v24.13.0 checkpoint-suite run reported 49 passed, 0 failed and
+0 skipped. The suite includes 13 honest-digest continuation/image mutations
+through the ordinary child runner, pre-readiness `E_BOUNDARY`/`E_STRUCTURE`
+rejection with exit 2 and unchanged baseline recapture, plus seeded line and
+character round trips. The fixture SHA-256 remained
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`.
+The local fixture-integrity suite passed 2 tests and skipped recompilation
+because the pinned compiler was absent. The local VM-I/O runner reported 56
+passes, 0 failed and 1 skip, but emitted error traces during malformed-story
+and runaway-story negative tests. The separate
+[PR #57 probe CI run](https://github.com/dhar174/zmachine_if_remix_plugin/actions/runs/42283459077)
+reported success using synthetic merge `eeaee322bcb314e9636630139c0d8d204f5c3092`:
+the VM-I/O suite reported 37 passes / 4 skips on Ubuntu and 39 passes / 2 skips
+on Windows; fixture integrity reported 2 passes / 1 skip on each. Both hosted
+VM-I/O logs also contain error traces from negative tests. This closeout does
+not count either the local run or those hosted VM-I/O runs as a clean pass, so
+it has not verified #41's all-current-G1-tests criterion. The hosted jobs used
+probe and fixture sources unchanged from PR #55. This is fixture-scoped #41
+evidence, not full A34 or production recovery acceptance. Issues #12, #40 and
+#41 remain open and D39 remains proposed.
 
 ## 6. Candidate isolation results
 
