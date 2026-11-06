@@ -1,6 +1,6 @@
 # G1-B evidence: native VM checkpoint, recovery, and candidate isolation probe
 
-**Issue:** [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) under #4 (G1 Technical Feasibility). **Probe brief:** `docs/superpowers/plans/2026-10-22-g1-b-checkpoint-probe.md`. **Status:** executed 2026-10-23; draft PR pending independent review. This document records measured evidence and a **proposed** recommendation; it is not an owner-approved runtime decision (roadmap G1 stop gate; decision-register D39 records the proposal).
+**Issue:** [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) under #4 (G1 Technical Feasibility). **Probe brief:** `docs/superpowers/plans/2026-10-22-g1-b-checkpoint-probe.md`. **Status at the 2026-10-23 report:** executed; draft PR pending independent review. This document records measured evidence and a **proposed** recommendation; it is not an owner-approved runtime decision (roadmap G1 stop gate; decision-register D39 records the proposal).
 
 ## 1. Executive findings
 
@@ -87,7 +87,30 @@ Every case: independent capture → fresh child restore → identical input suff
 | 9 | Halted (post-`@quit`) | Terminal | seeded | **Demonstrated** — restore succeeds; new input refused with zero output and zero state change (shared halt predicate) | roundtrip: restored halted execution… |
 | 10 | Undo after restore | ≥1 turn | seeded | **Demonstrated** — `undo` handled safely; no undo history; restored depth ≤ source | roundtrip: in-memory undo… |
 
-Reproduce: `cd experiments/vm-checkpoint && node --test` (47 tests, 0 failures, 0 skipped on this machine; CI covers ubuntu + windows via the checkpoint smoke workflow).
+Reproduce: `cd experiments/vm-checkpoint && node --test`. The earlier local
+Windows run recorded 47 tests, 0 failures and 0 skips at `7935cc8`. For the
+final [PR #55](https://github.com/dhar174/zmachine_if_remix_plugin/pull/55)
+head `bf71725`, [checkpoint CI run 41912746842](https://github.com/dhar174/zmachine_if_remix_plugin/actions/runs/41912746842)
+reported 49 passed, 0 failed and 0 skipped on each of Ubuntu and Windows. Its
+checkout was synthetic merge `285b21fd298ebce3117a65ff22eb2d936421ac65`.
+
+**Issue #41 verification, 2026-11-06:** On main baseline `dddc31c`, a local
+Windows / Node v24.13.0 checkpoint-suite run reported 49 passed, 0 failed and
+0 skipped. The suite includes 13 honest-digest continuation/image mutations
+through the ordinary child runner, pre-readiness `E_BOUNDARY`/`E_STRUCTURE`
+rejection with exit 2 and unchanged baseline recapture, plus seeded line and
+character round trips. The fixture SHA-256 remained
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`.
+The local fixture-integrity suite passed 2 tests and skipped recompilation
+because the pinned compiler was absent. The local VM-I/O runner reported 56
+passes, 0 failed and 1 skip, but emitted
+error traces during malformed-story negative tests; under the contributor
+verification policy this is not counted as a clean local pass. The separate
+[PR #57 probe CI run](https://github.com/dhar174/zmachine_if_remix_plugin/actions/runs/42283459077)
+reported success on both platforms, with machine-dependent skips; it used
+probe and fixture sources unchanged from PR #55. This is fixture-scoped #41
+evidence, not full A34 or production recovery acceptance. Issues #12 and #40
+remain open and D39 remains proposed.
 
 ## 6. Candidate isolation results
 
