@@ -1,6 +1,7 @@
 # G1-C feasibility probe: chatbot host, approvals and import
 
-**Owner issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13). **Status:** proposed, not executed; host/client, service options and allowed budget require explicit review.
+**Owner issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
+**Status at plan creation (2026-10-22):** proposed, not executed; host/client, service options and allowed budget required explicit review. The subsequent bounded outcome and owner acceptance are recorded in the [closeout](../../evidence/g1-chat-host-closeout.md).
 
 ## Question
 Can the actual intended ChatGPT client invoke authenticated read/write tools, demonstrate user-bound exact-change approval and privately supply a redistributable story file to the engine without assuming attachment filesystem access?

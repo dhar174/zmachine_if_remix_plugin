@@ -1,14 +1,14 @@
 # G1-C: live web and Classic probe evidence
 
 **Issue:** [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13).
-**Current disposition (2026-11-06):** The owner approved a bounded route and
-accepted the R1 host-definition limit; R2 and R3 have the narrower dispositions
-in the [supported-route audit](g1-chat-host-acceptance-audit.md). The
-[bounded closeout](g1-chat-host-closeout.md) maps the issue criteria and retains
-the separate owner closure decision. Issue #13 remains open. The dated
+**Current disposition (2026-11-06):** The owner accepted bounded G1-C for the
+documented route and Issue #13 was closed. The [bounded closeout](g1-chat-host-closeout.md)
+records the decision, maps the issue criteria and retains the limits. R1 is an
+accepted host-definition limit; R2 and R3 have the narrower dispositions in the
+[supported-route audit](g1-chat-host-acceptance-audit.md). The dated
 checkpoints below preserve their then-current gaps and availability observations;
 they do not assert a fresh shutdown check or full product acceptance.
-**Updated:** 2026-11-02 (independent review; no new live trials). Actual tested route: ChatGPT **web Chat** in Chrome on
+**Evidence updated:** 2026-11-02 (independent review; no new live trials). Actual tested route: ChatGPT **web Chat** in Chrome on
 Windows x64, using the owner-approved private Secure MCP Tunnel and Auth0.
 Classic desktop **Chat** is also tested. Web Work and native desktop Work now
 have separate authenticated read/receipt trials (§6.14); their write/approval
@@ -21,8 +21,8 @@ expired handoff remains a failed checkpoint (§6.12). The original forward commi
 initially produced an incorrect no-commit report; subsequent reads and receipt
 recovery reconciled it. See §6.8 for that retained failure and cleanup provenance.
 
-**Latest availability:** the service and private tunnel are **offline** for the
-independent review. The October 29 restoration and later running-process entries
+**Availability at the November 2 independent review:** the service and private
+tunnel were **offline**. The October 29 restoration and later running-process entries
 below are historical checkpoints. No live credentials, reconnect or probe calls
 were used for this review; the one-day runtime key has expired. See §6.15.
 
