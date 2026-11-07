@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const {
     createInstance, line, drive, capture, machineFingerprint, fingerprintDiff,
     FIXTURE, RUNNER, spawnRestore, awaitExit,
@@ -143,6 +143,55 @@ test('protocol evidence drains before immediate EOF or explicit exit', { timeout
     }
 });
 
+test('a temporarily paused stdout reader receives all queued failures', { timeout: 60000 }, async () => {
+    const child = spawn(process.execPath, [RUNNER, '--story', FIXTURE, '--checkpoint', checkpoint],
+        { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let stdinError = null;
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.stdin.on('error', (error) => { stdinError = error; });
+    const exited = new Promise((resolve, reject) => {
+        child.once('error', reject);
+        child.once('close', (code, signal) => resolve({ code, signal }));
+    });
+    const ready = new Promise((resolve, reject) => {
+        child.once('error', reject);
+        child.once('close', () => reject(new Error('child closed before readiness')));
+        child.stdout.on('data', (chunk) => {
+            stdout += chunk;
+            if (stdout.includes('\n')) resolve();
+        });
+    });
+    const watchdog = setTimeout(() => child.kill(), 30000);
+    try {
+        await ready;
+        assert.equal(JSON.parse(stdout.split('\n')[0]).ready, true);
+        child.stdout.pause();
+        child.stdin.end(Array(10000).fill('{').join('\n') + '\n{"op":"exit"}\n');
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        child.stdout.resume();
+        const result = await exited;
+        assert.equal(result.signal, null);
+        assert.equal(result.code, 4);
+        assert.equal(stdinError, null);
+        assert.equal(stderr, '');
+        const rows = stdout.split('\n').filter(Boolean).map((row) => JSON.parse(row));
+        assert.equal(rows.length, 10001, 'missing queued responses after reader resumed');
+        for (const row of rows.slice(1)) {
+            assert.equal(row.error, 'bad request line');
+            assert.equal(row.failed, true);
+        }
+    } finally {
+        clearTimeout(watchdog);
+        child.stdout.resume();
+        if (child.exitCode === null && child.signalCode === null) child.kill();
+        await exited.catch(() => {});
+    }
+});
+
 test('explicit exit terminates while the parent keeps stdin open', { timeout: 60000 }, async () => {
     const child = spawnRestore(checkpoint);
     try {
@@ -195,6 +244,28 @@ test('protocol failure cannot replace an immediate output-limit exit 3', () => {
     assert.equal(result.rows[1].failed, true);
     assert.equal(result.rows[2].error, 'output-limit-exceeded');
     assert.equal(result.status, 3);
+});
+
+test('invalid or missing runner arguments exit 2 with structured evidence', () => {
+    const cases = [
+        { args: ['--unknown', 'value'], message: 'unknown argument: --unknown' },
+        { args: ['--checkpoint', checkpoint], message: '--story and --checkpoint are required' },
+        { args: ['--story', FIXTURE], message: '--story and --checkpoint are required' },
+        { args: [], message: '--story and --checkpoint are required' },
+    ];
+    for (const item of cases) {
+        const result = spawnSync(process.execPath, [RUNNER, ...item.args], {
+            input: '', encoding: 'utf8', timeout: 30000,
+        });
+        assert.equal(result.error, undefined);
+        assert.equal(result.signal, null);
+        assert.equal(result.stderr, '');
+        assert.equal(result.status, 2);
+        const rows = result.stdout.split('\n').filter(Boolean).map((row) => JSON.parse(row));
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].ready, false);
+        assert.equal(rows[0].error, item.message);
+    }
 });
 
 test('checkpoint rejection still exits 2 before readiness', () => {

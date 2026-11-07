@@ -18,7 +18,7 @@ supplied story buffer.
 
 ```sh
 cd experiments/vm-checkpoint
-node --test          # format, identity, continuation, timed-input gates, round trips, isolation
+node --test          # protocol, format, identity, continuation, timed input, round trips, isolation
 ```
 
 Node >= 18 (tested on v24.13.0, Windows). Zero npm dependencies. Run from
@@ -188,9 +188,9 @@ a VM error on demand).
 ## Tests
 
 - `tests/runner-protocol.test.js` — ordinary-child protocol failures with EOF
-  and explicit exit, sticky failures across requests, queued-output drain,
-  clean input/serialization, and distinct output-limit/checkpoint exits; the
-  live baseline is rechecked after each case.
+  and explicit exit, sticky failures across requests, a temporarily paused
+  stdout reader, clean input/serialization, and distinct argument, output-limit
+  and checkpoint exits; the live baseline is rechecked after each case.
 - `tests/identity-integrity.test.js` — trusted capture/restore story identity,
   v1 rejection, canonical checksums, runtime/adapter and build mutations,
   metadata and capability mutations with stale and recomputed checksums,

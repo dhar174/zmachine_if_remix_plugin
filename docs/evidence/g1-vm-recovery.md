@@ -91,20 +91,26 @@ output limit stops processing with exit 3 even after a prior failure, and
 argument/checkpoint rejection remains exit 2. Explicit exit stops later queued
 input and closes stdin even if the parent keeps its pipe open. With a working
 stdout reader, queued responses drain before normal exit; broken pipes and
-forced kills do not guarantee delivery. Parent-enforced timeouts are observed
-kills/reaping, not a portable numeric exit class. The parent must check final
-status before using a candidate or its serialized output; durable publication
+forced kills do not guarantee delivery. The baseline also delivered all 2,500
+responses in the cooperative-reader batch, so that batch is not a demonstrated
+baseline truncation. A separate local paused-reader smoke delivered all 2,500
+candidate responses after the reader resumed; the permanent regression also
+checks 10,000 queued errors with the stdout reader temporarily paused.
+Parent-enforced timeouts are observed kills/reaping, not a portable numeric exit
+class. The parent must check final status before using a candidate or its
+serialized output; durable publication
 and receipt recovery remain outside this probe. Because `runner.js` is included
 in the adapter-build fingerprint, a v2 checkpoint captured at baseline
 `3a7a00b` on the same local host rejected before readiness with `E_RUNTIME`
 when restored by the changed runner (exit 2, empty stderr). A new capture is
 required; no checkpoint migration is provided.
 
-Local verification on Windows/Node v24.13.0: the focused protocol suite passed
-21/21, and the full checkpoint suite passed 84/84. VM-I/O passed 60 with one
-skip (WSL Bocfel is installed); fixture integrity passed two with one skip
-(the pinned compiler is absent). All commands exited 0 with empty stderr. The
-fixture SHA-256 remained
+Local verification on Windows/Node v24.13.0: after review follow-up, the focused
+protocol suite passed 23/23 and the full checkpoint suite passed 86/86. The
+VM-I/O and fixture suites ran before that follow-up, which changed only tests
+and documentation: VM-I/O passed 60 with one skip (WSL Bocfel is installed);
+fixture integrity passed two with one skip (the pinned compiler is absent).
+All commands exited 0 with empty stderr. The fixture SHA-256 remained
 `96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`;
 the regenerated VM-I/O receipt was restored to its pre-test bytes and both
 tracked receipt hashes were verified. Hosted Windows/Linux outcomes belong to
