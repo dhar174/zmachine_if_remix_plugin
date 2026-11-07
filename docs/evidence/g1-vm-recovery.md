@@ -178,6 +178,27 @@ Every case: independent capture → fresh child restore → identical input suff
 | 9 | Halted (post-`@quit`) | Terminal | seeded | **Demonstrated** — restore succeeds; new input refused with zero output and zero state change (shared halt predicate) | roundtrip: restored halted execution… |
 | 10 | Undo after restore | ≥1 turn | seeded | **Demonstrated** — `undo` handled safely; no undo history; restored depth ≤ source | roundtrip: in-memory undo… |
 
+**Issue #45 regression, 2026-11-07:** `tests/envelope-recapture.test.js`
+compares the complete canonical v2 envelope, including integrity, and exact
+JSON bytes after immediate fresh-child restore and recapture at seeded line and
+character boundaries. It checks nonempty fixture windows and cursor coordinates,
+serialized I/O, pending read data, transcript/grid and RNG state. A separate
+line → first child → pending character checkpoint → second child sequence
+compares each input's result and request log against an uninterrupted reference;
+the first child exits before the second starts. The final fingerprint and
+envelope match, startup/menu markers occur once, and the original live baseline
+and checkpoint file remain unchanged. Both children are observed exiting.
+Only the declared-unsupported `undoDepth` difference is allowed for
+fingerprints; the full-envelope comparisons have no field exclusions and no
+unseeded-output normalization. These are fixture-scoped candidate-process
+checks, not combined-world or durable-publication evidence.
+
+On Windows / Node v24.13.0, from `experiments/vm-checkpoint`,
+`node --test tests/envelope-recapture.test.js` exited 0: 3 passed, 0 failed,
+0 skipped; `node --test` exited 0: 89 passed, 0 failed, 0 skipped. Both
+commands produced empty stderr. Hosted Windows and Ubuntu results are recorded
+with the PR checks.
+
 Reproduce: `cd experiments/vm-checkpoint && node --test`. The earlier local
 Windows run recorded 47 tests, 0 failures and 0 skips at `7935cc8`. For the
 final [PR #55](https://github.com/dhar174/zmachine_if_remix_plugin/pull/55)
