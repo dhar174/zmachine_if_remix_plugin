@@ -27,11 +27,45 @@ Baseline verification runs recorded before probe work (actual counts, not assume
 
 ## 3. Checkpoint envelope and restore mechanism
 
-Envelope v1 (`experiments/vm-checkpoint/lib/checkpoint-format.js`) is data-only JSON: no functions, never the JIT cache. Sections: `format`/`version`; `identity` (story SHA-256 + size, runtime name + pinned revision, adapter, schema); `boundary` (`line`/`char`/`halted` + pending line maxlen); `payload` (Quetzal from the upstream `vm.save_file(pc, 1)` primitive — `IFhd` identity, `UMem` raw dynamic memory, `Stks` in-use call stack — plus RNG seed/mode, plain-data `io`, pending `read_data` with its buffer, window text/cursor, published buffer+grid transcript, request log minus the pending entry, VM halt flags, undo disposition); `integrity` (SHA-256 over the canonical payload); `capabilities` (coverage + unsupported list carried with the data).
+The original envelope v1 was data-only JSON (historical description; v2 supersedes it below): no functions, never the JIT cache. Sections: `format`/`version`; `identity` (story SHA-256 + size, runtime name + pinned revision, adapter, schema); `boundary` (`line`/`char`/`halted` + pending line maxlen); `payload` (Quetzal from the upstream `vm.save_file(pc, 1)` primitive — `IFhd` identity, `UMem` raw dynamic memory, `Stks` in-use call stack — plus RNG seed/mode, plain-data `io`, pending `read_data` with its buffer, window text/cursor, published buffer+grid transcript, request log minus the pending entry, VM halt flags, undo disposition); `integrity` (SHA-256 over the canonical payload); `capabilities` (coverage + unsupported list carried with the data).
+
+**Issue #43, 2026-11-07 — envelope v2:** At baseline `8a5ad823`, separate
+runtime-name, adapter-name, line-`maxlen` and capability mutants retained the
+old payload checksum yet each reached `ready:true` in the ordinary restoring
+child; the changed `maxlen` also appeared in the restored request log. V2
+rejects v1 (`E_VERSION`) without migration. Capture records story identity from
+the adapter's original supplied bytes; restore derives its expected story
+identity from its own supplied bytes. Before constructing an interpreter, it
+also compares the exact local runtime and adapter names, pinned revision,
+source-build digests, Node/V8 versions, platform, architecture, and schema.
+The runtime fingerprint covers all JavaScript under the vendored `src` tree;
+the adapter fingerprint covers the adapter, Glk shim, checkpoint
+contract/core/format, fingerprint and runner. Both use sorted relative paths
+and file hashes; identical sources in another checkout path match. The source
+snapshot is taken at module initialization, assuming files stay unchanged while
+the process runs; it does not attest Node, the OS, or in-process code.
+
+V2 hashes a domain prefix and experiment-specific canonical JSON of the entire
+envelope except the exactly shaped `integrity` object. This detects unrecomputed
+changes; the checksum is unkeyed, is not authentication, and cannot prevent an
+author from recomputing it after changing payload data. Independently, capability
+claims must exactly match the implementation-owned statement and a pending line
+request's `maxlen` must be zero, as passed by this pinned runtime. A recomputed
+checksum therefore cannot grant a claimed capability or change that request
+metadata. Exact identity comparisons deliberately reject a different source
+build or Node/V8/platform/architecture even when it could be compatible; any
+capability wording or array-order change likewise requires a new capture.
+
+Error precedence is format/version, story and implementation identity, boundary
+and nested payload structure including unsupported-state gates, checksum, then
+request/capability and cross-payload consistency. Consequently an earlier
+`E_RUNTIME`, `E_TIMED_INPUT`, or structural error can precede `E_DIGEST`;
+otherwise stale metadata rejects `E_DIGEST`, rehashed nonzero `maxlen` rejects
+`E_BOUNDARY`, and rehashed differing capabilities reject `E_CAPABILITY`.
 
 Restore (`lib/checkpoint-core.js`) always targets a fresh interpreter and follows upstream's own `do_autorestore` recipe plus additions the upstream never performs:
 
-1. **Validate everything before any interpreter exists**: format, schema version, story digest/size, runtime revision, boundary kind (+ maxlen range), per-section structure, size caps, payload digest — plus **deep validation of the nested state restore consumes** (the full `io` scalar/stream-table shape **down to the individual stream slots' contents** — keyboard-only input stream, an empty memory-output-stream stack, and non-file-backed transcript/command-recording state, per the vendored runtime's slot semantics; required main window and well-formed window entries, `readData.storer`/`routine`/`time` per boundary kind, and — after the digest verifies — cross-section consistency of the published transcript against the window text), **read-continuation address/span validation against the checkpointed memory image (Issue #41)** — the pending read's text-buffer and parse-table continuation writes must fit writable dynamic memory `[0x40, static base)` derived from the checkpointed UMem header, the buffer length must match the checkpointed capacity byte at `bufaddr`, `parseaddr = 0` stays the legal no-tokenise sentinel, and when the caller supplies the trusted story bytes the image's version/static base are cross-checked against the story header; out-of-range starts, near-end overflowing spans, and truncated tables are rejected `E_BOUNDARY`, capacity/header inconsistencies `E_STRUCTURE` (observed defect: an honest-digest envelope with `bufaddr`/`parseaddr = 0xFFFFFF` restored `ready:true` and only faulted on the first input with `RangeError` and exit 4) — and rejection of unseeded RNG payloads (`E_RNG`). Rejections throw `CheckpointError` with stable codes (`E_FORMAT`, `E_VERSION`, `E_STORY`, `E_RUNTIME`, `E_DIGEST`, `E_STRUCTURE`, `E_BOUNDARY`, `E_SIZE`, `E_RNG`). A second, VM-level identity gate sits behind the envelope: `vm.restore_file` verifies the Quetzal `IFhd` release/serial/checksum against the loaded story and returns 0 → `E_STORY_QUETZAL` (tested with an envelope whose payload is fixture-consistent but whose `IFhd` chunk claims a different release). **Capture runs the same validation on its own output before returning**, so an I/O state schema v1 cannot carry — pending `output_stream 3` memory-stream writes, file-backed transcript/command streams (open Glk references), redirected input — is refused at the source with the same codes instead of publishing an envelope restore would reject (the fixture never produces these states; a story that does simply cannot be checkpointed at such a boundary in v1). The restoring child exits **nonzero on every failure mode**: 2 = checkpoint rejected, 3 = output limit exceeded, 4 = candidate execution failed (an adapter step reporting `error`, or a thrown exception — the failure evidence is still emitted, so the transcript of a failed run is preserved, but exit-code callers can never mistake it for a clean run).
+1. **Validate everything before any interpreter exists**: format, schema version, story digest/size, runtime revision, boundary kind (+ maxlen range), per-section structure, size caps, envelope digest — plus **deep validation of the nested state restore consumes** (the full `io` scalar/stream-table shape **down to the individual stream slots' contents** — keyboard-only input stream, an empty memory-output-stream stack, and non-file-backed transcript/command-recording state, per the vendored runtime's slot semantics; required main window and well-formed window entries, `readData.storer`/`routine`/`time` per boundary kind, and — after the digest verifies — cross-section consistency of the published transcript against the window text), **read-continuation address/span validation against the checkpointed memory image (Issue #41)** — the pending read's text-buffer and parse-table continuation writes must fit writable dynamic memory `[0x40, static base)` derived from the checkpointed UMem header, the buffer length must match the checkpointed capacity byte at `bufaddr`, `parseaddr = 0` stays the legal no-tokenise sentinel, and when the caller supplies the trusted story bytes the image's version/static base are cross-checked against the story header; out-of-range starts, near-end overflowing spans, and truncated tables are rejected `E_BOUNDARY`, capacity/header inconsistencies `E_STRUCTURE` (observed defect: an honest-digest envelope with `bufaddr`/`parseaddr = 0xFFFFFF` restored `ready:true` and only faulted on the first input with `RangeError` and exit 4) — and rejection of unseeded RNG payloads (`E_RNG`). Rejections throw `CheckpointError` with stable codes (`E_FORMAT`, `E_VERSION`, `E_STORY`, `E_RUNTIME`, `E_DIGEST`, `E_STRUCTURE`, `E_BOUNDARY`, `E_SIZE`, `E_RNG`). A second, VM-level identity gate sits behind the envelope: `vm.restore_file` verifies the Quetzal `IFhd` release/serial/checksum against the loaded story and returns 0 → `E_STORY_QUETZAL` (tested with an envelope whose payload is fixture-consistent but whose `IFhd` chunk claims a different release). **Capture runs the same validation on its own output before returning**, so an I/O state schema v2 cannot carry — pending `output_stream 3` memory-stream writes, file-backed transcript/command streams (open Glk references), redirected input — is refused at the source with the same codes instead of publishing an envelope restore would reject (the fixture never produces these states; a story that does simply cannot be checkpointed at such a boundary in v2). The restoring child exits **nonzero on every failure mode**: 2 = checkpoint rejected, 3 = output limit exceeded, 4 = candidate execution failed (an adapter step reporting `error`, or a thrown exception — the failure evidence is still emitted, so the transcript of a failed run is preserved, but exit-code callers can never mistake it for a clean run).
 2. Fresh adapter runs its normal startup (windows, `origram`, pristine stack exist), then `restore_file` rebuilds memory/stacks/frames/pc.
 3. The interpreter-owned **header block `[0x00..0x40)` is restored verbatim**: `update_header()` (called inside `restore_file`) recomputes screen-size fields as a sum of window heights, so a restored instance recomputes different bytes than the source last published (observed: `0x20`/`0x24` = 24 at capture vs 48 after restore, because the source computed them before the game opened the upper window). Interpreter-owned header state is checkpointed, not recomputed.
 4. RNG seed re-applied **after** `restore_file` (its `update_header()` zeroes `xorshift_seed`; upstream `do_autorestore` does the same). Only seeded mode is accepted: seed 0 (unseeded, `Math.random` per draw — the only host-entropy point in the vendored tree) is rejected at capture and at validation with `E_RNG`, because host entropy can be neither captured nor reconstructed across processes (bridge §8; Issue #12 requires unsupported modes to fail explicitly rather than silently switch semantics).
@@ -46,7 +80,7 @@ Three harness rules were learned during implementation and are documented in cod
 copy their optional `time` and `routine` operands into `read_data`; no input
 timer scheduling exists in those methods or the probe's Glk shim, and the
 runtime advertises the timed-input flag as clear. An omitted argument is
-`undefined` in the live object and is omitted from the JSON clone. V1 accepts
+`undefined` in the live object and is omitted from the JSON clone. V1 accepted and v2 accepts
 absent or integer-zero operands, rejects `null`, negative or non-integer
 values with `E_STRUCTURE`, and rejects either nonzero operand with
 `E_TIMED_INPUT` at both capture and restore. This deliberately conservative
@@ -239,6 +273,22 @@ corresponding capture checks use the same code and diagnostic; explicit-zero
 controls restore and continue. These are fixture-scoped checkpoint tests, not
 timed-opcode or clock-reconstruction trials.
 
+Issue #43 adds normal-child identity, boundary and capability mutants,
+including recomputed checksums, plus a direct pre-construction check, v1
+downgrade rejection, and source-build mutation and identical-source relocation
+controls. These are deterministic probe tests, not authentication or a claim of
+cross-build portability. The previously stated A34 counts describe the earlier
+#41 and #42 evidence rather than a cumulative total for v2.
+
+**Issue #43 local verification, 2026-11-07:** On Windows with Node v24.13.0,
+the checkpoint suite passed 63/63; the VM-I/O suite passed 60/61 with one skip
+(the no-WSL-Bocfel environment case, because WSL Bocfel is installed); and the
+fixture suite passed 2/3 with one skip (the pinned Inform compiler is absent).
+All three commands exited 0 with empty stderr. The fixture SHA-256 remained
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`;
+the two VM-I/O receipts regenerated by its suite were restored to their
+pre-test bytes and verified. These results do not establish product readiness.
+
 Not claimed: combined-world persistence, Android/host support, live ChatGPT integration, production DB atomicity, conformance beyond the tested surface (glksim is an 80×24 headless shim; cross-interpreter byte-identity is explicitly not an expectation).
 
 ## 10. Recommendation (proposed evidence — not an owner decision)
@@ -246,7 +296,7 @@ Not claimed: combined-world persistence, Android/host support, live ChatGPT inte
 **GO (conditional) for ifvms.js ZVM as the G1-B-proven candidate**, with this minimum adapter contract, all at the experimental layer:
 
 1. Capture at supported boundaries only: pending line, pending character, halted. Reject capture elsewhere (not at a boundary → explicit error).
-2. Envelope v1 as implemented: data-only, versioned, identity-bound (story digest + runtime revision), digest-verified, capability-declaring; validate fully before constructing any interpreter; a second VM-level identity gate (Quetzal `IFhd`) behind the envelope check.
+2. Envelope v2 as implemented: data-only, versioned, identity-bound (story and local runtime/adapter build), checksum-verified, locally capability-validated; validate fully before constructing any interpreter; a second VM-level identity gate (Quetzal `IFhd`) behind the envelope check.
 3. Restore into a fresh process using only the checkpoint, the pinned story bytes, and static configuration; re-apply interpreter-owned header state, RNG (post-`update_header`), pending request, transcript, and watermark; sync halt semantics through one shared predicate.
 4. Candidate execution in parent-enforced killable child processes with deadlines, output limits, nonzero exits, and observed reaping; speculative output never published.
 5. Declared-unsupported surface carried in the envelope capabilities: **timed-input operands — either nonzero operand is rejected at capture and validation (`E_TIMED_INPUT`)**; sound, graphics, Glk file streams, undo history and interpreter number/version fields; **pending `output_stream 3` memory-stream writes and redirected input — the `io` stream slots are validated down to their contents and nonempty memory-stream stacks / file-backed stream state / non-keyboard input are rejected with `E_STRUCTURE` at capture and at validation**; and **unseeded RNG — rejected at capture and at restore (`E_RNG`)**. The stated rejection gates do not establish that every other declared-unsupported opcode is intercepted. Seeded mode is the deterministic path; controlled host-entropy capture/injection would require new evidence.

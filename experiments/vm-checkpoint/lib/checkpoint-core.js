@@ -30,16 +30,22 @@
 //   sound, graphics, Glk file streams, and the JIT cache (rebuilt on demand).
 // ==============================================================================
 
-const { createIfvmsAdapter, REVISION } = require('../../vm-io/adapters/ifvms-adapter.js');
+const { createIfvmsAdapter, getAdapterStoryIdentity, REVISION } = require('../../vm-io/adapters/ifvms-adapter.js');
+const { implementationIdentity, capabilityStatement } = require('./checkpoint-contract.js');
 const {
-    FORMAT, SCHEMA_VERSION, RUNTIME_NAME, CheckpointError,
-    sha256Hex, cloneJson, canonicalPayloadString, validateEnvelope,
+    FORMAT, SCHEMA_VERSION, CheckpointError,
+    sha256Hex, cloneJson, canonicalEnvelopeString, validateEnvelope,
 } = require('./checkpoint-format.js');
 
 // Serialize the live interpreter state at an input boundary into an envelope.
 // The adapter must currently be settled at a boundary (line/char request
 // pending) or halted.  `context` = { storySha256, storySize }.
 function captureCheckpoint(adapter, context) {
+    const storyIdentity = getAdapterStoryIdentity(adapter);
+    if (!storyIdentity) throw new CheckpointError('E_RUNTIME', 'capture requires an adapter created by the active ifvms module');
+    if (!context || context.storySha256 !== storyIdentity.storySha256 || context.storySize !== storyIdentity.storySize) {
+        throw new CheckpointError('E_STORY', 'capture story identity does not match the adapter original story bytes');
+    }
     const { state, vm } = adapter.__g1bInternals();
 
     const halted = !!(state.halted || vm.quit);
@@ -108,11 +114,9 @@ function captureCheckpoint(adapter, context) {
         format: FORMAT,
         version: SCHEMA_VERSION,
         identity: {
-            storySha256: context.storySha256,
-            storySize: context.storySize,
-            runtime: RUNTIME_NAME,
-            runtimeRevision: REVISION,
-            adapter: 'ifvms-adapter',
+            storySha256: storyIdentity.storySha256,
+            storySize: storyIdentity.storySize,
+            ...implementationIdentity(),
             schema: SCHEMA_VERSION,
         },
         boundary: kind === 'line'
@@ -120,21 +124,22 @@ function captureCheckpoint(adapter, context) {
             : { kind },
         payload,
         integrity: {
-            payloadSha256: sha256Hex(canonicalPayloadString(payload)),
-            quetzalBytes: quetzal.length,
+            algorithm: 'sha256',
+            envelopeSha256: '',
         },
         capabilities: capabilityStatement(),
     };
+    envelope.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(envelope));
 
     // Self-validate: capture must never emit an envelope restore would reject,
     // so the single validation rulebook governs both sides.  Beyond digest
-    // honesty this refuses AT THE SOURCE the I/O surfaces schema v1 cannot
+    // honesty this refuses AT THE SOURCE the I/O surfaces schema v2 cannot
     // carry (mirroring the E_RNG policy): a nonempty memory-output-stream
     // stack (pending output_stream 3 writes), file-backed
     // transcript/command-recording state (open Glk stream references),
     // redirected input, or nonzero timed-input operands.  The fixture does
     // not exercise these surfaces; a story that does cannot be checkpointed
-    // at such a boundary in v1 -- fail explicitly, not silently.
+    // at such a boundary in v2 -- fail explicitly, not silently.
     validateEnvelope(envelope, {
         storySha256: context.storySha256,
         storySize: context.storySize,
@@ -152,47 +157,29 @@ function windowsPayload(vm) {
     };
 }
 
-// The coverage declaration travels with the data: a restored instance cannot
-// claim more than the format actually carries.  Keep this in lockstep with
-// the inventory table in docs/evidence/g1-vm-recovery.md.
-function capabilityStatement() {
-    return {
-        coverage: {
-            dynamicMemory: 'serialized (Quetzal UMem)',
-            pc: 'serialized (Quetzal IFhd/Stks)',
-            callFramesAndStacks: 'serialized (Quetzal Stks, in-use region)',
-            storyIdentity: 'serialized (Quetzal IFhd release/serial/checksum) + envelope story digest',
-            interpreterHeaderFields: 'serialized (header block [0x00..0x40) written back verbatim after restore_file; update_header() recomputation is window-set-dependent and must not stand in for the source values)',
-            rng: 'seeded mode only (xorshift seed serialized and re-applied after restore_file); unseeded capture and restore are REJECTED with E_RNG -- host Math.random state can be neither captured nor reconstructed (bridge section 8), and Issue #12 requires unsupported modes to fail explicitly',
-            ioStreamsAndFlags: 'serialized (plain-data clone); the input stream must be keyboard (slot 0 = 0) and the memory-output-stream stack (slot 3) must be empty — pending output_stream 3 writes, file-backed transcript/command streams (mode 2 / open Glk references), and redirected input are rejected at capture and validation with E_STRUCTURE',
-            pendingInput: 'serialized (read_data + re-issued Glk request); line-continuation buffer addresses and spans are validated against the checkpointed dynamic-memory layout (static base, buffer/parse capacity bytes, trusted story header) before any interpreter is constructed -- out-of-range or overflowing continuation spans are rejected with E_BOUNDARY, capacity inconsistencies with E_STRUCTURE (Issue #41)',
-            windowTextAndCursor: 'serialized (main/upper/status window objects)',
-            publishedTranscript: 'serialized (buffer + grid window text)',
-            jittedCodeCache: 'reconstructed (rebuilt lazily per pc; never serialized)',
-            stackViews: 'reconstructed (make_stacks rebuilds s/l from the stack buffer)',
-            interpreterNumberVersionHeader: 'unsupported (vendored ZVM never writes them)',
-            undoHistory: 'unsupported (dropped on restore, upstream autosave semantics)',
-            timedInput: 'unsupported (upstream stores read_data.time/routine but never schedules them; Flags1 timed-input bit clear); either nonzero operand is rejected at capture and restore with E_TIMED_INPUT',
-            sound: 'unsupported (upstream no-op opcodes)',
-            graphics: 'unsupported (no picture opcode support in vendored ZVM)',
-            glkFileStreams: 'unsupported (glksim records them as unexpected)',
-            memoryOutputStreams: 'unsupported (pending output_stream 3 stack writes rejected: the [address, text] write-back path has no round-trip evidence in v1)',
-            redirectedInputStream: 'unsupported (input_stream redirection holds a live Glk stream reference the data-only envelope cannot carry)',
-        },
-        unsupported: ['timed-input', 'sound', 'graphics', 'glk-file-streams', 'undo-history', 'interpreter-number-version', 'unseeded-rng', 'memory-output-stream-writes', 'redirected-input'],
-        schemaVersion: SCHEMA_VERSION,
-    };
-}
-
 // Restore into a FRESH interpreter built from the pinned story bytes.  The
 // envelope is fully validated first; any rejection happens before a ZVM is
 // constructed, so an invalid checkpoint cannot disturb an active baseline.
 // Returns the restored adapter (same interface as createIfvmsAdapter).
-function restoreCheckpoint(envelope, storyBytes, expected) {
-    // The trusted story bytes ride along with the expected identity so the
-    // continuation-span validation can cross-check the checkpointed header
-    // (version, static memory base) against the real story file header.
-    validateEnvelope(envelope, { ...expected, storyBytes });
+function restoreCheckpoint(envelope, storyBytes, expected = {}) {
+    // Derive identity from the supplied story bytes, never from the envelope
+    // or a caller's expected digest. The caller may impose matching expected
+    // values, but cannot override the actual story or pinned runtime.
+    const trustedStory = Buffer.from(storyBytes);
+    const actualStorySha256 = sha256Hex(trustedStory);
+    if (expected.storySha256 !== undefined && expected.storySha256 !== actualStorySha256
+        || expected.storySize !== undefined && expected.storySize !== trustedStory.length) {
+        throw new CheckpointError('E_STORY', 'expected story identity does not match supplied story bytes');
+    }
+    if (expected.runtimeRevision !== undefined && expected.runtimeRevision !== REVISION) {
+        throw new CheckpointError('E_RUNTIME', 'expected runtime revision does not match the active implementation');
+    }
+    validateEnvelope(envelope, {
+        storySha256: actualStorySha256,
+        storySize: trustedStory.length,
+        runtimeRevision: REVISION,
+        storyBytes: trustedStory,
+    });
 
     // The vendored ZVM mutates the story buffer in place: ZVM.prepare wraps
     // the given bytes in the live MemoryView (this.m) and every dynamic-memory
@@ -200,7 +187,7 @@ function restoreCheckpoint(envelope, storyBytes, expected) {
     // copy -- passing a shared Buffer would leak one instance's game state
     // into the next (observed: a second in-process start saw the first run's
     // taken key and turn counter).  Copies are cheap at fixture size.
-    const storyCopy = Buffer.from(storyBytes);
+    const storyCopy = Buffer.from(trustedStory);
     const adapter = createIfvmsAdapter(storyCopy);
     const { state, vm, Glk, settle } = adapter.__g1bInternals();
 

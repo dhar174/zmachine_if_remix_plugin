@@ -10,7 +10,7 @@ const {
     spawnRestore, awaitExit, STORY, STORY_SHA256, REVISION,
     machineFingerprint, fingerprintDiff,
 } = require('./helpers.js');
-const { CheckpointError, canonicalPayloadString, sha256Hex, validateEnvelope } = require('../lib/checkpoint-format.js');
+const { CheckpointError, canonicalEnvelopeString, sha256Hex, validateEnvelope } = require('../lib/checkpoint-format.js');
 
 const EXPECTED = { storySha256: STORY_SHA256, storySize: STORY.length, runtimeRevision: REVISION, storyBytes: STORY };
 const CASES = [
@@ -56,7 +56,7 @@ function withTimerFields(adapter, fields, fn) {
 function honestMutation(envelope, fields) {
     const result = JSON.parse(JSON.stringify(envelope));
     Object.assign(result.payload.readData, fields);
-    result.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(result.payload));
+    result.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(result));
     return result;
 }
 
