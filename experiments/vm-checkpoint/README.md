@@ -191,6 +191,13 @@ a VM error on demand).
   and explicit exit, sticky failures across requests, a temporarily paused
   stdout reader, clean input/serialization, and distinct argument, output-limit
   and checkpoint exits; the live baseline is rechecked after each case.
+- `tests/envelope-recapture.test.js` — seeded line and character envelopes
+  are immediately restored and recaptured in fresh children, then compared in
+  full (including integrity, serialized I/O, pending read, window text/cursors,
+  transcript/grid and RNG). A separate line → child → character checkpoint →
+  second child chain compares each step with an uninterrupted fixture reference,
+  checks no duplicate startup/menu delivery, and verifies that the live baseline
+  is unchanged and both children exit. Undo history remains unsupported.
 - `tests/identity-integrity.test.js` — trusted capture/restore story identity,
   v1 rejection, canonical checksums, runtime/adapter and build mutations,
   metadata and capability mutations with stale and recomputed checksums,
