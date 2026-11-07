@@ -42,6 +42,21 @@ Restore (`lib/checkpoint-core.js`) always targets a fresh interpreter and follow
 
 Three harness rules were learned during implementation and are documented in code and `experiments/vm-checkpoint/README.md`: the vendored ZVM **mutates the story buffer in place** (every interpreter gets its own copy — two instances sharing a Node Buffer leak game state into each other); interpreter-owned header fields must be checkpointed, not recomputed (item 3); and the current frame's in-buffer `sp` slot is stale dead storage in a live interpreter (authoritative `sp` is a VM field, synced only at save/call) — one stale byte was observed to differ at halt, and the stack fingerprint excludes exactly that slot for the current frame (caller slots are kept: `restore_file`'s frame walk reads them).
 
+**Issue #42 timed-input policy:** The pinned `read` and `read_char` methods
+copy their optional `time` and `routine` operands into `read_data`; no input
+timer scheduling exists in those methods or the probe's Glk shim, and the
+runtime advertises the timed-input flag as clear. An omitted argument is
+`undefined` in the live object and is omitted from the JSON clone. V1 accepts
+absent or integer-zero operands, rejects `null`, negative or non-integer
+values with `E_STRUCTURE`, and rejects either nonzero operand with
+`E_TIMED_INPUT` at both capture and restore. This deliberately conservative
+rule also rejects a lone nonzero operand even though the [Z-machine standard
+§15](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html)
+specifies periodic callbacks when both operands are supplied and nonzero. No
+other timer sentinel is accepted. A halted envelope carries no pending
+`readData`; no shim timer event is reconstructed. The gate covers checkpoint
+capture and restore, not interception of a timed opcode at execution time.
+
 ## 4. Recovery-state inventory
 
 Owning objects are the vendored ZVM (`vm.*`), the headless Glk shim (`state.*`, closure-private `pending`), and the adapter. Classification per Issue #12 §1; validation test references are `experiments/vm-checkpoint/tests/*`.
@@ -64,7 +79,7 @@ Owning objects are the vendored ZVM (`vm.*`), the headless Glk shim (`state.*`, 
 | Undo machinery | `vm.undo`/`undo_len` | Not captured | Cleared on restore | **Explicitly unsupported** (upstream autosave drops it) | `@restore_undo` after restore is safe and empty (tested) | Documented, not silent |
 | JIT code cache | `vm.jit` | Never serialized | Rebuilt lazily per pc | **Reconstructed** | all round trips (behavior identical) | — |
 | Host entropy/time dependencies | `Math.random` only (runtime.js:532); **no `Date.now`/time calls anywhere in the vendored tree** (grep-verified) | n/a | n/a — unseeded checkpoints are rejected before any interpreter exists | **Unsupported (rejected)** | unseeded capture refusal + child `E_RNG` rejection | Unseeded cross-process reproducibility: **blocked by design and enforced by rejection**; a controlled host-entropy capture/injection mechanism would be a new evidence gate |
-| Timed input, sound, graphics | upstream opcodes / Flags | n/a | n/a | **Explicitly unsupported** (no-op/absent opcodes; Flags1 timed bit clear; Flags2 cleared & 0x57) | n/a | An opcode or property named autosave is not evidence of recovery — none claimed |
+| Timed input, sound, graphics | upstream opcodes / Flags | n/a | n/a | **Unsupported** (no-op/absent opcodes; Flags1 timed bit clear; Flags2 cleared & 0x57) | Timed input: nonzero `time` or `routine` rejected at capture and restore (`E_TIMED_INPUT`); see Issue #42 | No timed execution or clock recovery claimed; sound/graphics declarations do not establish a rejection gate for every opcode |
 | Glk file streams / filerefs | glksim | n/a | n/a | **Explicitly unsupported** (recorded as `unexpected`) | in-game `save`/`restore` not exercised in the checkpoint suite (G1-A scope) | Production save/restore interception is a turn-layer duty (state-and-vm-bridge §8), out of G1-B scope |
 | Runtime/adapter/checkpoint identities | envelope `identity` | Serialized | Validated before restore | **Serialized** | E_STORY/E_RUNTIME tests | — |
 
@@ -136,6 +151,21 @@ unchanged in this follow-up. That is historical CI evidence, not a fresh host
 test or live-client qualification.
 This follow-up does not approve D39 or close #12 or #40.
 
+**Issue #42 local verification, 2026-11-07:** On Windows with Node v24.13.0,
+using main baseline `5d5a974` plus the timed-input changes, `node --test` in
+`experiments/vm-checkpoint` reported **57 passed, 0 failed, 0 skipped**; the
+eight new timed-input tests include ten honest-digest ordinary-child variants.
+`node --test` in `experiments/vm-io` reported 60 passed, 0 failed and 1 skip
+(the unavailable-Bocfel case skips when WSL Bocfel is present); the fixture
+suite reported 2 passed and 1 skip because the pinned compiler was absent.
+All three runs exited 0, produced empty stderr and showed no error traces. The
+fixture SHA-256 remained
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`.
+The new negative states are injected into genuine seeded fixture boundaries;
+the tests also call the pinned read methods directly, but do not execute a
+timed story opcode or establish timed-input support. This does not approve D39
+or resolve the remaining #12/#40 work.
+
 ## 6. Candidate isolation results
 
 Baseline model: a live in-parent interpreter at a captured checkpoint; candidates are fresh child processes restored from the baseline's checkpoint file; the simulated publication store is a file only the parent ever writes (children structurally never receive its path), asserted unchanged after every phase.
@@ -201,6 +231,14 @@ The pre-existing failure was a genuine G1-A harness defect, found because this m
 | A31 | Combined restore at line and character prompts: memory/frames/continuation/I/O/RNG match expected checkpoint | **Demonstrated** for the native half (memory/frames/continuation/I-O/RNG) at both boundaries with fingerprint + transcript equality, **on the seeded path** (the only supported RNG mode — unseeded checkpoints are rejected per §1). Overlay/policy halves are #14+ (no combined world exists in this probe) |
 | A34 | Checkpoint with wrong story/runtime/schema or corrupt → import/restore fails without modifying the active session | **Demonstrated**: twenty-six hostile variants rejected in fresh children — thirteen in the isolation suite and thirteen honest-digest read-continuation span/image mutants in the continuation suite (Issue #41) — **all twenty-six with stable `E_*` codes** (incl. `E_RNG` for unseeded, `E_BOUNDARY` for out-of-range/overflowing/overlapping continuation addresses and spans, and `E_STRUCTURE` for nested-state malformations, capacity/header inconsistencies, and malformed quetzal containers — among them a pending memory-output-stream stack entry that previously restored `ready:true` and crashed on the next print); the VM-level `IFhd` gate is additionally demonstrated in-process behind the envelope (an envelope whose payload is fixture-consistent but whose `IFhd` claims a different release — `E_STORY_QUETZAL`); baseline byte-identical after every child rejection; capture-side self-validation additionally regression-tested (corrupted live `read_data` addresses refused at the source with `E_BOUNDARY`, baseline recapture byte-identical) |
 
+Issue #42 adds ten honest-digest timer-operand child variants across seeded
+line and character boundaries to the earlier twenty-six cases in the A34
+row. They use the normal runner, reject before readiness with exit 2 and
+`E_TIMED_INPUT`, and leave the baseline checkpoint byte-identical. The
+corresponding capture checks use the same code and diagnostic; explicit-zero
+controls restore and continue. These are fixture-scoped checkpoint tests, not
+timed-opcode or clock-reconstruction trials.
+
 Not claimed: combined-world persistence, Android/host support, live ChatGPT integration, production DB atomicity, conformance beyond the tested surface (glksim is an 80×24 headless shim; cross-interpreter byte-identity is explicitly not an expectation).
 
 ## 10. Recommendation (proposed evidence — not an owner decision)
@@ -211,7 +249,7 @@ Not claimed: combined-world persistence, Android/host support, live ChatGPT inte
 2. Envelope v1 as implemented: data-only, versioned, identity-bound (story digest + runtime revision), digest-verified, capability-declaring; validate fully before constructing any interpreter; a second VM-level identity gate (Quetzal `IFhd`) behind the envelope check.
 3. Restore into a fresh process using only the checkpoint, the pinned story bytes, and static configuration; re-apply interpreter-owned header state, RNG (post-`update_header`), pending request, transcript, and watermark; sync halt semantics through one shared predicate.
 4. Candidate execution in parent-enforced killable child processes with deadlines, output limits, nonzero exits, and observed reaping; speculative output never published.
-5. Declared-unsupported surface carried in the envelope capabilities: timed input, sound, graphics, Glk file streams, undo history, interpreter number/version fields, **pending `output_stream 3` memory-stream writes and redirected input — the `io` stream slots are validated down to their contents and nonempty memory-stream stacks / file-backed stream state / non-keyboard input are rejected with `E_STRUCTURE` at capture and at validation**, and **unseeded RNG — rejected at capture and at restore (`E_RNG`)**, so unsupported modes fail explicitly instead of silently switching semantics (seeded mode is the deterministic path; a controlled host-entropy capture/injection mechanism would be a new evidence gate).
+5. Declared-unsupported surface carried in the envelope capabilities: **timed-input operands — either nonzero operand is rejected at capture and validation (`E_TIMED_INPUT`)**; sound, graphics, Glk file streams, undo history and interpreter number/version fields; **pending `output_stream 3` memory-stream writes and redirected input — the `io` stream slots are validated down to their contents and nonempty memory-stream stacks / file-backed stream state / non-keyboard input are rejected with `E_STRUCTURE` at capture and at validation**; and **unseeded RNG — rejected at capture and at restore (`E_RNG`)**. The stated rejection gates do not establish that every other declared-unsupported opcode is intercepted. Seeded mode is the deterministic path; controlled host-entropy capture/injection would require new evidence.
 
 Conditions/caveats: (a) Bocfel 2.6's autosave route is not a substitute (char-boundary restore fails; random-mode RNG unserialized) but remains the independent I/O reference; (b) the vendored ZVM's quirks this probe compensated for — in-place story-buffer mutation, `update_header()` recomputation, stale in-buffer `sp` slot, no header-length validation (G1-A) — are exactly the kind of boundaries a production adapter must own at the adapter layer, never inside a modified vendor tree; (c) upstream's sequential-predictability RNG mode is deliberately unimplemented in the vendored revision — if a downstream consumer ever needs it, that is a new evidence gate; (d) production adoption still requires the #18/#21 durable-store half and the D39 decision-record acceptance.
 

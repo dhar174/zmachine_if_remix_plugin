@@ -18,7 +18,7 @@ state, ZVM instance, Glk object, and `settle()`; no behavior change).
 
 ```sh
 cd experiments/vm-checkpoint
-node --test          # 49 tests: format validation, continuation spans, round-trip matrix, isolation
+node --test          # 57 tests: format, continuation, timed-input gates, round trips, isolation
 ```
 
 Node >= 18 (tested on v24.13.0, Windows). Zero npm dependencies. Run from
@@ -85,6 +85,21 @@ RNG semantics — forbidden by state-and-vm-bridge §8 and Issue #12's
 fail-explicitly rule. Seeded continuation is exact (identical draws and
 seed across process death).
 
+**Timed-input policy (Issue #42):** the pinned `read` and `read_char`
+methods copy the optional `time` and `routine` arguments into `read_data`,
+but neither the runtime nor the Glk shim schedules their callbacks. Missing
+arguments are JavaScript `undefined` and disappear when the envelope is
+cloned to JSON. Envelope v1 accepts an absent field or integer `0`; `null`,
+negative and non-integer values are malformed (`E_STRUCTURE`). Either nonzero
+operand is conservatively rejected at capture and restore (`E_TIMED_INPUT`),
+including when the other is absent or zero. This is a checkpoint policy, not a
+claim that a single nonzero operand creates a timer under the Z-machine
+standard; [standard 1.1 §15](https://inform-fiction.org/zmachine/standards/z1point1/sect15.html)
+describes periodic callbacks when both operands are supplied and nonzero. No
+additional timer sentinel is supported. A halted envelope has no pending
+`readData`; the shim has no timer event to reconstruct. These checks do not
+intercept timed opcodes as they execute or implement clock reconstruction.
+
 Three rules the harness learned the hard way (documented in code comments
 and `docs/evidence/g1-vm-recovery.md`):
 
@@ -124,6 +139,12 @@ stories cannot be driven to a VM error on demand).
   captures stay valid, and `parseaddr = 0` remains the legal no-tokenise
   sentinel. Spans are derived from the checkpointed UMem image at runtime —
   no fixture addresses are hardcoded.
+- `tests/timed-input.test.js` — capture and ordinary-child restore reject
+  honest-digest nonzero timer operands at both line and character boundaries
+  with matching `E_TIMED_INPUT` diagnostics; malformed fields reject with
+  `E_STRUCTURE`, baseline recaptures stay byte-identical, and zero/absent
+  controls remain valid. Direct calls to the pinned read methods verify which
+  operands they store; they are not timed-opcode execution trials.
 - `tests/roundtrip.test.js` — the boundary matrix, each case run twice and
   compared against an uninterrupted reference run: full output/grid/markers
   equality after every suffix step (never marker-only), machine-state
@@ -150,8 +171,10 @@ stories cannot be driven to a VM error on demand).
 
 ## Declared unsupported (with source evidence, not silent)
 
-Timed input (`read_data.time` stored but never used; Flags1 timed-input bit
-clear), sound and graphics (no-op / absent opcodes), Glk file streams
+Timed input (the runtime stores `read_data.time`/`routine` but does not schedule
+callbacks; Flags1 timed-input bit clear; nonzero operands reject at capture
+and validation with `E_TIMED_INPUT`), sound and graphics (no-op / absent
+opcodes), Glk file streams
 (glksim records them as unexpected), interpreter number/version header
 fields (never written), **pending `output_stream 3` memory-stream writes
 and redirected input — nonempty memory-stream stacks, file-backed
