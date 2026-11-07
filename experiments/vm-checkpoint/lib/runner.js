@@ -15,8 +15,7 @@
 //   stdin {"op":"fingerprint"}                  -> {"fingerprint":{...}}
 //   stdin {"op":"serialize"}                    -> writes the CURRENT state as
 //       a checkpoint to the fixed --out path, replies {"serialized":true}
-//   stdin {"op":"exit"}                         -> clean exit 0
-//   EOF on stdin                                -> exit 0
+//   stdin {"op":"exit"} / EOF on stdin         -> exit 0 if clean, else 4
 //
 // The process holds no state except what it restored from the checkpoint
 // file plus the story bytes it read from the pinned fixture path: no VM is
@@ -25,10 +24,13 @@
 // the parent kill the child DURING the serialization phase (kill tests).
 //
 // Exit codes: 0 = clean run; 2 = checkpoint rejected / unreadable; 3 = output
-// limit exceeded; 4 = candidate execution FAILED (an adapter step reported
-// status 'error', or an exception was thrown while handling a request -- the
-// failure evidence is still emitted, but exit-code callers can never mistake
-// a failed candidate for a clean run).  --selftest step-error | throw is
+// limit exceeded; 4 = candidate or protocol failure. Protocol errors, adapter
+// errors and request exceptions make failure sticky; subsequent requests may
+// still run, but EOF or explicit exit remains 4. An output limit terminates
+// immediately with 3 even if an earlier request failed. Protocol and caught
+// exception responses carry failed:true and the first failure detail. Output
+// drains before normal exit.
+// --selftest step-error | throw is
 // test scaffolding that deterministically drives the two failure-accounting
 // paths; real pinned stories cannot be driven to a VM error on demand.
 // ==============================================================================
@@ -108,13 +110,9 @@ async function main() {
     }
 
     let outputCount = 0;
-    // Failure accounting (PR #37 review): a candidate whose execution fails
-    // -- an adapter step reporting status 'error', or an exception thrown
-    // while handling a request -- must NOT exit 0.  The failure evidence is
-    // still emitted (the parent may want the transcript of the failed run),
-    // but the process exit status records the outcome: exit code 4 = failed
-    // candidate execution (distinct from 2 = restore rejection and 3 =
-    // output limit).
+    // Failure accounting: protocol errors, adapter errors and request
+    // exceptions make the candidate fail permanently. Retain the first
+    // detail, while still reporting each individual request error.
     let failed = false;
     let failureDetail = null;
     const markFailed = (detail) => {
@@ -123,23 +121,45 @@ async function main() {
             failureDetail = detail;
         }
     };
-    const exitWithStatus = () => process.exit(failed ? 4 : 0);
+    const protocolError = (error) => {
+        markFailed('protocol error: ' + error);
+        emit({ error, failed: true, detail: failureDetail });
+    };
     emit({ ready: true, fingerprint: machineFingerprint(adapter), pid: process.pid });
 
     const rl = readline.createInterface({ input: process.stdin, terminal: false });
+    let terminating = false;
+    let forcedExit = null;
+    // Closing input stops later queued lines, but leaves stdout time to drain.
+    // A direct process.exit() can truncate buffered protocol evidence on pipes.
+    const stop = (code) => {
+        if (terminating) return;
+        terminating = true;
+        forcedExit = code;
+        rl.close();
+        // readline.close() pauses but may leave an open stdin pipe referenced.
+        // Close that input handle so explicit exit does not wait for parent EOF.
+        process.stdin.destroy();
+    };
     rl.on('line', (line) => {
-        if (!line.trim()) return;
+        if (terminating || !line.trim()) return;
         let msg;
         try {
             msg = JSON.parse(line);
         } catch {
-            emit({ error: 'bad request line' });
+            protocolError('bad request line');
+            return;
+        }
+        if (!msg || typeof msg !== 'object' || Array.isArray(msg)
+            || (Object.prototype.hasOwnProperty.call(msg, 'op')
+                && !['exit', 'fingerprint', 'serialize'].includes(msg.op))) {
+            protocolError('unrecognized request');
             return;
         }
         try {
             if (msg.op === 'exit') {
-                rl.close();
-                exitWithStatus();
+                stop(failed ? 4 : 0);
+                return;
             } else if (opts.selftest === 'step-error') {
                 // Test scaffolding: deterministically exercise the
                 // returned-error accounting path (real stories cannot be
@@ -148,7 +168,7 @@ async function main() {
                     markFailed('selftest: adapter step reported status error');
                     emit({ step: { status: 'error', delta: '', output: '', gridOutput: '', requestLog: [], errors: ['selftest: step-error'], unexpectedGlk: [] } });
                 } else {
-                    emit({ error: 'selftest mode only answers input requests' });
+                    protocolError('selftest mode only answers input requests');
                 }
             } else if (opts.selftest === 'throw') {
                 // Test scaffolding: deterministically exercise the
@@ -156,12 +176,12 @@ async function main() {
                 if (msg.input) {
                     throw new Error('selftest: thrown exception while handling input');
                 }
-                emit({ error: 'selftest mode only answers input requests' });
+                protocolError('selftest mode only answers input requests');
             } else if (msg.op === 'fingerprint') {
                 emit({ fingerprint: machineFingerprint(adapter) });
             } else if (msg.op === 'serialize') {
                 if (!opts.out) {
-                    emit({ error: 'serialize requested without --out' });
+                    protocolError('serialize requested without --out');
                     return;
                 }
                 if (opts.stallSerializeMs > 0) {
@@ -181,18 +201,22 @@ async function main() {
                 }
                 if (opts.outputLimit > 0 && outputCount > opts.outputLimit) {
                     emit({ step: slimResult(res), error: 'output-limit-exceeded', limit: opts.outputLimit });
-                    process.exit(3);
+                    stop(3);
+                    return;
                 }
                 emit({ step: slimResult(res) });
             } else {
-                emit({ error: 'unrecognized request' });
+                protocolError('unrecognized request');
             }
         } catch (e) {
             markFailed('exception while handling request: ' + String(e && e.message ? e.message : e));
             emit({ error: String(e && e.message ? e.message : e), failed: true, detail: failureDetail });
         }
     });
-    rl.on('close', () => exitWithStatus());
+    rl.on('close', () => {
+        terminating = true;
+        process.exitCode = forcedExit === null ? (failed ? 4 : 0) : forcedExit;
+    });
 }
 
 main();

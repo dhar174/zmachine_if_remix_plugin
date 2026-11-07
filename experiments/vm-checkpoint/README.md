@@ -71,6 +71,10 @@ V2 intentionally rejects v1 with `E_VERSION`; there is no migration. Exact
 build and Node/V8/platform/architecture comparisons also refuse restore on a
 different build or host identity, even if it might otherwise be compatible.
 Changing capability text or array order requires a new compatible capture.
+Issue #44 changes `runner.js`, which is in the adapter-build fingerprint: a v2
+checkpoint captured at baseline `3a7a00b` was rejected before readiness with
+`E_RUNTIME` on the changed build. Capture a new checkpoint; no migration is
+provided.
 Validation first checks format/version and local story/runtime identity, then
 boundary and payload structure and unsupported-state gates, then checksum,
 then request/capability and cross-payload consistency. Thus an earlier error
@@ -156,18 +160,37 @@ the checkpoint file plus the pinned fixture path only — no closure,
 singleton, or shared buffer survives the process boundary. Protocol:
 `{"ready":true,...}` on stdout, then one JSON request per stdin line
 (`input`, `op:fingerprint`, `op:serialize`, `op:exit`). All argv is static;
-no environment value reaches an argv element or a file path. **Exit codes:
-0 clean; 2 checkpoint rejected; 3 output limit exceeded; 4 candidate
-execution failed** (an adapter step reporting `error`, or a thrown
-exception — the failure evidence is still emitted, so the transcript of a
-failed run survives, but exit-code callers can never mistake a failed
-candidate for a clean run; EOF after a failure also exits 4). The
-`--selftest step-error | throw` flag is test scaffolding that
-deterministically drives the two failure-accounting paths (real pinned
-stories cannot be driven to a VM error on demand).
+no environment value reaches an argv element or a file path.
+
+**Runner failure contract (Issue #44):** Exit `0` means clean termination;
+`2` means a runner-argument or checkpoint rejection; `3` means the output limit
+stopped the child; `4` means a protocol error, adapter error or caught request
+exception. Parent-enforced timeouts kill and reap the child; they do not have a
+portable numeric exit code. After readiness, malformed JSON, non-object JSON,
+unknown operations and serialization without `--out` emit a structured
+`{error, failed:true, detail}` response. An unknown `op` is rejected even if
+an input accompanies it. Empty lines are ignored.
+
+Failure is sticky across requests: later requests may still execute and their
+responses describe those operations, but EOF or `op:exit` returns `4`. The
+`detail` in protocol/exception errors retains the first failure; `error` names
+the current error. An output-limit stop takes precedence and exits `3` even
+after an earlier failure. Explicit exit stops processing later buffered lines
+and closes stdin without waiting for the parent to close its pipe. With a
+working stdout reader, queued responses drain before normal termination; a
+broken pipe or killed process does not guarantee delivery. A parent must check
+the final status before using candidate output or a serialized candidate;
+this probe does not implement durable publication or receipt recovery. The
+`--selftest step-error | throw` flag is test scaffolding that deterministically
+drives the two adapter/exception paths (real pinned stories cannot be driven to
+a VM error on demand).
 
 ## Tests
 
+- `tests/runner-protocol.test.js` — ordinary-child protocol failures with EOF
+  and explicit exit, sticky failures across requests, queued-output drain,
+  clean input/serialization, and distinct output-limit/checkpoint exits; the
+  live baseline is rechecked after each case.
 - `tests/identity-integrity.test.js` — trusted capture/restore story identity,
   v1 rejection, canonical checksums, runtime/adapter and build mutations,
   metadata and capability mutations with stale and recomputed checksums,
