@@ -131,10 +131,10 @@ function captureCheckpoint(adapter, context) {
     // honesty this refuses AT THE SOURCE the I/O surfaces schema v1 cannot
     // carry (mirroring the E_RNG policy): a nonempty memory-output-stream
     // stack (pending output_stream 3 writes), file-backed
-    // transcript/command-recording state (open Glk stream references), or
-    // redirected input.  None is reachable with the fixture (it never touches
-    // output_stream/input_stream); a story that does simply cannot be
-    // checkpointed at such a boundary in v1 -- fail explicitly, not silently.
+    // transcript/command-recording state (open Glk stream references),
+    // redirected input, or nonzero timed-input operands.  The fixture does
+    // not exercise these surfaces; a story that does cannot be checkpointed
+    // at such a boundary in v1 -- fail explicitly, not silently.
     validateEnvelope(envelope, {
         storySha256: context.storySha256,
         storySize: context.storySize,
@@ -172,7 +172,7 @@ function capabilityStatement() {
             stackViews: 'reconstructed (make_stacks rebuilds s/l from the stack buffer)',
             interpreterNumberVersionHeader: 'unsupported (vendored ZVM never writes them)',
             undoHistory: 'unsupported (dropped on restore, upstream autosave semantics)',
-            timedInput: 'unsupported (read_data.time stored by upstream but never used; Flags1 timed-input bit clear)',
+            timedInput: 'unsupported (upstream stores read_data.time/routine but never schedules them; Flags1 timed-input bit clear); either nonzero operand is rejected at capture and restore with E_TIMED_INPUT',
             sound: 'unsupported (upstream no-op opcodes)',
             graphics: 'unsupported (no picture opcode support in vendored ZVM)',
             glkFileStreams: 'unsupported (glksim records them as unexpected)',

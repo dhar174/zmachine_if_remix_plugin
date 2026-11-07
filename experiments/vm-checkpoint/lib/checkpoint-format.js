@@ -178,6 +178,15 @@ function validateEnvelope(envelope, expected) {
             if (rd[opt] !== undefined && (!Number.isInteger(rd[opt]) || rd[opt] < 0)) {
                 throw new CheckpointError('E_STRUCTURE', 'readData.' + opt + ' must be a non-negative integer');
             }
+            // ifvms stores both optional opcode operands, but neither it nor
+            // the Glk shim schedules timed input.  Missing/undefined and zero
+            // are the only accepted v1 representations; reject either nonzero
+            // operand even if the other is zero or absent.  Capture invokes
+            // this same validator, so both sides give the same error.
+            if (rd[opt] !== undefined && rd[opt] !== 0) {
+                throw new CheckpointError('E_TIMED_INPUT',
+                    'readData.' + opt + ' is nonzero: timed input is unsupported by the pinned runtime and checkpoint shim');
+            }
         }
         if (b.kind === 'line') {
             if (!isArrayOfInts(rd.buffer, CAPS.readDataBufferEntries)) throw new CheckpointError('E_STRUCTURE', 'line readData.buffer invalid');
