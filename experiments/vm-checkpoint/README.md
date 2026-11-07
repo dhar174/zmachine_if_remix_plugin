@@ -46,10 +46,12 @@ created, it compares the runtime/adapter names, pinned revision, runtime and
 adapter source-build digests, Node and V8 versions, platform, architecture,
 and schema against local implementation data. The runtime digest covers the
 vendored `src` JavaScript tree; the adapter digest covers the adapter, Glk shim,
-checkpoint contract/core/format, fingerprint and runner. Identical source bytes
-at another path match. Fingerprints are sampled on module initialization and assume source
-files remain unchanged while the process runs; they do not attest the Node
-binary, OS, or in-process code.
+checkpoint contract/core/format, fingerprint and runner. This adapter file list
+is explicit: when another file joins that execution surface, extend the list
+and capture a new checkpoint. Identical source bytes at another path match.
+Fingerprints are sampled on module initialization and assume source files
+remain unchanged while the process runs; they do not attest the Node binary,
+OS, or in-process code.
 
 V2 uses SHA-256 over `zirp-g1b-envelope-v2\n` followed by experiment-specific
 canonical JSON for every top-level field except `integrity` (object keys sorted
@@ -60,7 +62,10 @@ checkpoint data is trustworthy. Independently, imported capabilities must equal
 the local statement and the pending line request's `maxlen` must be zero, as
 passed by this pinned runtime; a recomputed checksum cannot expand those
 capabilities or change that request metadata. Other well-formed payload data is
-not protected against an author who can recompute the checksum.
+not protected against an author who can recompute the checksum. V2 permits
+unknown top-level and payload keys; they are checksum-bound but ignored by the
+current restore code. They do not grant capabilities. Reassess this contract
+and its version before assigning restore semantics to such fields.
 
 V2 intentionally rejects v1 with `E_VERSION`; there is no migration. Exact
 build and Node/V8/platform/architecture comparisons also refuse restore on a
