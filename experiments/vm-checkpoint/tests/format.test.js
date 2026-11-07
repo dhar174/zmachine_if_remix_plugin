@@ -12,7 +12,7 @@ const {
     createInstance, capture, STORY, STORY_SHA256, LOOPSTORY_SHA256, REVISION,
 } = require('./helpers.js');
 const { restoreCheckpoint } = require('../lib/checkpoint-core.js');
-const { validateEnvelope, canonicalPayloadString, sha256Hex, CheckpointError } = require('../lib/checkpoint-format.js');
+const { validateEnvelope, canonicalEnvelopeString, sha256Hex, CheckpointError } = require('../lib/checkpoint-format.js');
 
 const PREFIX = ['look', 'seed 42', 'take brass key'];
 const EXPECTED = { storySha256: STORY_SHA256, storySize: STORY.length, runtimeRevision: REVISION };
@@ -79,12 +79,12 @@ test('unseeded checkpoints are rejected, not silently accepted (E_RNG)', () => {
     const env = capturedEnvelope();
     const unseeded = JSON.parse(JSON.stringify(env));
     unseeded.payload.rng = { seed: 0, mode: 'unseeded' };
-    unseeded.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(unseeded.payload));
+    unseeded.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(unseeded));
     expectCode(() => validateEnvelope(unseeded, EXPECTED), 'E_RNG');
     // An envelope claiming seeded mode with seed 0 is equally unsupported.
     const zeroSeed = JSON.parse(JSON.stringify(env));
     zeroSeed.payload.rng = { seed: 0, mode: 'seeded' };
-    zeroSeed.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(zeroSeed.payload));
+    zeroSeed.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(zeroSeed));
     expectCode(() => validateEnvelope(zeroSeed, EXPECTED), 'E_RNG');
 });
 
@@ -95,13 +95,13 @@ test('malformed nested recovery state is rejected before any interpreter exists 
     // when the next input arrives (streams[2] access).
     const ioEmpty = JSON.parse(JSON.stringify(env));
     ioEmpty.payload.io = {};
-    ioEmpty.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(ioEmpty.payload));
+    ioEmpty.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(ioEmpty));
     expectCode(() => validateEnvelope(ioEmpty, EXPECTED), 'E_STRUCTURE');
 
     // A stream table of the wrong shape.
     const ioStreams = JSON.parse(JSON.stringify(env));
     ioStreams.payload.io.streams = [0, 1, [], [], {}];
-    ioStreams.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(ioStreams.payload));
+    ioStreams.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(ioStreams));
     expectCode(() => validateEnvelope(ioStreams, EXPECTED), 'E_STRUCTURE');
 
     // Pending memory-output-stream stack entries: slot 3 holds [address,
@@ -112,7 +112,7 @@ test('malformed nested recovery state is rejected before any interpreter exists 
     // '1')" on the next input).
     const memStreamNull = JSON.parse(JSON.stringify(env));
     memStreamNull.payload.io.streams[3] = [null];
-    memStreamNull.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(memStreamNull.payload));
+    memStreamNull.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(memStreamNull));
     expectCode(() => validateEnvelope(memStreamNull, EXPECTED), 'E_STRUCTURE');
 
     // Even a WELL-FORMED entry is rejected: slot 3 is the memory-output-
@@ -121,7 +121,7 @@ test('malformed nested recovery state is rejected before any interpreter exists 
     // instead of being accepted unverified.
     const memStreamEntry = JSON.parse(JSON.stringify(env));
     memStreamEntry.payload.io.streams[3] = [[0x3000, 'pending memory-stream text']];
-    memStreamEntry.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(memStreamEntry.payload));
+    memStreamEntry.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(memStreamEntry));
     expectCode(() => validateEnvelope(memStreamEntry, EXPECTED), 'E_STRUCTURE');
 
     // File-backed transcript state: an open Glk stream reference (or mode 2,
@@ -129,59 +129,59 @@ test('malformed nested recovery state is rejected before any interpreter exists 
     // envelope.  Slot 2 = transcript, slot 4 = command recording.
     const transcriptRef = JSON.parse(JSON.stringify(env));
     transcriptRef.payload.io.streams[2] = { mode: 2, str: null };
-    transcriptRef.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(transcriptRef.payload));
+    transcriptRef.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(transcriptRef));
     expectCode(() => validateEnvelope(transcriptRef, EXPECTED), 'E_STRUCTURE');
     const commandFileMode = JSON.parse(JSON.stringify(env));
     commandFileMode.payload.io.streams[4] = { mode: 2 };
-    commandFileMode.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(commandFileMode.payload));
+    commandFileMode.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(commandFileMode));
     expectCode(() => validateEnvelope(commandFileMode, EXPECTED), 'E_STRUCTURE');
     const badCache = JSON.parse(JSON.stringify(env));
     badCache.payload.io.streams[2] = { mode: 1, cache: 5 };
-    badCache.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badCache.payload));
+    badCache.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(badCache));
     expectCode(() => validateEnvelope(badCache, EXPECTED), 'E_STRUCTURE');
 
     // Redirected input: slot 0 holds 0 (keyboard) or a live Glk stream
     // reference -- only the former is representable.
     const redirectedInput = JSON.parse(JSON.stringify(env));
     redirectedInput.payload.io.streams[0] = 1;
-    redirectedInput.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(redirectedInput.payload));
+    redirectedInput.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(redirectedInput));
     expectCode(() => validateEnvelope(redirectedInput, EXPECTED), 'E_STRUCTURE');
 
     // windows.main: null loses the captured transcript prefix silently.
     const noMain = JSON.parse(JSON.stringify(env));
     noMain.payload.windows.main = null;
-    noMain.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(noMain.payload));
+    noMain.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(noMain));
     expectCode(() => validateEnvelope(noMain, EXPECTED), 'E_STRUCTURE');
 
     // A malformed window entry (missing text).
     const badWindow = JSON.parse(JSON.stringify(env));
     delete badWindow.payload.windows.upper.text;
-    badWindow.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badWindow.payload));
+    badWindow.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(badWindow));
     expectCode(() => validateEnvelope(badWindow, EXPECTED), 'E_STRUCTURE');
 
     // Transcript/window disagreement: sections describe different states.
     const inconsistent = JSON.parse(JSON.stringify(env));
     inconsistent.payload.publishedOutput.output += 'EXTRA';
-    inconsistent.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(inconsistent.payload));
+    inconsistent.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(inconsistent));
     expectCode(() => validateEnvelope(inconsistent, EXPECTED), 'E_STRUCTURE');
 
     // Character readData without the store variable.
     const charEmpty = JSON.parse(JSON.stringify(env));
     charEmpty.boundary = { kind: 'char' };
     charEmpty.payload.readData = {};
-    charEmpty.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(charEmpty.payload));
+    charEmpty.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(charEmpty));
     expectCode(() => validateEnvelope(charEmpty, EXPECTED), 'E_STRUCTURE');
 
     // Line readData with an out-of-range store variable.
     const badStorer = JSON.parse(JSON.stringify(env));
     badStorer.payload.readData.storer = 999;
-    badStorer.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badStorer.payload));
+    badStorer.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(badStorer));
     expectCode(() => validateEnvelope(badStorer, EXPECTED), 'E_STRUCTURE');
 
     // Boundary maxlen out of range.
     const badMaxlen = JSON.parse(JSON.stringify(env));
     badMaxlen.boundary.maxlen = 999;
-    badMaxlen.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badMaxlen.payload));
+    badMaxlen.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(badMaxlen));
     expectCode(() => validateEnvelope(badMaxlen, EXPECTED), 'E_BOUNDARY');
 });
 
@@ -233,7 +233,7 @@ test('a checkpoint whose quetzal IFhd claims a different story is rejected by th
     const path = require('node:path');
     const loopBytes = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'tests', 'fixtures', 'zmachine', 'negative', 'loopstory.z5'));
     hostile.identity.storySize = loopBytes.length;
-    hostile.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(hostile.payload));
+    hostile.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(hostile));
     expectCode(
         () => restoreCheckpoint(hostile, require('./helpers.js').STORY, EXPECTED),
         'E_STORY',
@@ -259,7 +259,7 @@ test('a checkpoint whose quetzal IFhd claims a different story is rejected by th
         }
         off += 8 + len + (len % 2);
     }
-    ifhdForged.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(ifhdForged.payload));
+    ifhdForged.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(ifhdForged));
     expectCode(
         () => restoreCheckpoint(ifhdForged, STORY, EXPECTED),
         'E_STORY_QUETZAL',

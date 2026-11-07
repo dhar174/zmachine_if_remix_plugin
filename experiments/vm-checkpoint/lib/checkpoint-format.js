@@ -7,7 +7,7 @@
 // (the ZVM JIT cache is deliberately excluded; it is rebuilt on demand), and
 // restore validates the whole envelope before any interpreter is touched.
 //
-// Envelope v1 layout (see docs/evidence/g1-vm-recovery.md for the full
+// Envelope v2 layout (see docs/evidence/g1-vm-recovery.md for the full
 // state-inventory classification this implements):
 //   format / version            -- magic + schema version
 //   identity                    -- exact story digest/size, runtime name +
@@ -22,21 +22,19 @@
 //                                  text/cursor state, published output,
 //                                  request log (minus the pending entry), VM
 //                                  halt flags, undo disposition
-//   integrity                   -- sha256 over the canonical payload JSON
-//   capabilities                -- coverage/unsupported declaration carried
-//                                  with the data so a restored instance cannot
-//                                  silently claim more than was proven
+//   integrity                   -- sha256 over all other envelope fields
+//   capabilities                -- exact implementation-owned declaration;
+//                                  imported claims never grant authority
 //
 // Validation failures throw CheckpointError with a stable `code` so tests can
 // assert the rejection reason (A34 evidence).
 // ==============================================================================
 
 const crypto = require('node:crypto');
+const { SCHEMA_VERSION, RUNTIME_NAME, implementationIdentity, capabilityStatement } = require('./checkpoint-contract.js');
 
 const FORMAT = 'zirp-g1b-checkpoint';
-const SCHEMA_VERSION = 1;
 const SUPPORTED_BOUNDARIES = ['line', 'char', 'halted'];
-const RUNTIME_NAME = 'ifvms.js ZVM';
 // Generous size caps: a checkpoint for the 88,576-byte fixture is ~250 KB of
 // JSON (UMem is ~47 KB raw -> ~63 KB base64; output/transcript small).  Caps
 // exist so a hostile or corrupt envelope is rejected before parsing deep
@@ -68,8 +66,35 @@ function cloneJson(value) {
     return JSON.parse(JSON.stringify(value));
 }
 
-function canonicalPayloadString(payload) {
-    return JSON.stringify(payload);
+// Canonical JSON for the data-only v2 checksum: object keys are sorted by JS
+// string order, array order is retained, and only finite JSON values are
+// permitted. This is an experiment-specific encoding, not a signature or a
+// claim of compliance with an external canonicalization standard.
+function canonicalJson(value, ancestors = new Set()) {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
+    if (typeof value === 'number' && Number.isFinite(value)) return JSON.stringify(value);
+    if (typeof value !== 'object' || ancestors.has(value)) {
+        throw new CheckpointError('E_STRUCTURE', 'envelope contains a non-JSON or cyclic value');
+    }
+    if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
+        throw new CheckpointError('E_STRUCTURE', 'envelope contains a non-plain object');
+    }
+    ancestors.add(value);
+    let result;
+    if (Array.isArray(value)) {
+        result = '[' + Array.from(value, (item) => canonicalJson(item, ancestors)).join(',') + ']';
+    } else {
+        result = '{' + Object.keys(value).sort().map((key) => JSON.stringify(key) + ':' + canonicalJson(value[key], ancestors)).join(',') + '}';
+    }
+    ancestors.delete(value);
+    return result;
+}
+
+function canonicalEnvelopeString(envelope) {
+    if (!isPlainObject(envelope)) throw new CheckpointError('E_FORMAT', 'envelope is not an object');
+    const bound = Object.create(null);
+    for (const key of Object.keys(envelope)) if (key !== 'integrity') bound[key] = envelope[key];
+    return 'zirp-g1b-envelope-v2\n' + canonicalJson(bound);
 }
 
 function isPlainObject(v) {
@@ -94,16 +119,28 @@ function validateEnvelope(envelope, expected) {
 
     const id = envelope.identity;
     if (!isPlainObject(id)) throw new CheckpointError('E_STRUCTURE', 'identity section missing');
-    if (expected.storySha256 !== null && id.storySha256 !== expected.storySha256) {
+    if (!isPlainObject(expected) || typeof expected.storySha256 !== 'string' || !/^[a-f0-9]{64}$/.test(expected.storySha256)
+        || !Number.isSafeInteger(expected.storySize) || expected.storySize < 0) {
+        throw new CheckpointError('E_STORY', 'trusted story digest and size are required');
+    }
+    if (id.storySha256 !== expected.storySha256) {
         throw new CheckpointError('E_STORY', 'checkpoint story digest ' + id.storySha256 + ' does not match active story ' + expected.storySha256);
     }
-    if (expected.storySize !== null && id.storySize !== expected.storySize) {
+    if (id.storySize !== expected.storySize) {
         throw new CheckpointError('E_STORY', 'checkpoint story size mismatch');
     }
-    if (expected.runtimeRevision !== null && id.runtimeRevision !== expected.runtimeRevision) {
-        throw new CheckpointError('E_RUNTIME', 'checkpoint runtime revision ' + id.runtimeRevision + ' does not match pinned ' + expected.runtimeRevision);
-    }
     if (id.schema !== SCHEMA_VERSION) throw new CheckpointError('E_VERSION', 'identity.schema mismatch');
+    const implementation = implementationIdentity();
+    if (expected.runtimeRevision !== implementation.runtimeRevision) {
+        throw new CheckpointError('E_RUNTIME', 'expected runtime revision does not match the active pinned implementation');
+    }
+    for (const [key, value] of Object.entries(implementation)) {
+        if (id[key] !== value) throw new CheckpointError('E_RUNTIME', 'checkpoint identity.' + key + ' does not match the active implementation');
+    }
+    const identityKeys = ['storySha256', 'storySize', 'schema', ...Object.keys(implementation)].sort();
+    if (JSON.stringify(Object.keys(id).sort()) !== JSON.stringify(identityKeys)) {
+        throw new CheckpointError('E_STRUCTURE', 'identity contains missing or unknown fields');
+    }
 
     const b = envelope.boundary;
     if (!isPlainObject(b) || !SUPPORTED_BOUNDARIES.includes(b.kind)) {
@@ -114,6 +151,10 @@ function validateEnvelope(envelope, expected) {
     }
     if (b.kind === 'line' && (b.maxlen < 0 || b.maxlen > 255)) {
         throw new CheckpointError('E_BOUNDARY', 'line boundary maxlen out of range: ' + b.maxlen);
+    }
+    const boundaryKeys = b.kind === 'line' ? ['kind', 'maxlen'] : ['kind'];
+    if (JSON.stringify(Object.keys(b).sort()) !== JSON.stringify(boundaryKeys)) {
+        throw new CheckpointError('E_BOUNDARY', 'boundary contains missing or unknown fields');
     }
 
     const p = envelope.payload;
@@ -159,7 +200,7 @@ function validateEnvelope(envelope, expected) {
         throw new CheckpointError('E_STRUCTURE', 'vmFlags section invalid');
     }
     if (!isPlainObject(p.undo) || p.undo.preserved !== false) {
-        throw new CheckpointError('E_STRUCTURE', 'undo disposition missing (undo is declared unsupported in schema v1)');
+        throw new CheckpointError('E_STRUCTURE', 'undo disposition missing (undo is declared unsupported in schema v2)');
     }
 
     if (b.kind === 'halted') {
@@ -180,7 +221,7 @@ function validateEnvelope(envelope, expected) {
             }
             // ifvms stores both optional opcode operands, but neither it nor
             // the Glk shim schedules timed input.  Missing/undefined and zero
-            // are the only accepted v1 representations; reject either nonzero
+            // are the only accepted v2 representations; reject either nonzero
             // operand even if the other is zero or absent.  Capture invokes
             // this same validator, so both sides give the same error.
             if (rd[opt] !== undefined && rd[opt] !== 0) {
@@ -198,17 +239,29 @@ function validateEnvelope(envelope, expected) {
     }
 
     const integ = envelope.integrity;
-    if (!isPlainObject(integ) || typeof integ.payloadSha256 !== 'string') {
+    if (!isPlainObject(integ) || JSON.stringify(Object.keys(integ).sort()) !== JSON.stringify(['algorithm', 'envelopeSha256'])
+        || integ.algorithm !== 'sha256' || typeof integ.envelopeSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(integ.envelopeSha256)) {
         throw new CheckpointError('E_STRUCTURE', 'integrity section missing');
     }
-    const actual = sha256Hex(canonicalPayloadString(p));
-    if (actual !== integ.payloadSha256) {
-        throw new CheckpointError('E_DIGEST', 'payload digest mismatch: envelope says ' + integ.payloadSha256 + ', payload hashes to ' + actual);
+    const actual = sha256Hex(canonicalEnvelopeString(envelope));
+    if (actual !== integ.envelopeSha256) {
+        throw new CheckpointError('E_DIGEST', 'envelope digest mismatch');
     }
 
-    // Cross-section consistency, checked only AFTER the payload digest
-    // verifies (there is no point interpreting sections a tampered envelope
-    // may have rewritten): the shim's published buffer-window text IS the
+    // The pinned read method always passes initiallen=0 to the shim. Even an
+    // honestly rehashed envelope cannot change the restored request metadata.
+    if (b.kind === 'line' && b.maxlen !== 0) {
+        throw new CheckpointError('E_BOUNDARY', 'line boundary maxlen must equal the pinned runtime initial length 0');
+    }
+
+    if (!isPlainObject(envelope.capabilities)
+        || canonicalJson(envelope.capabilities) !== canonicalJson(capabilityStatement())) {
+        throw new CheckpointError('E_CAPABILITY', 'checkpoint capability claims do not match the active implementation');
+    }
+
+    // Cross-section consistency, checked after the envelope checksum. The
+    // checksum detects unrecomputed changes; it does not authenticate data.
+    // The shim's published buffer-window text IS the
     // transcript (and the grid window's text is the grid transcript), so a
     // disagreement means the envelope's sections describe different states
     // and continuation would lose or republish text.
@@ -221,10 +274,9 @@ function validateEnvelope(envelope, expected) {
 
     // Read-continuation address/span validation (Issue #41, A34), also
     // post-digest: it interprets the payload's own checkpointed memory image,
-    // which is only trustworthy once the digest has verified.
+    // after the checksum verifies; that checksum does not authenticate its source.
     validateReadContinuation(p, b, expected);
 
-    if (!isPlainObject(envelope.capabilities)) throw new CheckpointError('E_STRUCTURE', 'capabilities section missing');
     return true;
 }
 
@@ -496,7 +548,7 @@ function validateIo(io) {
     // print.
     if (!Array.isArray(s[3])) throw new CheckpointError('E_STRUCTURE', 'io.streams[3] (memory-output-stream stack) must be an array');
     if (s[3].length > 0) {
-        throw new CheckpointError('E_STRUCTURE', 'io.streams[3] (memory-output-stream stack) must be empty: pending output_stream 3 memory writes are unsupported in schema v1');
+        throw new CheckpointError('E_STRUCTURE', 'io.streams[3] (memory-output-stream stack) must be empty: pending output_stream 3 memory writes are unsupported in schema v2');
     }
     validateStreamState(4, 'command recording', s[4]);
 }
@@ -556,7 +608,7 @@ module.exports = {
     CheckpointError,
     sha256Hex,
     cloneJson,
-    canonicalPayloadString,
+    canonicalEnvelopeString,
     quetzalUmem,
     validateEnvelope,
 };

@@ -17,13 +17,24 @@
 // ==============================================================================
 
 const path = require('path');
+const { createHash } = require('node:crypto');
 const { createGlk } = require('../glksim.js');
 const ZVM = require('../vendor/ifvms/src/index.js').ZVM;
 
 // ifvms.js master revision vendored under vendor/ifvms (MIT).
 const REVISION = '6ac63e6b61144d4353a168df16c4ad5c22526f88';
+// Coordinator-only probe bookkeeping: capture must identify an adapter made
+// by this exact module and the original story bytes, before ifvms mutates the
+// supplied buffer.  This is not an authentication boundary against code
+// already running in the same process.
+const adapterStories = new WeakMap();
 
 function createIfvmsAdapter(storyBytes /*, options */) {
+    const initialStory = Buffer.from(storyBytes);
+    const storyIdentity = Object.freeze({
+        storySha256: createHash('sha256').update(initialStory).digest('hex'),
+        storySize: initialStory.length,
+    });
     const state = { inputQueue: [] };
     const Glk = createGlk(state);
     const vm = new ZVM();
@@ -77,7 +88,7 @@ function createIfvmsAdapter(storyBytes /*, options */) {
         };
     }
 
-    return {
+    const adapter = {
         describe() {
             return {
                 runtime: 'ifvms.js ZVM',
@@ -150,6 +161,12 @@ function createIfvmsAdapter(storyBytes /*, options */) {
             return settle();
         },
     };
+    adapterStories.set(adapter, storyIdentity);
+    return adapter;
 }
 
-module.exports = { createIfvmsAdapter, REVISION };
+function getAdapterStoryIdentity(adapter) {
+    return adapterStories.get(adapter) || null;
+}
+
+module.exports = { createIfvmsAdapter, getAdapterStoryIdentity, REVISION };

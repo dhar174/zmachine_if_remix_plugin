@@ -273,7 +273,7 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
     setUpStore();
     const baseline = makeBaseline();
     const envPath = writeEnvelope(baseline.envelope, 'iso-hostile.json');
-    const { sha256Hex, canonicalPayloadString } = require('../lib/checkpoint-format.js');
+    const { sha256Hex, canonicalEnvelopeString } = require('../lib/checkpoint-format.js');
 
     const variants = {};
     variants['not-json'] = 'this is not json {{{';
@@ -288,21 +288,21 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.identity.storySha256 = require('./helpers.js').LOOPSTORY_SHA256;
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         variants['wrong-story'] = JSON.stringify(e);
     }
     // Wrong runtime revision, honest digest.
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.identity.runtimeRevision = 'deadbeefdeadbeef';
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         variants['wrong-runtime'] = JSON.stringify(e);
     }
     // Unsupported boundary kind.
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.boundary = { kind: 'timed-input' };
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         variants['bad-boundary'] = JSON.stringify(e);
     }
     // Structurally valid but corrupt quetzal: truncated base64 with a
@@ -313,7 +313,7 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.payload.quetzalB64 = e.payload.quetzalB64.slice(0, 40);
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         variants['corrupt-quetzal'] = JSON.stringify(e);
     }
     // Honest unseeded envelope (digest recomputed): must be rejected by
@@ -321,7 +321,7 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.payload.rng = { seed: 0, mode: 'unseeded' };
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         variants['unseeded-rng'] = JSON.stringify(e);
     }
     // Pending memory-output-stream stack entry (PR #37 re-review): slot 3
@@ -332,7 +332,7 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.payload.io.streams[3] = [null];
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         variants['memorystream-stack-entry'] = JSON.stringify(e);
     }
     // Nested-state malformations that pass shallow shape checks (PR #37
@@ -342,26 +342,26 @@ test('malformed and hostile checkpoints are rejected in the child without touchi
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.payload.io = {};
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         variants['io-empty'] = JSON.stringify(e);
     }
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.payload.windows.main = null;
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         variants['windows-main-null'] = JSON.stringify(e);
     }
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.boundary = { kind: 'char' };
         e.payload.readData = {};
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         variants['char-readdata-empty'] = JSON.stringify(e);
     }
     {
         const e = JSON.parse(baseline.envelopeJson);
         e.payload.publishedOutput.output += 'EXTRA';
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         variants['transcript-inconsistent'] = JSON.stringify(e);
     }
 

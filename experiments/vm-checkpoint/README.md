@@ -10,32 +10,73 @@ adapter or a product checkpoint format; nothing here freezes a contract.
 Baseline dependencies (never duplicated): `experiments/vm-io/` (adapter,
 glksim, vendored ifvms) and `tests/fixtures/zmachine/fixture.z5`
 (SHA-256 `96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`,
-88,576 bytes). The only shared-code change is the additive
-`__g1bInternals()` accessor on the ifvms adapter (exposes the live shim
-state, ZVM instance, Glk object, and `settle()`; no behavior change).
+88,576 bytes). The shared ifvms adapter exposes `__g1bInternals()` and records the original
+story digest and size for checkpoint capture before the runtime mutates the
+supplied story buffer.
 
 ## Run
 
 ```sh
 cd experiments/vm-checkpoint
-node --test          # 57 tests: format, continuation, timed-input gates, round trips, isolation
+node --test          # format, identity, continuation, timed-input gates, round trips, isolation
 ```
 
 Node >= 18 (tested on v24.13.0, Windows). Zero npm dependencies. Run from
 this directory only (`node --test` does not honor .gitignore when sweeping
 wider trees). Evidence and scratch files land in gitignored `results/`.
 
-## Design (envelope v1)
+## Design (envelope v2)
 
 A checkpoint is a versioned, **data-only** JSON envelope
 (`lib/checkpoint-format.js`): identity (story digest/size, runtime name +
-pinned runtime revision, adapter name, schema version), boundary kind
+pinned runtime revision and build digest, adapter name and build digest,
+Node/V8 version, platform, architecture, schema version), boundary kind
 (`line`/`char`/`halted`), payload
 (Quetzal `IFhd`+`UMem`+`Stks` from the upstream `vm.save_file(pc, 1)`
 primitive, plus the RNG seed/mode, the plain-data `io` object, the pending
 `read_data`, window text/cursor state, published transcript, request log),
-an integrity digest over the payload, and a capability statement. Executable
-code is never serialized (the JIT cache is rebuilt lazily).
+a checksum over all envelope fields other than `integrity`, and a capability
+statement that must exactly match the active implementation. Executable code
+is never serialized (the JIT cache is rebuilt lazily).
+
+**Identity, integrity and compatibility (Issue #43):** Capture binds the
+original story bytes recorded when this adapter was created. Restore derives
+the expected story digest and size from its own supplied bytes. Before a VM is
+created, it compares the runtime/adapter names, pinned revision, runtime and
+adapter source-build digests, Node and V8 versions, platform, architecture,
+and schema against local implementation data. The runtime digest covers the
+vendored `src` JavaScript tree; the adapter digest covers the adapter, Glk shim,
+checkpoint contract/core/format, fingerprint and runner. This adapter file list
+is explicit: when another file joins that execution surface, extend the list
+and capture a new checkpoint. Identical source bytes at another path match.
+Fingerprints are sampled on module initialization and assume source files
+remain unchanged while the process runs; they do not attest the Node binary,
+OS, or in-process code.
+
+V2 uses SHA-256 over `zirp-g1b-envelope-v2\n` followed by experiment-specific
+canonical JSON for every top-level field except `integrity` (object keys sorted
+by JavaScript string order, array order preserved). The integrity object itself
+has an exact checked shape. This unkeyed checksum detects changes only when it
+is not recomputed: it is **not authentication**, a signature, or proof that
+checkpoint data is trustworthy. Independently, imported capabilities must equal
+the local statement and the pending line request's `maxlen` must be zero, as
+passed by this pinned runtime; a recomputed checksum cannot expand those
+capabilities or change that request metadata. Other well-formed payload data is
+not protected against an author who can recompute the checksum. V2 permits
+unknown top-level and payload keys; they are checksum-bound but ignored by the
+current restore code. They do not grant capabilities. Reassess this contract
+and its version before assigning restore semantics to such fields.
+
+V2 intentionally rejects v1 with `E_VERSION`; there is no migration. Exact
+build and Node/V8/platform/architecture comparisons also refuse restore on a
+different build or host identity, even if it might otherwise be compatible.
+Changing capability text or array order requires a new compatible capture.
+Validation first checks format/version and local story/runtime identity, then
+boundary and payload structure and unsupported-state gates, then checksum,
+then request/capability and cross-payload consistency. Thus an earlier error
+can take precedence over a digest error (e.g. `E_RUNTIME` or `E_TIMED_INPUT`);
+otherwise stale metadata is `E_DIGEST`, rehashed nonzero `maxlen` is
+`E_BOUNDARY`, and rehashed capability differences are `E_CAPABILITY`.
 
 **Capture** (`lib/checkpoint-core.js`): `vm.save_file(vm.pc, 1)` plus the
 explicit supplement sections above, at a boundary where a request is pending
@@ -89,7 +130,7 @@ seed across process death).
 methods copy the optional `time` and `routine` arguments into `read_data`,
 but neither the runtime nor the Glk shim schedules their callbacks. Missing
 arguments are JavaScript `undefined` and disappear when the envelope is
-cloned to JSON. Envelope v1 accepts an absent field or integer `0`; `null`,
+cloned to JSON. Envelope v2 accepts an absent field or integer `0`; `null`,
 negative and non-integer values are malformed (`E_STRUCTURE`). Either nonzero
 operand is conservatively rejected at capture and restore (`E_TIMED_INPUT`),
 including when the other is absent or zero. This is a checkpoint policy, not a
@@ -127,6 +168,10 @@ stories cannot be driven to a VM error on demand).
 
 ## Tests
 
+- `tests/identity-integrity.test.js` — trusted capture/restore story identity,
+  v1 rejection, canonical checksums, runtime/adapter and build mutations,
+  metadata and capability mutations with stale and recomputed checksums,
+  pre-VM rejection, and identical-source/different-path restore controls.
 - `tests/format.test.js` — envelope validation: magic/version/identity/
   boundary/digest/structure/size rejections (A34), and the VM-level Quetzal
   IFhd rejection behind them.

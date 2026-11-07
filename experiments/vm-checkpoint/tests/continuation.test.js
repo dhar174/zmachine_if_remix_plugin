@@ -32,7 +32,7 @@ const {
     machineFingerprint, fingerprintDiff,
 } = require('./helpers.js');
 const {
-    validateEnvelope, CheckpointError, sha256Hex, canonicalPayloadString, quetzalUmem,
+    validateEnvelope, CheckpointError, sha256Hex, canonicalEnvelopeString, quetzalUmem,
 } = require('../lib/checkpoint-format.js');
 
 const PREFIX = [line('look'), line('seed 42'), line('take brass key')];
@@ -73,7 +73,7 @@ function expectCode(fn, code) {
 function mutatePayload(env, fn) {
     const m = JSON.parse(JSON.stringify(env));
     fn(m.payload);
-    m.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(m.payload));
+    m.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(m));
     return m;
 }
 
@@ -100,7 +100,7 @@ function withUmemByte(env, addr, value) {
         if (q[off] === 0x55 && q[off + 1] === 0x4D && q[off + 2] === 0x65 && q[off + 3] === 0x6D) {
             q[off + 8 + addr] = value;
             env.payload.quetzalB64 = q.toString('base64');
-            env.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(env.payload));
+            env.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(env));
             return env;
         }
         off += 8 + len + (len % 2);
@@ -133,7 +133,7 @@ function withHighBitTag(env, which) {
     }
     q[off] |= 0x80;
     env.payload.quetzalB64 = q.toString('base64');
-    env.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(env.payload));
+    env.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(env));
     return env;
 }
 
@@ -303,7 +303,7 @@ test('a quetzal whose validated memory image is not the applied image rejects wi
         combined.writeUInt32BE(combined.length - 8, 4);
         doubleUmem.payload.quetzalB64 = combined.toString('base64');
     }
-    doubleUmem.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(doubleUmem.payload));
+    doubleUmem.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(doubleUmem));
     expectCode(() => validateEnvelope(doubleUmem, EXPECTED_STORY), 'E_STRUCTURE');
 
     // A compressed CMem memory chunk is not the uncompressed autosave image
@@ -319,7 +319,7 @@ test('a quetzal whose validated memory image is not the applied image rejects wi
             off += 8 + len + (len % 2);
         }
     }
-    cmem.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(cmem.payload));
+    cmem.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(cmem));
     expectCode(() => validateEnvelope(cmem, EXPECTED_STORY), 'E_STRUCTURE');
 
     // A FORM size field inconsistent with the buffer would fault the
@@ -333,7 +333,7 @@ test('a quetzal whose validated memory image is not the applied image rejects wi
         q.writeUInt32BE(q.length - 7, 4); // declared area +1 past the buffer
         badForm.payload.quetzalB64 = q.toString('base64');
     }
-    badForm.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(badForm.payload));
+    badForm.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(badForm));
     expectCode(() => validateEnvelope(badForm, EXPECTED_STORY), 'E_STRUCTURE');
     const trailing = mutatePayload(env, () => {});
     {
@@ -344,7 +344,7 @@ test('a quetzal whose validated memory image is not the applied image rejects wi
         const padded = Buffer.concat([q, Buffer.alloc(8)]);
         trailing.payload.quetzalB64 = padded.toString('base64');
     }
-    trailing.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(trailing.payload));
+    trailing.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(trailing));
     expectCode(() => validateEnvelope(trailing, EXPECTED_STORY), 'E_STRUCTURE');
 
     // Straddling chunk header (review F8): a len-0 chunk landing the next
@@ -362,7 +362,7 @@ test('a quetzal whose validated memory image is not the applied image rejects wi
         combined.writeUInt32BE(combined.length - 8, 4);
         straddler.payload.quetzalB64 = combined.toString('base64');
     }
-    straddler.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(straddler.payload));
+    straddler.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(straddler));
     expectCode(() => validateEnvelope(straddler, EXPECTED_STORY), 'E_STRUCTURE');
 });
 
@@ -423,7 +423,7 @@ test('honest-digest continuation-span mutations are rejected by the ordinary chi
 
     // Every variant is an HONEST-DIGEST mutation of the genuine capture.
     const honest = (e) => {
-        e.integrity.payloadSha256 = sha256Hex(canonicalPayloadString(e.payload));
+        e.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(e));
         return e;
     };
     const variants = {};
