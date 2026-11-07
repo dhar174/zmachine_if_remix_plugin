@@ -1,9 +1,11 @@
 'use strict';
-// Fresh-process STORY executor for kill tests (G1-B probe).  Same stdin/out
-// protocol as lib/runner.js but starting a story directly instead of
-// restoring a checkpoint -- used for the unbounded-execution (spinloop)
-// deadline kill, which a checkpoint-based runner cannot reach (a story that
-// never reaches an input boundary can never be checkpointed).
+// Fresh-process STORY executor for kill tests (G1-B probe). It shares basic
+// newline-delimited request/response shapes with lib/runner.js, but is a
+// separate scaffold and does not implement the runner's failure/exit contract.
+// It starts a story directly instead of restoring a checkpoint, for the
+// unbounded-execution (spinloop) deadline kill. A checkpoint-based runner
+// cannot reach it: a story that never reaches an input boundary cannot be
+// checkpointed.
 // argv: node exec-child.js --story <path>   (static paths from the parent)
 
 const fs = require('node:fs');
