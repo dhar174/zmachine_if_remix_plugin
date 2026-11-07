@@ -17,6 +17,13 @@ const { resolveBocfelLaunch, probeBocfelAvailable, windowsToWslPath } = require(
 const TESTS_DIR = __dirname;
 const NATIVE_EXE = path.join(TESTS_DIR, '..', 'tools', 'bocfel', 'bocfel.exe');
 
+// Per-process mocks cannot advertise a placeholder to another test process,
+// and never overwrite or remove an installed interpreter.
+function nativeExists(t, present) {
+    const original = fs.existsSync;
+    t.mock.method(fs, 'existsSync', (file) => file === NATIVE_EXE ? present : original(file));
+}
+
 function withBocfelCommand(value, fn) {
     const prev = process.env.BOCFEL_COMMAND;
     if (value === undefined) delete process.env.BOCFEL_COMMAND;
@@ -42,21 +49,17 @@ test('resolveBocfelLaunch: BOCFEL_COMMAND overrides everything and substitutes @
     });
 });
 
-test('resolveBocfelLaunch: native Windows build is preferred over the WSL default', () => {
-    fs.mkdirSync(path.dirname(NATIVE_EXE), { recursive: true });
-    fs.writeFileSync(NATIVE_EXE, 'placeholder (not a real interpreter)');
+test('resolveBocfelLaunch: native Windows build is preferred over the WSL default', (t) => {
+    nativeExists(t, true);
     withBocfelCommand(undefined, () => {
-        try {
-            const launch = resolveBocfelLaunch('D:\\x\\story.z5');
-            assert.match(launch.platform, /Windows native/);
-            assert.strictEqual(launch.command[0], NATIVE_EXE);
-        } finally {
-            fs.rmSync(NATIVE_EXE, { force: true });
-        }
+        const launch = resolveBocfelLaunch('D:/x/story.z5');
+        assert.match(launch.platform, /Windows native/);
+        assert.strictEqual(launch.command[0], NATIVE_EXE);
     });
 });
 
-test('resolveBocfelLaunch: WSL default when no override or native build exists', () => {
+test('resolveBocfelLaunch: WSL default when no override or native build exists', (t) => {
+    nativeExists(t, false);
     withBocfelCommand(undefined, () => {
         assert.ok(!fs.existsSync(NATIVE_EXE), 'no native build may exist for this test');
         const launch = resolveBocfelLaunch('D:\\x\\story.z5');
@@ -71,19 +74,15 @@ test('probeBocfelAvailable: a configured BOCFEL_COMMAND is recognized without an
     });
 });
 
-test('probeBocfelAvailable: a native build at the documented tools path is recognized', () => {
-    fs.mkdirSync(path.dirname(NATIVE_EXE), { recursive: true });
-    fs.writeFileSync(NATIVE_EXE, 'placeholder (not a real interpreter)');
+test('probeBocfelAvailable: a native build at the documented tools path is recognized', (t) => {
+    nativeExists(t, true);
     withBocfelCommand(undefined, () => {
-        try {
-            assert.strictEqual(probeBocfelAvailable(), true);
-        } finally {
-            fs.rmSync(NATIVE_EXE, { force: true });
-        }
+        assert.strictEqual(probeBocfelAvailable(), true);
     });
 });
 
-test('probeBocfelAvailable: with no override, no native build, and no WSL bocfel, unavailable', function () {
+test('probeBocfelAvailable: with no override, no native build, and no WSL bocfel, unavailable', function (t) {
+    nativeExists(t, false);
     // Mirrors the WSL availability check to decide skip: on machines where a
     // real WSL bocfel exists (e.g. the authoring machine) this case cannot be
     // arranged; on machines without one (CI runners) it must hold.

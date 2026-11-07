@@ -28,14 +28,15 @@ jobs:
       # The fixture digest manifest pins the exact committed (LF) bytes; on a
       # Windows runner an autocrlf checkout would rewrite text files to CRLF
       # and fail the digest test. Force an LF (blob-faithful) checkout.
-      - name: Normalize checkout to LF bytes
-        run: |
-          git config core.autocrlf false
-          git checkout-index -f -a
-
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      - name: Normalize checkout to LF bytes
+        run: node .github/scripts/normalize-checkout.js
+
+      - name: Checkout normalization regression
+        run: node --test tests/ci/checkout-normalization.test.js
 
       - name: Fixture integrity suite
         run: node --test
