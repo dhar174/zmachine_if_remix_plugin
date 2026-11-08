@@ -658,3 +658,116 @@ D39 remains proposed and owner-unapproved; #12/#40 remain open. No #49/#14
 work, general input/output hardening, sandbox, production coordinator, service
 restart, live-model or host/device trial is performed. An unmet independent
 review/CI gate or a discrepancy within the declared route leaves #48 open.
+
+## Issue #49 probe transport limits
+
+Recorded 2026-11-08; source base `025ca8d1e2b125deb821e47cc2fa8fff7c092a79`,
+branch `codex/issue-49-probe-io-limits`. This supersedes earlier unqualified
+output-limit/bounded-collection wording for the current runner while retaining
+the dated observations. The approved approach changes transport and test
+support, not the synchronous VM-I/O adapter/shim or vendor implementation.
+
+### Exact bounds and compatibility
+
+`lib/transport-limits.js` is the implementation-owned source: runner story
+4 MiB; checkpoint input/encoded output 32 MiB UTF-8; decoded JSON 32 Mi UTF-16
+code units (`CAPS.jsonChars`); request line before LF 64 KiB and cumulative
+input 8 MiB; stdout record including LF 8 MiB and cumulative stdout 32 MiB;
+parent-retained stderr 64 KiB; terminal diagnostic reserve 1 KiB within stdout.
+`--output-limit` is cumulative `delta.length`, default/maximum 4 Mi UTF-16
+code units, configurable downward to a positive safe integer only. These are
+probe limits, not adopted product budgets. No ordinary bypass/raise flag exists.
+
+Files are opened once, checked through their descriptor, required to be regular
+and read with a short-read-aware cap-plus-one loop. Growth after metadata does
+not bypass the cap. Byte/character checks precede checkpoint JSON parsing;
+invalid UTF-8/truncation is `E_FORMAT`, oversize `E_SIZE`, `ready:false`, exit 2.
+Encoded serialization size is checked before opening/replacing `--out`;
+oversize is sticky `E_SIZE`, exit 4, with no success response. The ordinary
+runner test preserves an existing output sentinel. Its oversize envelope is
+explicit post-capture guard scaffolding, not a story-produced supported state.
+
+Byte-framed protocol input and awaited stdout writes replace unbounded line
+accumulation; input overflow is terminal `E_INPUT_LIMIT`, exit 4. Story-output
+and wire overflow are terminal `E_OUTPUT_LIMIT`, exit 3, with a small diagnostic
+instead of the offending response; later requests do not execute. All encoded
+responses count, including readiness, fingerprints and errors. Below-limit
+sticky failures, explicit exit and paused-reader drain behavior remain tested.
+
+Parents count raw bytes before decoding/parsing, retain bounded fragments and
+records, queue early messages and keep failures sticky through close. They kill
+failed live children, drain/discard excess data and observe both exit and final
+pipe closure before guarded temporary cleanup. Default response waits are
+30 seconds; termination waits 10 seconds; existing larger case timeouts remain.
+The test-only synchronous facade uses a separate supervising Node process for
+independent stdout/stderr caps and preserves original response text. Its outer
+timeout is the requested deadline plus 15 seconds and its finite `maxBuffer`
+is 32 MiB + 64 KiB. An outer timeout/error cannot prove inner-child cleanup.
+
+The legacy mutable-window diagnostic case emitted a handled TypeError/stack
+directly to stdout before JSON. The diagnostic scaffold now retains its full
+formatted message/stack in bounded `vmDiagnostics` data. Tests still assert the
+same missing Glk method, error step and `E_NOT_AT_BOUNDARY` capture refusal.
+This reporting process's zero exit does not qualify candidate execution.
+
+Canonical fixture: 88,576 bytes, SHA256
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`.
+Pinned ifvms revision `6ac63e6b61144d4353a168df16c4ad5c22526f88`, runtime build
+`d225d898a0c93b7efc020549d16bda391561632c3cc5b06dc62119d498863454` unchanged.
+New adapter source identity:
+`8cfef9e33abd8bbf9680744d3356f7ea68dc6aeda2aa7de88729dd82d1a1aeb2`.
+Transport is included in the source inventory and mutation regression. V2 layout,
+checkpoint state semantics and fingerprint oracle are unchanged; prior builds
+reject `E_RUNTIME` and require fresh captures. No migration is claimed.
+
+### Tests, acceptance and remaining risks
+
+Local Node 24.13.0 Windows x64 focused command in the checkpoint directory:
+`node --test --test-reporter=tap tests/transport-limits.test.js`: **21/21 pass**.
+Full checkpoint `node --test --test-reporter=tap`: **138/138 pass**, preserving
+117 prior cases plus 21 new. The same full command in VM-I/O: **61 pass / 1
+WSL-dependent skip**; fixture directory: **2 pass / 1 pinned-compiler skip**.
+Root `node --test --test-reporter=tap tests/ci/checkout-normalization.test.js`:
+**1/1 pass**. Final commands exit 0 with empty command stderr. Expected child
+fault diagnostics are captured/asserted within tests. Initial implementation
+failures were fixed; their raw logs remain separate, not passing evidence.
+
+Local-only raw logs: `D:/projects/zirp-issue49-focused-r6.{out,err}` and
+`D:/projects/zirp-issue49-{checkpoint-r4,vmio-r1,fixture-r1,checkout-r1}.{out,err}`.
+The latter runs have `.json` receipts with actual cwd, command, exit and hashes.
+These paths are not portable public receipts. Final source/review SHAs,
+Windows/Ubuntu hosted logs, verdict and issue disposition belong in the PR and
+issue closeout; no new committed machine-readable result receipt is supplied.
+
+| #49 acceptance | Test / disposition |
+| --- | --- |
+| Reject oversized/truncated input and bound captured child output | Reader exact-cap/plus-one/short-read/growth/descriptor tests; parse spy confirms byte refusal before parsing; invalid UTF-8/truncated and oversized ordinary-runner cases; byte-framed input; response and parent record/aggregate/stderr tests. |
+| Failures are not clean; baseline/store unchanged; reaping observed | Real fixture low-output-limit omission and no queued serialization; existing output preserved on serialization refusal; synthetic malformed/partial/flood/deadline cases; actual zero-exit child remains ineligible; baseline file/whole capture/fingerprint/transcript/pending state and exact seeded suffix/store checked. |
+| Synthetic/pinned fixtures on Linux/Windows | Only synthetic files/processes, existing pinned original fixtures and existing diagnostic stories; local Windows pass above. Hosted Windows/Ubuntu is a separate required PR/main gate, not asserted by this local report. |
+| Exact limits, risks and #30 handoff | Fixed-limit table and threat model here/README; no sandbox/private-import/quota/rate-limit or durable publication implementation. #30/#22/#18/#21 retain ownership. |
+
+The zero-exit overflow test replaces the parent's kill method **only in that
+test** to simulate a kill arriving too late; the real synthetic child exits 0
+and its transport fault remains ineligible. Other cases exercise actual kills.
+TAP diagnostics retain observed code/signal at exit/close, counters, retained
+bytes and zero publication calls. The positive fixture control uses trusted
+fresh restore, whole-envelope recapture and exact seeded continuation before
+one simulated parent publication; no universal-rejection assertion can pass it.
+
+Children inherit cwd/environment and ordinary host-user filesystem/network
+authority. General spawns use inherited environment; interruption children copy
+it and remove only `NODE_TEST_CONTEXT`. No credentials/environment values are
+recorded. No OS permission restriction, sandbox or account isolation is added.
+Missing publication-store paths are ownership discipline, not a security gate.
+Synchronous VM execution, JSON encoding and parsing can allocate or consume CPU
+before/within transport checks. Retained raw text plus parsed records and
+temporary buffers are not a JS heap quota. JSON complexity, CPU/memory/IO quotas,
+rate limits, descendant containment, arbitrary private-story safety and hostile
+imports remain unqualified. Object APIs receive already-constructed data.
+#30 owns production sandbox/quotas, #22 private imports, #18/#21 durable
+publication/receipt recovery. #50's shared-filename repair is not included.
+
+D39 remains proposed and owner-unapproved; #12/#40 stay open. No #50/#14 work,
+service restart, untrusted import, deployment or live-model/device trial is
+performed. Missing independent review/CI or an unbounded declared transport
+boundary leaves #49 open.

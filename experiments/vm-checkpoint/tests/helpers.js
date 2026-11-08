@@ -13,6 +13,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { supervise } = require('../test-support/bounded-child.cjs');
 const { createIfvmsAdapter, REVISION } = require('../../vm-io/adapters/ifvms-adapter.js');
 const { captureCheckpoint } = require('../lib/checkpoint-core.js');
 const { machineFingerprint, fingerprintDiff, normalizeRngDraws } = require('../lib/fingerprint.js');
@@ -69,83 +70,49 @@ function runReference(prefix, suffix) {
 // (fingerprint/serialize) are sent after the suffix.
 function spawnRestore(envelopePath, opts = {}) {
     const args = [RUNNER, '--story', FIXTURE, '--checkpoint', envelopePath];
-    if (opts.outputLimit) args.push('--output-limit', String(opts.outputLimit));
+    if (opts.outputLimit !== undefined) args.push('--output-limit', String(opts.outputLimit));
     if (opts.stallSerializeMs) args.push('--stall-serialize-ms', String(opts.stallSerializeMs));
     if (opts.out) args.push('--out', opts.out);
     if (opts.selftest) args.push('--selftest', opts.selftest);
-    const child = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
-
-    const result = { ready: false, readyError: null, fingerprint: null, steps: [], exitCode: null, stderr: '' };
-    let stdoutBuf = '';
-    let pendingResolve = null;
-    child.stdout.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-        stdoutBuf += chunk;
-        let idx;
-        while ((idx = stdoutBuf.indexOf('\n')) >= 0) {
-            const lineStr = stdoutBuf.slice(0, idx);
-            stdoutBuf = stdoutBuf.slice(idx + 1);
-            if (!lineStr.trim()) continue;
-            let msg;
-            try { msg = JSON.parse(lineStr); } catch { result.stderr += 'unparseable stdout: ' + lineStr + '\n'; continue; }
-            if (msg.ready === true) {
-                result.ready = true;
-                result.readyFingerprint = msg.fingerprint;
-                result.fingerprint = msg.fingerprint;
-            } else if (msg.ready === false) {
-                result.readyError = msg.error + (msg.code ? ' [' + msg.code + ']' : '');
-            } else if (msg.step) {
-                result.steps.push(msg.step);
-            } else if (msg.fingerprint) {
-                result.fingerprint = msg.fingerprint;
-            }
-            if (pendingResolve) { const r = pendingResolve; pendingResolve = null; r(msg); }
-        }
+    const child = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const result = { ready: false, readyError: null, fingerprint: null, steps: [], exitCode: null, child };
+    const session = supervise(child, msg => {
+        if (msg.ready === true) {
+            result.ready = true; result.readyFingerprint = msg.fingerprint; result.fingerprint = msg.fingerprint;
+        } else if (msg.ready === false) result.readyError = msg.error + (msg.code ? ' [' + msg.code + ']' : '');
+        else if (msg.step) result.steps.push(msg.step);
+        else if (msg.fingerprint) result.fingerprint = msg.fingerprint;
     });
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (c) => { result.stderr += c; });
-
-    const nextMessage = (timeoutMs) => new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('timed out waiting for runner message')), timeoutMs || 30000);
-        pendingResolve = (msg) => { clearTimeout(timer); resolve(msg); };
+    result.session = session;
+    Object.defineProperties(result, {
+        stderr: { get: () => session.collector.stderr },
+        fault: { get: () => session.collector.fault },
+        eligible: { get: () => session.eligible },
     });
-
-    const exited = new Promise((resolve) => child.on('exit', (code) => resolve(code)));
-    result.exited = exited;
-    result.child = child;
-    result.nextMessage = nextMessage;
-
-    result.run = async (suffix) => {
-        const boot = await nextMessage(30000);
-        if (boot.ready !== true) { result.readyError = result.readyError || 'no ready signal'; return result; }
-        result.ready = true;
+    result.exited = new Promise(resolve => child.on('exit', code => { result.exitCode = code; resolve(code); }));
+    let cursor = 0;
+    result.nextMessage = timeout => session.wait(() => {
+        const msg = session.collector.records[cursor];
+        if (msg) { cursor++; return msg; }
+    }, timeout || 30000);
+    result.run = async suffix => {
+        const boot = await result.nextMessage();
+        if (boot.ready !== true) { result.readyError ||= 'no ready signal'; return result; }
         for (const input of suffix) {
-            child.stdin.write(JSON.stringify({ input }) + '\n');
-            await nextMessage(30000);
+            child.stdin.write(JSON.stringify({ input }) + '\n'); await result.nextMessage();
         }
-        child.stdin.write(JSON.stringify({ op: 'fingerprint' }) + '\n');
-        await nextMessage(30000);
-        // The child stays alive after run(): tests may send further inputs or
-        // ops (e.g. refused-input probes on a halted restore).  Callers end
-        // the child via finish() or kill().
+        child.stdin.write(JSON.stringify({ op: 'fingerprint' }) + '\n'); await result.nextMessage();
         return result;
     };
     result.finish = async () => {
-        child.stdin.write(JSON.stringify({ op: 'exit' }) + '\n');
-        return awaitExit(result, 10000);
+        child.stdin.write(JSON.stringify({ op: 'exit' }) + '\n'); return awaitExit(result, 10000);
     };
     return result;
 }
-
-// Await a child's exit; fail the test if it does not die within the timeout
-// (the "no surviving child processes" evidence).
 async function awaitExit(rec, timeoutMs) {
-    const code = await Promise.race([
-        rec.exited,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('child process did not exit within ' + timeoutMs + 'ms (leaked)')), timeoutMs || 10000)),
-    ]);
-    rec.exitCode = code;
-    return code;
+    const closed = await rec.session.wait(() => rec.session.closed, timeoutMs || 10000, true);
+    if (!rec.session.exit) throw new Error('missing child exit observation');
+    rec.exitCode = closed.code; return closed.code;
 }
 
 module.exports = {

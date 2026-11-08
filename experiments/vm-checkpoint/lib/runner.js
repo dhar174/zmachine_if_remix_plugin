@@ -1,222 +1,126 @@
 'use strict';
-// ==============================================================================
-// runner.js -- fresh-process restore endpoint for the G1-B probe (Issue #12).
-// ------------------------------------------------------------------------------
-// Invoked by tests as:  node runner.js --story <path> --checkpoint <path>
-//                               [--output-limit N] [--stall-serialize-ms N]
-// All arguments are static paths/numbers supplied by the parent test; no
-// environment value ever reaches an argv element or a file path here.
-//
-// Protocol (newline-delimited JSON on stdout, one request per stdin line):
-//   -> {"ready":true,"fingerprint":{...}}       after a successful restore
-//   -> {"ready":false,"error":"...","code":...} + exit 2 on restore rejection
-//   stdin {"input":{"kind":"line","text":".."}} -> {"step":{status,delta,...}}
-//   stdin {"input":{"kind":"char","key":"b"}}   -> {"step":{...}}
-//   stdin {"op":"fingerprint"}                  -> {"fingerprint":{...}}
-//   stdin {"op":"serialize"}                    -> writes the CURRENT state as
-//       a checkpoint to the fixed --out path, replies {"serialized":true}
-//   stdin {"op":"exit"} / EOF on stdin         -> exit 0 if clean, else 4
-//
-// The process holds no state except what it restored from the checkpoint
-// file plus the story bytes it read from the pinned fixture path: no VM is
-// inherited through any closure, singleton, or shared buffer.  --output-limit
-// caps cumulative output (exit 3 when exceeded); --stall-serialize-ms lets
-// the parent kill the child DURING the serialization phase (kill tests).
-//
-// Exit codes: 0 = clean run; 2 = checkpoint rejected / unreadable; 3 = output
-// limit exceeded; 4 = candidate or protocol failure. Protocol errors, adapter
-// errors and request exceptions make failure sticky; subsequent requests may
-// still run, but EOF or explicit exit remains 4. An output limit terminates
-// immediately with 3 even if an earlier request failed. Protocol and caught
-// exception responses carry failed:true and the first failure detail. Output
-// drains before normal exit.
-// --selftest step-error | throw is
-// test scaffolding that deterministically drives the two failure-accounting
-// paths; real pinned stories cannot be driven to a VM error on demand.
-// ==============================================================================
-
+// Experimental fresh-process restore endpoint; private NDJSON is not publication.
+// Exit 0 clean, 2 startup rejection, 3 output limit, 4 protocol/candidate failure.
+// The legacy --stall-serialize-ms stall occurs BEFORE capture/write.
 const fs = require('node:fs');
-const readline = require('node:readline');
 const { captureCheckpoint, restoreCheckpoint } = require('./checkpoint-core.js');
 const { machineFingerprint } = require('./fingerprint.js');
-const { sha256Hex, CheckpointError } = require('./checkpoint-format.js');
-// The pinned revision this runner actually executes -- the envelope's claimed
-// identity is validated AGAINST this, never taken from it (a self-referential
-// check would accept any forged runtime identity).
+const { sha256Hex } = require('./checkpoint-format.js');
+const { LIMITS, fault, readBoundedFile, parseCheckpoint, encodeCheckpoint,
+    decodeUtf8, requestFramer, responseWriter } = require('./transport-limits.js');
 const RUNTIME_REVISION = require('../../vm-io/adapters/ifvms-adapter.js').REVISION;
-
 function parseArgv(argv) {
-    const opts = { story: null, checkpoint: null, out: null, outputLimit: 0, stallSerializeMs: 0, selftest: null };
+    const opts = { outputLimit: LIMITS.outputChars, stallSerializeMs: 0 };
+    const keys = { '--story': 'story', '--checkpoint': 'checkpoint', '--out': 'out',
+        '--output-limit': 'outputLimit', '--stall-serialize-ms': 'stallSerializeMs', '--selftest': 'selftest' };
     for (let i = 2; i < argv.length; i += 2) {
-        const key = argv[i];
-        const val = argv[i + 1];
-        if (key === '--story') opts.story = val;
-        else if (key === '--checkpoint') opts.checkpoint = val;
-        else if (key === '--out') opts.out = val;
-        else if (key === '--output-limit') opts.outputLimit = Number(val);
-        else if (key === '--stall-serialize-ms') opts.stallSerializeMs = Number(val);
-        else if (key === '--selftest') opts.selftest = val; // 'step-error' | 'throw' (test scaffolding only)
-        else {
-            process.stdout.write(JSON.stringify({ ready: false, error: 'unknown argument: ' + key }) + '\n');
-            process.exit(2);
-        }
+        const key = argv[i], val = argv[i + 1];
+        if (!Object.hasOwn(keys, key)) throw fault('E_FORMAT', 'unknown argument: ' + key.slice(0, 120));
+        if (val === undefined || val.startsWith('--')) throw fault('E_FORMAT', 'missing value for ' + key);
+        opts[keys[key]] = val;
     }
+    if (!opts.story || !opts.checkpoint) throw fault('E_FORMAT', '--story and --checkpoint are required');
+    opts.outputLimit = Number(opts.outputLimit); opts.stallSerializeMs = Number(opts.stallSerializeMs);
+    if (!Number.isSafeInteger(opts.outputLimit) || opts.outputLimit <= 0 || opts.outputLimit > LIMITS.outputChars)
+        throw fault('E_FORMAT', 'invalid --output-limit');
+    if (!Number.isSafeInteger(opts.stallSerializeMs) || opts.stallSerializeMs < 0)
+        throw fault('E_FORMAT', 'invalid --stall-serialize-ms');
     return opts;
 }
-
-function emit(obj) {
-    process.stdout.write(JSON.stringify(obj) + '\n');
-}
-
-function slimResult(res) {
-    return {
-        status: res.status,
-        delta: res.delta,
-        output: res.output,
-        gridOutput: res.gridOutput,
-        requestLog: res.requestLog,
-        errors: res.errors,
-        unexpectedGlk: res.unexpectedGlk,
-    };
-}
-
+const short = value => String(value).slice(0, 160);
+const slimResult = res => ({ status: res.status, delta: res.delta, output: res.output,
+    gridOutput: res.gridOutput, requestLog: res.requestLog, errors: res.errors, unexpectedGlk: res.unexpectedGlk });
 async function main() {
-    const opts = parseArgv(process.argv);
-    if (!opts.story || !opts.checkpoint) {
-        emit({ ready: false, error: '--story and --checkpoint are required' });
-        process.exit(2);
-    }
-
-    const story = fs.readFileSync(opts.story);
-    const storySha256 = sha256Hex(story);
-    let envelope;
+    const writer = responseWriter(text => new Promise((resolve, reject) => {
+        process.stdout.write(text, error => error ? reject(error) : resolve());
+    }));
+    let opts, story, storySha256, adapter;
     try {
-        envelope = JSON.parse(fs.readFileSync(opts.checkpoint, 'utf8'));
-    } catch (e) {
-        emit({ ready: false, error: 'unreadable checkpoint file: ' + (e && e.message ? e.message : e), code: 'E_FORMAT' });
-        process.exit(2);
+        opts = parseArgv(process.argv);
+        story = readBoundedFile(opts.story, LIMITS.storyBytes); storySha256 = sha256Hex(story);
+        const envelope = parseCheckpoint(readBoundedFile(opts.checkpoint, LIMITS.checkpointBytes));
+        adapter = restoreCheckpoint(envelope, story, { storySha256, storySize: story.length, runtimeRevision: RUNTIME_REVISION });
+    } catch (error) {
+        await writer.diagnostic({ ready: false, error: short(error.message),
+            code: error.code && error.code.startsWith('E_') ? error.code : 'E_FORMAT' });
+        process.exitCode = 2; return;
     }
-
-    let adapter;
-    try {
-        adapter = restoreCheckpoint(envelope, story, {
-            storySha256,
-            storySize: story.length,
-            runtimeRevision: RUNTIME_REVISION,
-        });
-    } catch (e) {
-        emit({ ready: false, error: String(e && e.message ? e.message : e), code: e.code || null });
-        process.exit(2);
-    }
-
-    let outputCount = 0;
-    // Failure accounting: protocol errors, adapter errors and request
-    // exceptions make the candidate fail permanently. Retain the first
-    // detail, while still reporting each individual request error.
-    let failed = false;
-    let failureDetail = null;
-    const markFailed = (detail) => {
-        if (!failed) {
-            failed = true;
-            failureDetail = detail;
-        }
-    };
-    const protocolError = (error) => {
+    let failed = false, failureDetail = null, outputCount = 0, terminating = false, forcedExit = null;
+    const markFailed = detail => { if (!failed) { failed = true; failureDetail = short(detail); } };
+    const protocolError = async error => {
         markFailed('protocol error: ' + error);
-        emit({ error, failed: true, detail: failureDetail });
+        await writer.emit({ error, failed: true, detail: failureDetail });
     };
-    emit({ ready: true, fingerprint: machineFingerprint(adapter), pid: process.pid });
-
-    const rl = readline.createInterface({ input: process.stdin, terminal: false });
-    let terminating = false;
-    let forcedExit = null;
-    // Closing input stops later queued lines, but leaves stdout time to drain.
-    // A direct process.exit() can truncate buffered protocol evidence on pipes.
-    const stop = (code) => {
-        if (terminating) return;
-        terminating = true;
-        forcedExit = code;
-        rl.close();
-        // readline.close() pauses but may leave an open stdin pipe referenced.
-        // Close that input handle so explicit exit does not wait for parent EOF.
-        process.stdin.destroy();
-    };
-    rl.on('line', (line) => {
-        if (terminating || !line.trim()) return;
+    const stop = code => { terminating = true; forcedExit = code; };
+    async function terminal(error, ready = undefined) {
+        const output = error.code === 'E_OUTPUT_LIMIT';
+        stop(output ? 3 : 4);
+        await writer.diagnostic({ ...(ready === undefined ? {} : { ready }),
+            error: output ? 'output-limit-exceeded' : 'input-limit-exceeded', code: error.code, failed: true });
+    }
+    async function handle(bytes) {
         let msg;
         try {
+            const line = decodeUtf8(bytes);
+            if (!line.trim()) return;
             msg = JSON.parse(line);
-        } catch {
-            protocolError('bad request line');
-            return;
-        }
+        } catch { await protocolError('bad request line'); return; }
         if (!msg || typeof msg !== 'object' || Array.isArray(msg)
-            || (Object.prototype.hasOwnProperty.call(msg, 'op')
-                && !['exit', 'fingerprint', 'serialize'].includes(msg.op))) {
-            protocolError('unrecognized request');
-            return;
+            || (Object.hasOwn(msg, 'op') && !['exit', 'fingerprint', 'serialize'].includes(msg.op))) {
+            await protocolError('unrecognized request'); return;
         }
         try {
-            if (msg.op === 'exit') {
-                stop(failed ? 4 : 0);
-                return;
-            } else if (opts.selftest === 'step-error') {
-                // Test scaffolding: deterministically exercise the
-                // returned-error accounting path (real stories cannot be
-                // driven to a VM error on demand).
+            if (msg.op === 'exit') { stop(failed ? 4 : 0); return; }
+            if (opts.selftest === 'step-error') {
                 if (msg.input) {
                     markFailed('selftest: adapter step reported status error');
-                    emit({ step: { status: 'error', delta: '', output: '', gridOutput: '', requestLog: [], errors: ['selftest: step-error'], unexpectedGlk: [] } });
-                } else {
-                    protocolError('selftest mode only answers input requests');
-                }
+                    await writer.emit({ step: { status: 'error', delta: '', output: '', gridOutput: '', requestLog: [],
+                        errors: ['selftest: step-error'], unexpectedGlk: [] } });
+                } else await protocolError('selftest mode only answers input requests');
             } else if (opts.selftest === 'throw') {
-                // Test scaffolding: deterministically exercise the
-                // thrown-exception accounting path.
-                if (msg.input) {
-                    throw new Error('selftest: thrown exception while handling input');
-                }
-                protocolError('selftest mode only answers input requests');
+                if (msg.input) throw new Error('selftest: thrown exception while handling input');
+                await protocolError('selftest mode only answers input requests');
             } else if (msg.op === 'fingerprint') {
-                emit({ fingerprint: machineFingerprint(adapter) });
+                await writer.emit({ fingerprint: machineFingerprint(adapter) });
             } else if (msg.op === 'serialize') {
-                if (!opts.out) {
-                    protocolError('serialize requested without --out');
-                    return;
-                }
-                if (opts.stallSerializeMs > 0) {
-                    // Test-only busy stall: keeps this process inside the
-                    // serialization phase so the parent can kill it there.
-                    const t0 = Date.now();
-                    while (Date.now() - t0 < opts.stallSerializeMs) { /* spin */ }
-                }
-                const env = captureCheckpoint(adapter, { storySha256, storySize: story.length });
-                fs.writeFileSync(opts.out, JSON.stringify(env));
-                emit({ serialized: true });
+                if (!opts.out) { await protocolError('serialize requested without --out'); return; }
+                const t0 = Date.now();
+                while (Date.now() - t0 < opts.stallSerializeMs) { /* legacy before-capture stall */ }
+                const text = encodeCheckpoint(captureCheckpoint(adapter, { storySha256, storySize: story.length }));
+                fs.writeFileSync(opts.out, text); await writer.emit({ serialized: true });
             } else if (msg.input) {
                 const res = adapter.send(msg.input);
                 outputCount += (res.delta || '').length;
-                if (Array.isArray(res.errors) && res.errors.length > 0 || res.status === 'error') {
+                if ((Array.isArray(res.errors) && res.errors.length) || res.status === 'error')
                     markFailed('adapter step reported status error: ' + JSON.stringify(res.errors || []));
-                }
-                if (opts.outputLimit > 0 && outputCount > opts.outputLimit) {
-                    emit({ step: slimResult(res), error: 'output-limit-exceeded', limit: opts.outputLimit });
-                    stop(3);
-                    return;
-                }
-                emit({ step: slimResult(res) });
-            } else {
-                protocolError('unrecognized request');
-            }
-        } catch (e) {
-            markFailed('exception while handling request: ' + String(e && e.message ? e.message : e));
-            emit({ error: String(e && e.message ? e.message : e), failed: true, detail: failureDetail });
+                if (outputCount > opts.outputLimit) throw fault('E_OUTPUT_LIMIT', 'output-limit-exceeded');
+                await writer.emit({ step: slimResult(res) });
+            } else await protocolError('unrecognized request');
+        } catch (error) {
+            if (error.code === 'E_OUTPUT_LIMIT') throw error;
+            markFailed('exception while handling request: ' + error.message);
+            await writer.emit({ error: short(error.message), code: error.code || null, failed: true, detail: failureDetail });
         }
-    });
-    rl.on('close', () => {
-        terminating = true;
-        process.exitCode = forcedExit === null ? (failed ? 4 : 0) : forcedExit;
-    });
+    }
+    try { await writer.emit({ ready: true, fingerprint: machineFingerprint(adapter), pid: process.pid }); }
+    catch (error) {
+        if (error.code !== 'E_OUTPUT_LIMIT') throw error;
+        await terminal(error, false); process.exitCode = forcedExit; return;
+    }
+    const framer = requestFramer();
+    try {
+        // Awaited writes apply stdout backpressure before consuming more input.
+        requests: for await (const chunk of process.stdin) {
+            for (const bytes of framer.push(chunk)) {
+                await handle(bytes);
+                if (terminating) break requests;
+            }
+        }
+        if (!terminating) await handle(framer.end());
+    } catch (error) {
+        if (error.code === 'E_INPUT_LIMIT' || error.code === 'E_OUTPUT_LIMIT') await terminal(error);
+        else throw error;
+    } finally { process.stdin.destroy(); }
+    process.exitCode = forcedExit === null ? (failed ? 4 : 0) : forcedExit;
 }
-
-main();
+main().catch(() => { process.stdin.destroy(); process.exitCode = 4; });

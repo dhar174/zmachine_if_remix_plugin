@@ -28,6 +28,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { supervise } = require('../test-support/bounded-child.cjs');
 const {
     createInstance, line, drive, capture, writeEnvelope,
     runReference, spawnRestore, awaitExit,
@@ -140,25 +141,14 @@ test('an unbounded candidate is preempted by a parent-enforced deadline and reap
         const child = spawn(process.execPath, [
             path.join(__dirname, 'exec-child.js'), '--story', SPINLOOP,
         ], { stdio: ['pipe', 'pipe', 'pipe'] });
-        let stdout = '';
-        child.stdout.setEncoding('utf8');
-        child.stdout.on('data', (c) => { stdout += c; });
-        const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })));
+        const session = supervise(child);
         try {
-            await new Promise((r) => setTimeout(r, 2000));
-            assert.strictEqual(stdout.includes('"ready":true'), false, 'spinloop never reaches a ready boundary');
-            child.kill();
-            const { code } = await Promise.race([
-                exited,
-                new Promise((_, reject) => setTimeout(() => reject(new Error('spinloop child leaked: did not exit after kill')), 10000)),
-            ]);
-            assert.notStrictEqual(code, 0, 'deadline-killed spinloop exits nonzero');
-        } finally {
-            // Guarantee reaping even if an assertion fired before the kill.
-            try { child.kill(); } catch { /* already gone */ }
-            await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))]);
-        }
-        assertBaselineUnchanged(baseline, 'unbounded-execution kill');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            assert.equal(session.collector.records.some(row => row.ready === true), false);
+            const result = await session.terminate();
+            assert.notEqual(result.code, 0); assert.ok(session.exit && session.closed);
+            assertBaselineUnchanged(baseline, 'deadline stop');
+        } finally { await session.terminate(); assert.ok(session.exit && session.closed); }
     } finally {
         fs.rmSync(STORE, { force: true });
     }

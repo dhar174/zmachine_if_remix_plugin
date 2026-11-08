@@ -21,6 +21,7 @@ const ADAPTER_FILES = [
     'vm-checkpoint/lib/checkpoint-format.js',
     'vm-checkpoint/lib/fingerprint.js',
     'vm-checkpoint/lib/runner.js',
+    'vm-checkpoint/lib/transport-limits.js',
 ];
 
 function sourceFiles(relativeDirectory) {
@@ -70,6 +71,7 @@ function implementationIdentity() {
 function capabilityStatement() {
     return {
         coverage: {
+            experimentalTransport: 'runner: story 4 MiB, checkpoint JSON 32 MiB UTF-8 / 32 Mi UTF-16 units, request line 64 KiB, input 8 MiB, stdout record 8 MiB / total 32 MiB, diagnostic reserve 1 KiB; parents retain stderr up to 64 KiB. Bounds apply after synchronous VM execution/JSON encoding; no allocation quota or sandbox (#49/#30)',
             dynamicMemory: 'serialized (Quetzal UMem)',
             pc: 'serialized (Quetzal IFhd/Stks)',
             callFramesAndStacks: 'serialized (Quetzal Stks, in-use region)',

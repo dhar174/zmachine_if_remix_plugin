@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawnSync } = require('../test-support/bounded-sync.cjs');
 const {
     createInstance, line, drive, capture, writeEnvelope, spawnRestore, awaitExit,
     STORY, STORY_SHA256, REVISION, FIXTURE, machineFingerprint, fingerprintDiff,
@@ -223,7 +223,7 @@ test('changed runtime, adapter, shim or checkpoint source is a different build',
         copyVerified('vm-io/vendor/ifvms/src');
         const runner = path.join(destExperiments, 'vm-checkpoint', 'lib', 'runner.js');
         const unchanged = spawnSync(process.execPath, [runner, '--story', FIXTURE, '--checkpoint', checkpoint], {
-            encoding: 'utf8', timeout: 30000, input: '{"op":"exit"}\n',
+            encoding: 'utf8', timeout: 30000, maxBuffer: 32 * 1024 * 1024, input: '{"op":"exit"}\n',
         });
         assert.equal(unchanged.error, undefined);
         assert.equal(unchanged.status, 0, 'byte-identical build at another path must restore');
@@ -234,6 +234,7 @@ test('changed runtime, adapter, shim or checkpoint source is a different build',
             ['vm-io/glksim.js', 'adapterBuildSha256'],
             ['vm-checkpoint/lib/checkpoint-core.js', 'adapterBuildSha256'],
             ['vm-checkpoint/lib/fingerprint.js', 'adapterBuildSha256'],
+            ['vm-checkpoint/lib/transport-limits.js', 'adapterBuildSha256'],
             ['vm-io/vendor/ifvms/src/zvm/io.js', 'runtimeBuildSha256'],
         ]) {
             const target = path.join(destExperiments, relativePath);
@@ -242,7 +243,7 @@ test('changed runtime, adapter, shim or checkpoint source is a different build',
                 const changed = Buffer.concat([original, Buffer.from('\n// issue43 build identity test\n')]);
                 fs.writeFileSync(target, changed);
                 assert.deepEqual(fs.readFileSync(target), changed);
-                const result = spawnSync(process.execPath, [runner, '--story', FIXTURE, '--checkpoint', checkpoint], { encoding: 'utf8', timeout: 30000 });
+                const result = spawnSync(process.execPath, [runner, '--story', FIXTURE, '--checkpoint', checkpoint], { encoding: 'utf8', timeout: 30000, maxBuffer: 32 * 1024 * 1024 });
                 assert.equal(result.error, undefined, relativePath + ': runner failed to start');
                 assert.equal(result.status, 2, relativePath + ': wrong exit');
                 assert.equal(result.stderr, '');

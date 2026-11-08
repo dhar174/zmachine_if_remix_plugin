@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawnSync } = require('../test-support/bounded-sync.cjs');
 const { createIfvmsAdapter, REVISION } = require('../../vm-io/adapters/ifvms-adapter.js');
 const { captureCheckpoint, restoreCheckpoint } = require('../lib/checkpoint-core.js');
 const { machineFingerprint } = require('../lib/fingerprint.js');
@@ -206,11 +206,13 @@ test('existing-upper growth: missing shim stream API faults before a capturable 
     assert.equal(digest(story), PINS['resize-grow']);
     const file = write(path.join(dir, 'story.z5'), story);
     const result = run(CHILD, [], JSON.stringify({ story: file, inputs: [key('x')] }));
-    // The pinned VM logs this handled fault to stdout, before the scaffold's
-    // final JSON record. Assert that diagnostic explicitly; do not hide it.
-    assert.match(result.stdout, /^TypeError: Glk\.glk_window_get_stream is not a function\r?\n/);
+    // The pinned VM still logs this handled fault. Issue #49's diagnostic
+    // scaffold preserves it as bounded JSON data, rather than protocol noise.
     assert.equal(result.status, 0, 'diagnostic scaffold records the handled VM fault');
     const record = JSON.parse(result.stdout.trim().split('\n').at(-1));
+    assert.equal(record.vmDiagnostics.length, 1);
+    assert.match(record.vmDiagnostics[0], /^TypeError: Glk\.glk_window_get_stream is not a function\n/);
+    assert.match(record.vmDiagnostics[0], /at newClass\.split_window/);
     assert.equal(record.steps[0].status, 'error');
     assert.equal(record.captureError.code, 'E_NOT_AT_BOUNDARY'); assert.equal(record.envelope, null);
     assert.match(record.fingerprint.errors.join('\n'), /glk_window_get_stream/);
