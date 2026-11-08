@@ -1,0 +1,19 @@
+
+[F01:startup=7]
+G1A fixture initialised. Type MARKERS for internal state, MENU for the character-input test.
+
+G1A IO Probe Fixture
+An original purpose-built diagnostic story for the zmachine_if_remix_plugin G1-A probe. Bracketed [Fxx:...] lines are probe evidence, not prose.
+Release 1 / Serial number 261022 / Inform v6.44 Library v6.12.8 S
+
+Probe Chamber
+[LOC:chamber] You are in the Probe Chamber, a bare stone room. A heavy stone panel is set into the east wall. A doorway leads north.
+
+A small brass key lies here.
+
+>[F07:menu-open] Press a single key: a = alpha, b = beta, q = quit menu.
+[F07:menu-key=98]
+[F07:menu-choice=beta]
+[F06:turn=1]
+
+>Are you sure you want to quit? 

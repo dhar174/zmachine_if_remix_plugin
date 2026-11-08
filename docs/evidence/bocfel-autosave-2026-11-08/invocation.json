@@ -1,0 +1,21 @@
+{
+  "argv": [
+    "/mnt/d/projects/zirp-issue51-bocfel-autosave-repro/experiments/bocfel-autosave/reproduce.py",
+    "--archive",
+    "/mnt/d/projects/zmachine_if_remix_plugin/experiments/vm-io/tools/bocfel-2.6.tar.gz",
+    "--out",
+    "/mnt/d/projects/zirp-issue51-qualified-r2",
+    "--require-reference"
+  ],
+  "characterize": false,
+  "source_hashes": {
+    "expectations.json": "4c9914a66613472fbf669d38c51e8505341dbe12900c7bb9acaa3b0d2f03f64f",
+    "fixture.py": "ad943be3f1c5c31fe4d9377e1bfb2a30602f480a94ea29dc358bf5b9d3324c4f",
+    "matrix.py": "6fb97a904eeb0f6ebadbb3706cd6b635cab561b354b503d86b610366f364cd6e",
+    "reference.py": "effa99824ec1315b57a0d364ae4e58d0ea349ec9c78acf607c0bd625c5cbd829",
+    "reproduce.py": "18e6d6237892a41e097d7ccb5b49a2c9ab8347af6b2d0692e88d8caf12a66aaf",
+    "tests/test_boundary.py": "f9d29428e0e837bfd565ba33d5ed7d355fe2bd4c0559c44b05c148bf7cee0136",
+    "tests/test_process.py": "bffa8824424f90bda631e1fbf1370836e8e7052d14f65be4f0ec9f6540508657",
+    "tests/test_reference.py": "748af4d7f037a85105d91d57bf4386b3f1626522b9e23c3a3e7fee95dc94e3b6"
+  }
+}

@@ -1,0 +1,194 @@
+{
+  "candidate_prefix": {
+    "args_hex": "00111e128f",
+    "bytes": 5520,
+    "chunks": {
+      "414e4e4f": {
+        "bytes": 23,
+        "sha256": "b2030dafe0e2a59be49a6c8709dbd4943cc8aeb6282e10a2e127255b4298d861"
+      },
+      "41726773": {
+        "bytes": 5,
+        "sha256": "ba48ea555cfb80efdbf4bd113ef0395dbac72f0affe6a9d33cfb447fd60bc6fb"
+      },
+      "42666873": {
+        "bytes": 2208,
+        "sha256": "001149d0f7617cc191e0ac02bb2d7b343890b3d9f7f9583a9956a80962786380"
+      },
+      "434d656d": {
+        "bytes": 572,
+        "sha256": "15c1d078ff49f6914e61e59126b4d9e955b7293b3bb64c13236de4b781782d15"
+      },
+      "49466864": {
+        "bytes": 13,
+        "sha256": "7f66a7d24eb94b652530f9fef37caf4e95584bc779f52a765e7db33b70640a6d"
+      },
+      "496e7444": {
+        "bytes": 72,
+        "sha256": "2923cf995c70cf0dde34e7419f4a07167310ecd82bf3e9d7930aaeb8e7288d49"
+      },
+      "4d536176": {
+        "bytes": 8,
+        "sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+      },
+      "5363726e": {
+        "bytes": 27,
+        "sha256": "67b13b49adb1f50d8beb2bedd02c2fcff0afa7dcb748b32ce2ab6687a7987e69"
+      },
+      "53746b73": {
+        "bytes": 188,
+        "sha256": "a17215022204ac3c12729e6637c285a5796eb95ed1fe62004ffecad59dc3c672"
+      },
+      "556e646f": {
+        "bytes": 2307,
+        "sha256": "40e0eb9a9dce17f59c779a27d2fd215d22489698fafe9e0cc30b6e4f84b373b2"
+      }
+    },
+    "memory_sha256": "ba01d24facb8ca508934b608a5d15c546bac0c9ab9af3493ffe59cb85972ff30",
+    "operands": [
+      4382,
+      4751
+    ],
+    "pc": 25821,
+    "rand_hex": null,
+    "save_opcode": 0,
+    "sha256": "ab82cf9718bc1ab97ea684feef0295442c443e527a24ece9f6a3897477c74eef"
+  },
+  "case": "random-mode",
+  "control_prefix": {
+    "args_hex": "00111e128f",
+    "bytes": 5520,
+    "chunks": {
+      "414e4e4f": {
+        "bytes": 23,
+        "sha256": "b2030dafe0e2a59be49a6c8709dbd4943cc8aeb6282e10a2e127255b4298d861"
+      },
+      "41726773": {
+        "bytes": 5,
+        "sha256": "ba48ea555cfb80efdbf4bd113ef0395dbac72f0affe6a9d33cfb447fd60bc6fb"
+      },
+      "42666873": {
+        "bytes": 2208,
+        "sha256": "001149d0f7617cc191e0ac02bb2d7b343890b3d9f7f9583a9956a80962786380"
+      },
+      "434d656d": {
+        "bytes": 572,
+        "sha256": "15c1d078ff49f6914e61e59126b4d9e955b7293b3bb64c13236de4b781782d15"
+      },
+      "49466864": {
+        "bytes": 13,
+        "sha256": "7f66a7d24eb94b652530f9fef37caf4e95584bc779f52a765e7db33b70640a6d"
+      },
+      "496e7444": {
+        "bytes": 72,
+        "sha256": "2923cf995c70cf0dde34e7419f4a07167310ecd82bf3e9d7930aaeb8e7288d49"
+      },
+      "4d536176": {
+        "bytes": 8,
+        "sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+      },
+      "5363726e": {
+        "bytes": 27,
+        "sha256": "67b13b49adb1f50d8beb2bedd02c2fcff0afa7dcb748b32ce2ab6687a7987e69"
+      },
+      "53746b73": {
+        "bytes": 188,
+        "sha256": "a17215022204ac3c12729e6637c285a5796eb95ed1fe62004ffecad59dc3c672"
+      },
+      "556e646f": {
+        "bytes": 2307,
+        "sha256": "40e0eb9a9dce17f59c779a27d2fd215d22489698fafe9e0cc30b6e4f84b373b2"
+      }
+    },
+    "memory_sha256": "ba01d24facb8ca508934b608a5d15c546bac0c9ab9af3493ffe59cb85972ff30",
+    "operands": [
+      4382,
+      4751
+    ],
+    "pc": 25821,
+    "rand_hex": null,
+    "save_opcode": 0,
+    "sha256": "ab82cf9718bc1ab97ea684feef0295442c443e527a24ece9f6a3897477c74eef"
+  },
+  "entropy_byteorder": "little",
+  "entropy_sha256": "c89db7222126863309183fc023c7091fb18392d16a397dac76a96a022cd62cef",
+  "fixture_sha256": "96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b",
+  "observed": {
+    "candidate_returncode": -9,
+    "control_markers": [
+      "[F08:roll=6]",
+      "[F06:turn=4]",
+      "[F08:roll=1]",
+      "[F06:turn=5]"
+    ],
+    "control_suffix_hex": "5b4630383a726f6c6c3d365d0a5b4630363a7475726e3d345d0a0a3e5b4630383a726f6c6c3d315d0a5b4630363a7475726e3d355d0a0a3e",
+    "native_restore_error": null,
+    "prefix_args_hex": "00111e128f",
+    "prefix_rand_hex": null,
+    "restored_markers": [
+      "[F08:roll=1]",
+      "[F06:turn=4]",
+      "[F08:roll=2]",
+      "[F06:turn=5]"
+    ],
+    "restored_returncode": 0,
+    "restored_suffix_hex": "5b4630383a726f6c6c3d315d0a5b4630363a7475726e3d345d0a0a3e5b4630383a726f6c6c3d325d0a5b4630363a7475726e3d355d0a0a3e",
+    "suffix_equal": false
+  },
+  "repeat": 1,
+  "restored_boundary": {
+    "args_hex": "00111e128f",
+    "bytes": 5520,
+    "chunks": {
+      "414e4e4f": {
+        "bytes": 23,
+        "sha256": "b2030dafe0e2a59be49a6c8709dbd4943cc8aeb6282e10a2e127255b4298d861"
+      },
+      "41726773": {
+        "bytes": 5,
+        "sha256": "ba48ea555cfb80efdbf4bd113ef0395dbac72f0affe6a9d33cfb447fd60bc6fb"
+      },
+      "42666873": {
+        "bytes": 2208,
+        "sha256": "001149d0f7617cc191e0ac02bb2d7b343890b3d9f7f9583a9956a80962786380"
+      },
+      "434d656d": {
+        "bytes": 572,
+        "sha256": "15c1d078ff49f6914e61e59126b4d9e955b7293b3bb64c13236de4b781782d15"
+      },
+      "49466864": {
+        "bytes": 13,
+        "sha256": "7f66a7d24eb94b652530f9fef37caf4e95584bc779f52a765e7db33b70640a6d"
+      },
+      "496e7444": {
+        "bytes": 72,
+        "sha256": "2923cf995c70cf0dde34e7419f4a07167310ecd82bf3e9d7930aaeb8e7288d49"
+      },
+      "4d536176": {
+        "bytes": 8,
+        "sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc"
+      },
+      "5363726e": {
+        "bytes": 27,
+        "sha256": "67b13b49adb1f50d8beb2bedd02c2fcff0afa7dcb748b32ce2ab6687a7987e69"
+      },
+      "53746b73": {
+        "bytes": 188,
+        "sha256": "a17215022204ac3c12729e6637c285a5796eb95ed1fe62004ffecad59dc3c672"
+      },
+      "556e646f": {
+        "bytes": 2307,
+        "sha256": "40e0eb9a9dce17f59c779a27d2fd215d22489698fafe9e0cc30b6e4f84b373b2"
+      }
+    },
+    "memory_sha256": "ba01d24facb8ca508934b608a5d15c546bac0c9ab9af3493ffe59cb85972ff30",
+    "operands": [
+      4382,
+      4751
+    ],
+    "pc": 25821,
+    "rand_hex": null,
+    "save_opcode": 0,
+    "sha256": "ab82cf9718bc1ab97ea684feef0295442c443e527a24ece9f6a3897477c74eef"
+  }
+}

@@ -1,0 +1,51 @@
+
+[F01:startup=7]
+G1A fixture initialised. Type MARKERS for internal state, MENU for the character-input test.
+
+G1A IO Probe Fixture
+An original purpose-built diagnostic story for the zmachine_if_remix_plugin G1-A probe. Bracketed [Fxx:...] lines are probe evidence, not prose.
+Release 1 / Serial number 261022 / Inform v6.44 Library v6.12.8 S
+
+Probe Chamber
+[LOC:chamber] You are in the Probe Chamber, a bare stone room. A heavy stone panel is set into the east wall. A doorway leads north.
+
+A small brass key lies here.
+
+>look
+
+Probe Chamber
+[LOC:chamber] You are in the Probe Chamber, a bare stone room. A heavy stone panel is set into the east wall. A doorway leads north.
+
+A small brass key lies here.
+[F06:turn=1]
+
+>north
+
+Token Gallery
+[LOC:gallery] You are in the Token Gallery. Small tokens lie scattered here. A doorway leads south, and a reinforced vault door is set into the north wall.
+
+One brass token lies here.
+
+One brass token lies here.
+
+You can also see a vault door here.
+[F06:turn=2]
+
+>seed 42
+[F08:seed=42]
+[F06:turn=3]
+[F06:event=chime] A distant chime sounds.
+
+>roll
+[F08:roll=1]
+[F06:turn=4]
+
+>
+[Continuing last session from autosave]
+[F08:roll=5]
+[F06:turn=5]
+
+>[F08:roll=4]
+[F06:turn=6]
+
+>Are you sure you want to quit? 

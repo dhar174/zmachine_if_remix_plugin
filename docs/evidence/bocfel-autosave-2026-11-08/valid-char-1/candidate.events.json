@@ -1,0 +1,98 @@
+{
+  "argv": [
+    "/tmp/zirp-bocfel-reference-bpb1wwa2/bocfel-2.6/bocfel",
+    "-C",
+    "-m",
+    "/tmp/zirp-bocfel-reference-bpb1wwa2/valid-char-1/fixture.z5"
+  ],
+  "counts": {
+    "stderr": 0,
+    "stdout": 17
+  },
+  "cwd": "/tmp/zirp-bocfel-reference-bpb1wwa2/valid-char-1/candidate",
+  "environment": {
+    "BOCFEL_AUTOSAVE": "1",
+    "BOCFEL_AUTOSAVE_DIRECTORY": "/tmp/zirp-bocfel-reference-bpb1wwa2/valid-char-1/candidate/autosaves",
+    "BOCFEL_AUTOSAVE_LIBRARYSTATE": "0",
+    "BOCFEL_PERSISTENT_TRANSCRIPT": "0",
+    "BOCFEL_SKIP_AUTORESTORE": "0",
+    "HOME": "/tmp/zirp-bocfel-reference-bpb1wwa2/valid-char-1/candidate/home",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/bin:/usr/bin",
+    "TERM": "dumb",
+    "TZ": "UTC",
+    "XDG_CONFIG_HOME": "/tmp/zirp-bocfel-reference-bpb1wwa2/valid-char-1/candidate/home/config",
+    "XDG_DATA_HOME": "/tmp/zirp-bocfel-reference-bpb1wwa2/valid-char-1/candidate/home/data"
+  },
+  "events": [
+    {
+      "argv": [
+        "/tmp/zirp-bocfel-reference-bpb1wwa2/bocfel-2.6/bocfel",
+        "-C",
+        "-m",
+        "/tmp/zirp-bocfel-reference-bpb1wwa2/valid-char-1/fixture.z5"
+      ],
+      "event": "spawn",
+      "pid": 126,
+      "seconds": 0.00042810000000059745,
+      "stderr_offset": 0,
+      "stdout_offset": 0
+    },
+    {
+      "event": "boundary",
+      "opcode": 1,
+      "save_sha256": "1934346c629ee7ad7869684db39f6f61d3fa200353e1a08ab2841b20e44d7e03",
+      "seconds": 0.002388199999998619,
+      "stderr_offset": 0,
+      "stdout_offset": 17
+    },
+    {
+      "event": "kill-request",
+      "seconds": 0.017092799000003822,
+      "signal": "SIGKILL",
+      "stderr_offset": 0,
+      "stdout_offset": 17
+    },
+    {
+      "event": "pipe-eof",
+      "pipe": "stderr",
+      "seconds": 0.017470398999996917,
+      "stderr_offset": 0,
+      "stdout_offset": 17
+    },
+    {
+      "event": "pipe-eof",
+      "pipe": "stdout",
+      "seconds": 0.017476199000000747,
+      "stderr_offset": 0,
+      "stdout_offset": 17
+    },
+    {
+      "event": "exit",
+      "returncode": -9,
+      "seconds": 0.017512299000003395,
+      "stderr_offset": 0,
+      "stdout_offset": 17
+    },
+    {
+      "event": "reaped",
+      "pipes": [
+        "stderr",
+        "stdout"
+      ],
+      "returncode": -9,
+      "seconds": 0.0175224990000018,
+      "stderr_offset": 0,
+      "stdout_offset": 17
+    }
+  ],
+  "exit_observed": true,
+  "killed_by_harness": true,
+  "pid": 126,
+  "pipes_closed": [
+    "stderr",
+    "stdout"
+  ],
+  "returncode": -9
+}

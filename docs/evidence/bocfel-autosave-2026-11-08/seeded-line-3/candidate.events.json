@@ -1,0 +1,158 @@
+{
+  "argv": [
+    "/tmp/zirp-bocfel-reference-bpb1wwa2/bocfel-2.6/bocfel",
+    "-C",
+    "-m",
+    "/tmp/zirp-bocfel-reference-bpb1wwa2/seeded-line-3/fixture.z5"
+  ],
+  "counts": {
+    "stderr": 0,
+    "stdout": 1094
+  },
+  "cwd": "/tmp/zirp-bocfel-reference-bpb1wwa2/seeded-line-3/candidate",
+  "environment": {
+    "BOCFEL_AUTOSAVE": "1",
+    "BOCFEL_AUTOSAVE_DIRECTORY": "/tmp/zirp-bocfel-reference-bpb1wwa2/seeded-line-3/candidate/autosaves",
+    "BOCFEL_AUTOSAVE_LIBRARYSTATE": "0",
+    "BOCFEL_PERSISTENT_TRANSCRIPT": "0",
+    "BOCFEL_SKIP_AUTORESTORE": "0",
+    "HOME": "/tmp/zirp-bocfel-reference-bpb1wwa2/seeded-line-3/candidate/home",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/bin:/usr/bin",
+    "TERM": "dumb",
+    "TZ": "UTC",
+    "XDG_CONFIG_HOME": "/tmp/zirp-bocfel-reference-bpb1wwa2/seeded-line-3/candidate/home/config",
+    "XDG_DATA_HOME": "/tmp/zirp-bocfel-reference-bpb1wwa2/seeded-line-3/candidate/home/data"
+  },
+  "events": [
+    {
+      "argv": [
+        "/tmp/zirp-bocfel-reference-bpb1wwa2/bocfel-2.6/bocfel",
+        "-C",
+        "-m",
+        "/tmp/zirp-bocfel-reference-bpb1wwa2/seeded-line-3/fixture.z5"
+      ],
+      "event": "spawn",
+      "pid": 114,
+      "seconds": 0.0005617999999998347,
+      "stderr_offset": 0,
+      "stdout_offset": 0
+    },
+    {
+      "event": "boundary",
+      "opcode": 0,
+      "save_sha256": "b4ffca4b8f8288166c708b127d545881d65b45b475bd8c0606781983475d43b2",
+      "seconds": 0.003379199999997695,
+      "stderr_offset": 0,
+      "stdout_offset": 523
+    },
+    {
+      "event": "input",
+      "hex": "6c6f6f6b0a",
+      "seconds": 0.00339360000000255,
+      "stderr_offset": 0,
+      "stdout_offset": 523
+    },
+    {
+      "event": "boundary",
+      "opcode": 0,
+      "save_sha256": "c845ff7d1f8b0f9e50af29a86bc0b06cd2b2dc5b336c76c6305713414b67008e",
+      "seconds": 0.004819500000003529,
+      "stderr_offset": 0,
+      "stdout_offset": 716
+    },
+    {
+      "event": "input",
+      "hex": "6e6f7274680a",
+      "seconds": 0.004842299999999966,
+      "stderr_offset": 0,
+      "stdout_offset": 716
+    },
+    {
+      "event": "boundary",
+      "opcode": 0,
+      "save_sha256": "ba0688db1c7340e736205312811cd3c0cc3d6b8d95f70d21c16d5566bfa8f147",
+      "seconds": 0.03748349800000028,
+      "stderr_offset": 0,
+      "stdout_offset": 995
+    },
+    {
+      "event": "input",
+      "hex": "736565642034320a",
+      "seconds": 0.03750769799999887,
+      "stderr_offset": 0,
+      "stdout_offset": 995
+    },
+    {
+      "event": "boundary",
+      "opcode": 0,
+      "save_sha256": "50e08bfb229713a8fe4ac06472b669413b72d8b156eff62a388e8d091f53f708",
+      "seconds": 0.03866589799999787,
+      "stderr_offset": 0,
+      "stdout_offset": 1066
+    },
+    {
+      "event": "input",
+      "hex": "726f6c6c0a",
+      "seconds": 0.03868269800000235,
+      "stderr_offset": 0,
+      "stdout_offset": 1066
+    },
+    {
+      "event": "boundary",
+      "opcode": 0,
+      "save_sha256": "28e39cd90862d994cbcc1225fca3c8d918f4c94a3e9c06da51bf8f461c7bf144",
+      "seconds": 0.03973809800000083,
+      "stderr_offset": 0,
+      "stdout_offset": 1094
+    },
+    {
+      "event": "kill-request",
+      "seconds": 0.05536539700000276,
+      "signal": "SIGKILL",
+      "stderr_offset": 0,
+      "stdout_offset": 1094
+    },
+    {
+      "event": "pipe-eof",
+      "pipe": "stderr",
+      "seconds": 0.05570639700000157,
+      "stderr_offset": 0,
+      "stdout_offset": 1094
+    },
+    {
+      "event": "pipe-eof",
+      "pipe": "stdout",
+      "seconds": 0.0557118970000019,
+      "stderr_offset": 0,
+      "stdout_offset": 1094
+    },
+    {
+      "event": "exit",
+      "returncode": -9,
+      "seconds": 0.055729896999999085,
+      "stderr_offset": 0,
+      "stdout_offset": 1094
+    },
+    {
+      "event": "reaped",
+      "pipes": [
+        "stderr",
+        "stdout"
+      ],
+      "returncode": -9,
+      "seconds": 0.05573669700000039,
+      "stderr_offset": 0,
+      "stdout_offset": 1094
+    }
+  ],
+  "exit_observed": true,
+  "killed_by_harness": true,
+  "pid": 114,
+  "pipes_closed": [
+    "stderr",
+    "stdout"
+  ],
+  "returncode": -9
+}
