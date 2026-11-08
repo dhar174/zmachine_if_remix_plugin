@@ -112,7 +112,12 @@ test('ordinary runner refuses restart serialization: failure exit and no new che
 test('mid-turn host entropy survives reseeding: turn replay differs, each final snapshot recovers', t => {
     const dir = scratch(t), story = rngStory();
     assert.equal(story[0], 5);
-    assert.equal(sha256Hex(story), 'a9a43f42442e897ceb4d35fd56ac33e15b50f71cccd4d295ac4fe09abdd9b39d');
+    assert.equal(story.readUInt16BE(8), 0x500, 'dictionary in static memory, after code');
+    assert.equal(story[0x501], 6, 'v5 entry length meets section 13.2 minimum');
+    assert.equal(story.readUInt16BE(24), 0x600);
+    for (let i = 0; i < 96; i++) assert.equal(story.readUInt16BE(0x600 + 2 * i), 0x360);
+    assert.equal(story.readUInt16BE(0x6c0), 0x94a5, 'abbreviations point to an empty packed string');
+    assert.equal(sha256Hex(story), 'b137a5ad9174dc6616a95a36909abe90fcfd32f998ea9297e172e7c08672d514');
     const storyFile = write(path.join(dir, 'entropy.z5'), story);
     const initial = child({ story: storyFile, entropy: LOW });
     assert.equal(initial.hostDraws, 0);
