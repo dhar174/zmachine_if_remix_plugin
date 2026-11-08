@@ -322,7 +322,7 @@ The pre-existing failure was a genuine G1-A harness defect, found because this m
 
 | Row | Requirement (verbatim intent) | Status here |
 | --- | --- | --- |
-| A15 | Speculative native attempt rejected before commit; candidate discarded completely including RNG, output, pending input | **Demonstrated** (candidate layer): discard + kills + byte-identical baseline recapture + control-equal continuation (`isolation.test.js`) |
+| A15 | Speculative native attempt rejected before commit; candidate discarded completely including RNG, output, pending input | **Demonstrated** (candidate layer): discard + kills + byte-identical baseline recapture + control-equal continuation (`isolation.test.js` discard controls; `interruption-phases.test.js` acknowledged kills and parent publication controls) |
 | A16 | VM waiting for a character/menu response; correct input path; no line injected into read_char | **Demonstrated**: char-boundary capture/restore + kind-correct re-issued request; wrong-boundary delivery semantics remain G1-A adapter behavior (mismatch logged, first-char parity) |
 | A28 | Crash before checkpoint/head publication → no live change; orphan candidate recoverable/collectable | **Candidate-process/test-harness evidence only**: acknowledged interruption barriers and parent cancellation leave the baseline/store unchanged; the test writer's partial-file evidence does not establish ordinary-runner write interruption. Durable-store orphan collection/receipt recovery is #18/#21; production requirements documented in §6 |
 | A29 | Crash after durable commit before response → retry returns saved receipt without replay | **Not in scope** — no durable store exists in this probe. Production requirement recorded in §6 (envelope durable before head publication; idempotent retry returns the receipt) |
@@ -637,11 +637,14 @@ full-suite Node command in their directories. Root
 `node --test --test-reporter=tap tests/ci/checkout-normalization.test.js`: **1 pass**.
 All final commands exited 0, stderr empty. Expected wrong-release child stderr
 is captured and asserted inside its test, not treated as a clean child.
-Raw logs: `D:/projects/zirp-issue48-focused-r2.{out,err}` and
-`D:/projects/zirp-issue48-{checkpoint,vmio,fixture,checkout}-r1.{out,err}`;
+Raw logs: `D:/projects/zirp-issue48-focused-r3.{out,err}`,
+`D:/projects/zirp-issue48-checkpoint-r2.{out,err}` and
+`D:/projects/zirp-issue48-{vmio,fixture,checkout}-r1.{out,err}`;
 these local-only paths are not portable public receipts. TAP diagnostics retain
 phase sequences, artifact sizes/digests, exit/close, private-record counts,
-baseline continuation and publication-call outcomes. No historical receipt is
+baseline continuation and publication-call outcomes. The final focused/full
+checkpoint reruns also retain explicit working directories and exits in their
+matching `.json` command receipts. No historical receipt is
 rewritten as fresh evidence; hosted CI and independent verdict belong in the PR.
 
 | #48 acceptance / deliverable | Test or explicit limit |

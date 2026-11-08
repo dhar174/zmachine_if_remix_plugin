@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { createInstance, line, drive, capture, FIXTURE, RUNNER, STORY,
+const { createInstance, line, capture, FIXTURE, RUNNER, STORY,
     STORY_SHA256, REVISION, machineFingerprint, fingerprintDiff } = require('./helpers.js');
 const { validateEnvelope, sha256Hex } = require('../lib/checkpoint-format.js');
 const { PHASES, spawnCandidate } = require('../test-support/interruption-support.cjs');
