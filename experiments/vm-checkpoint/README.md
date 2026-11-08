@@ -37,7 +37,8 @@ primitive, plus the RNG seed/mode, the plain-data `io` object, the pending
 `read_data`, window text/cursor state, published transcript, request log),
 a checksum over all envelope fields other than `integrity`, and a capability
 statement that must exactly match the active implementation. Executable code
-is never serialized (the JIT cache is rebuilt lazily).
+is never serialized. Startup-derived caches can survive native restore; later
+code/text entries are lazy. See the Issue #47 qualification below.
 
 **Identity, integrity and compatibility (Issue #43):** Capture binds the
 original story bytes recorded when this adapter was created. Restore derives
@@ -86,7 +87,7 @@ otherwise stale metadata is `E_DIGEST`, rehashed nonzero `maxlen` is
 explicit supplement sections above, at a boundary where a request is pending
 (or halted).
 
-**Restore** (always into a fresh interpreter): full envelope validation
+**Restore** (always into a fresh interpreter): full envelope data validation
 *before* any ZVM exists (format/version/identity/boundary/structure/size,
 **deep validation of the nested `io`/windows/`readData` state restore
 consumes — the `io` stream slots are validated down to their contents per
@@ -117,9 +118,39 @@ way and must not stand in for the source values); `io`, RNG seed (re-applied
 *after* restore because `update_header()` zeroes it), pending request (re-
 issued against the restored `read_data` buffer), and the published
 transcript are then applied, and the output-delta watermark is synced so no
-prefix text is ever republished. **Capture runs the same validation on its
+prefix text is ever republished. **Capture runs the same data validation on its
 own output**, so a state the envelope cannot carry is refused at the source
 with the same codes restore uses.
+
+**Cache/window qualification (Issue #47):** Envelope equality is not a cache
+oracle. Fresh startup populates JIT/text/dictionary and alphabet/Unicode state;
+`restore_file()` replaces memory without clearing JIT or rerunning `init_text`.
+The new controls prove immutable cold/warm code/text recovery and a dynamic
+abbreviation target lookup. A warmed mutable custom dictionary and diagnostic
+self-modifying dynamic code produce different continuations despite identical
+immediate envelopes. Mutable alphabet/Unicode tables remain stale in both
+reference and restored runs: agreement is not proof of correct table semantics.
+These dependency histories are explicitly unsupported, not generally detected.
+They must not be used as qualified arbitrary-story/publication evidence (#20/#21).
+
+`E_WINDOW_TOPOLOGY` rejects invalid saved selectors/rocks and invalid live
+role/type/parent relationships. Saved/fresh window presence is compared after
+startup and again after native restore, before restored input or `ready:true`.
+These latter checks construct a fresh isolated interpreter; they are not
+pre-VM validation and capture alone does not prove startup compatibility.
+Late-opened and removed upper windows fail the ordinary runner with exit 2
+and no readiness/serialization. Malformed field shapes remain `E_STRUCTURE`.
+No windows are recreated and no caches are repaired. The v2 wire layout stays
+unchanged; changed adapter source identity requires fresh captures (`E_RUNTIME`
+for a checkpoint made with the prior build), with no migration.
+
+The selected-upper character-input micro-story is refused at capture by the
+existing grid/transcript consistency gate (`E_STRUCTURE`). Growing its existing
+upper window faults on the shim's missing `glk_window_get_stream`; its handled
+VM diagnostic is explicitly asserted in captured child stdout, not hidden.
+Shrinking/closing/reopening windows passes headless continuation tests, but the
+shim's fixed 80x24 size and no-op arrangement method do not qualify real geometry.
+See the [inventory and acceptance mapping](../../docs/evidence/g1-vm-recovery.md#issue-47-cache-and-window-qualification).
 
 **RNG policy:** checkpointable boundaries require the game to be in **seeded
 (predictable) mode**. Unseeded capture is refused at the source (`E_RNG`)
@@ -214,6 +245,10 @@ a VM error on demand).
 
 ## Tests
 
+- `tests/cache-window.test.js` — original digest-pinned Z5 stories characterize
+  cold/warm caches, mutable dependencies, headless topology, actual unsupported
+  paths, capture/restore guards and ordinary-runner readiness refusal. A native
+  topology-change mock is labeled guard scaffolding, separate from story trials.
 - `tests/rng-transitions.test.js` — restart/unseeded refusal, an ordinary-runner
   rejected serialization, controlled mid-turn entropy/reseed counterexample,
   exact recovery of each resulting snapshot, and parent-only publication

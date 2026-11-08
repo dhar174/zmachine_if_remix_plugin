@@ -70,7 +70,7 @@ otherwise stale metadata rejects `E_DIGEST`, rehashed nonzero `maxlen` rejects
 
 Restore (`lib/checkpoint-core.js`) always targets a fresh interpreter and follows upstream's own `do_autorestore` recipe plus additions the upstream never performs:
 
-1. **Validate everything before any interpreter exists**: format, schema version, story digest/size, runtime revision, boundary kind (+ maxlen range), per-section structure, size caps, envelope digest — plus **deep validation of the nested state restore consumes** (the full `io` scalar/stream-table shape **down to the individual stream slots' contents** — keyboard-only input stream, an empty memory-output-stream stack, and non-file-backed transcript/command-recording state, per the vendored runtime's slot semantics; required main window and well-formed window entries, `readData.storer`/`routine`/`time` per boundary kind, and — after the digest verifies — cross-section consistency of the published transcript against the window text), **read-continuation address/span validation against the checkpointed memory image (Issue #41)** — the pending read's text-buffer and parse-table continuation writes must fit writable dynamic memory `[0x40, static base)` derived from the checkpointed UMem header, the buffer length must match the checkpointed capacity byte at `bufaddr`, `parseaddr = 0` stays the legal no-tokenise sentinel, and when the caller supplies the trusted story bytes the image's version/static base are cross-checked against the story header; out-of-range starts, near-end overflowing spans, and truncated tables are rejected `E_BOUNDARY`, capacity/header inconsistencies `E_STRUCTURE` (observed defect: an honest-digest envelope with `bufaddr`/`parseaddr = 0xFFFFFF` restored `ready:true` and only faulted on the first input with `RangeError` and exit 4) — and rejection of unseeded RNG payloads (`E_RNG`). Rejections throw `CheckpointError` with stable codes (`E_FORMAT`, `E_VERSION`, `E_STORY`, `E_RUNTIME`, `E_DIGEST`, `E_STRUCTURE`, `E_BOUNDARY`, `E_SIZE`, `E_RNG`, `E_TIMED_INPUT`, `E_CAPABILITY`). A second, VM-level identity gate sits behind the envelope: `vm.restore_file` verifies the Quetzal `IFhd` release/serial/checksum against the loaded story and returns 0 → `E_STORY_QUETZAL` (tested with an envelope whose payload is fixture-consistent but whose `IFhd` chunk claims a different release). **Capture runs the same validation on its own output before returning**, so an I/O state schema v2 cannot carry — pending `output_stream 3` memory-stream writes, file-backed transcript/command streams (open Glk references), redirected input — is refused at the source with the same codes instead of publishing an envelope restore would reject (the fixture never produces these states; a story that does simply cannot be checkpointed at such a boundary in v2). The restoring child uses exit 2 for argument/checkpoint rejection, 3 for an output limit, and 4 for protocol or candidate failure; Issue #44's ordering and stdout limits are described below.
+1. **Validate the envelope data contract before any interpreter exists**: format, schema version, story digest/size, runtime revision, boundary kind (+ maxlen range), per-section structure, size caps, envelope digest — plus **deep validation of the nested state restore consumes** (the full `io` scalar/stream-table shape **down to the individual stream slots' contents** — keyboard-only input stream, an empty memory-output-stream stack, and non-file-backed transcript/command-recording state, per the vendored runtime's slot semantics; required main window and well-formed window entries, `readData.storer`/`routine`/`time` per boundary kind, and — after the digest verifies — cross-section consistency of the published transcript against the window text), **read-continuation address/span validation against the checkpointed memory image (Issue #41)** — the pending read's text-buffer and parse-table continuation writes must fit writable dynamic memory `[0x40, static base)` derived from the checkpointed UMem header, the buffer length must match the checkpointed capacity byte at `bufaddr`, `parseaddr = 0` stays the legal no-tokenise sentinel, and when the caller supplies the trusted story bytes the image's version/static base are cross-checked against the story header; out-of-range starts, near-end overflowing spans, and truncated tables are rejected `E_BOUNDARY`, capacity/header inconsistencies `E_STRUCTURE` (observed defect: an honest-digest envelope with `bufaddr`/`parseaddr = 0xFFFFFF` restored `ready:true` and only faulted on the first input with `RangeError` and exit 4) — and rejection of unseeded RNG payloads (`E_RNG`). Rejections throw `CheckpointError` with stable codes (`E_FORMAT`, `E_VERSION`, `E_STORY`, `E_RUNTIME`, `E_DIGEST`, `E_STRUCTURE`, `E_BOUNDARY`, `E_SIZE`, `E_RNG`, `E_TIMED_INPUT`, `E_CAPABILITY`, `E_WINDOW_TOPOLOGY`). A second, VM-level identity gate sits behind the envelope: `vm.restore_file` verifies the Quetzal `IFhd` release/serial/checksum against the loaded story and returns 0 → `E_STORY_QUETZAL` (tested with an envelope whose payload is fixture-consistent but whose `IFhd` chunk claims a different release). **Capture runs the same validation on its own output before returning**, so an I/O state schema v2 cannot carry — pending `output_stream 3` memory-stream writes, file-backed transcript/command streams (open Glk references), redirected input — is refused at the source with the same codes instead of publishing an envelope restore would reject (the fixture never produces these states; a story that does simply cannot be checkpointed at such a boundary in v2). The restoring child uses exit 2 for argument/checkpoint rejection, 3 for an output limit, and 4 for protocol or candidate failure; Issue #44's ordering and stdout limits are described below.
 2. Fresh adapter runs its normal startup (windows, `origram`, pristine stack exist), then `restore_file` rebuilds memory/stacks/frames/pc.
 3. The interpreter-owned **header block `[0x00..0x40)` is restored verbatim**: `update_header()` (called inside `restore_file`) recomputes screen-size fields as a sum of window heights, so a restored instance recomputes different bytes than the source last published (observed: `0x20`/`0x24` = 24 at capture vs 48 after restore, because the source computed them before the game opened the upper window). Interpreter-owned header state is checkpointed, not recomputed.
 4. RNG seed re-applied **after** `restore_file` (its `update_header()` zeroes `xorshift_seed`; upstream `do_autorestore` does the same). Only seeded mode is accepted: seed 0 (unseeded, `Math.random` per draw — the only host-entropy point in the vendored tree) is rejected at capture and at validation with `E_RNG`, because host entropy can be neither captured nor reconstructed across processes (bridge §8; Issue #12 requires unsupported modes to fail explicitly rather than silently switch semantics).
@@ -148,18 +148,18 @@ Owning objects are the vendored ZVM (`vm.*`), the headless Glk shim (`state.*`, 
 | Unanswered vs consumed event | `state.pendingEvent` / answered event fields | Implied by boundary kind + request log tail | Re-issue regenerates unanswered state; answered history via request log | **Serialized** | no-duplicate-delivery case (menu answer exactly once) | — |
 | Parser-disambiguation state | Story-owned parse buffers in dynamic memory + pending read | `UMem` + `read_data` | Same as above | **Serialized** | disambiguation case (`examine token` → restore → `blue`) | — |
 | RNG mode, state, reseeding | `vm.xorshift_seed` | Envelope `rng {seed, mode}` — **seeded mode only; unseeded capture refused and unseeded envelopes rejected (`E_RNG`)** | Re-applied after `restore_file` | **Serialized (seeded path)** | seeded draws + seed equality across restore; reseed case; unseeded capture/validation rejection tests | Unseeded (`Math.random` per draw, runtime.js:532 — the tree's only host-entropy point) cannot be reconstructed across processes → **rejected, per bridge §8 and Issue #12's fail-explicitly rule**; `random(0)` = seed 0 = unseeded (source-verified); deliberate standard deviation: upstream does not implement sequential predictability mode |
-| Window/cursor/style, output streams, pending text, status/upper window | shim window objects (`vm.mainwin`/`upperwin`/`statuswin`), `vm.io`, `state.output`/`gridOutput` | Window text/cursor + `io` clone + transcript strings | Text/cursor written to the (fresh, rock-matched) window objects; `io` assigned; transcript overwritten; watermark synced | **Serialized**; shim `currentWindow` **reconstructed** from `io.currentwin` (VM's notion; the VM re-syncs the shim on every print) | gridOutput equality per step; no-republish per step | Style calls are no-ops in the shim (styles not part of transcript evidence — G1-A scope); upper-window quote-box state carried inside `io` (plain data) |
+| Window/cursor/style, output streams, pending text, status/upper window | shim window objects (`vm.mainwin`/`upperwin`/`statuswin`), `vm.io`, `state.output`/`gridOutput` | Window text/cursor + `io` clone + transcript strings | Text/cursor written only to matching fresh window roles/presence (Issue #47 guard); `io` assigned; transcript overwritten; watermark synced | **Serialized**; shim `currentWindow` **reconstructed** from `io.currentwin` (VM's notion; the VM re-syncs the shim on every print) | gridOutput equality per step; no-republish per step | Style calls are no-ops in the shim (styles not part of transcript evidence — G1-A scope); upper-window quote-box state carried inside `io` (plain data) |
 | Transcript publication position | adapter `lastOutputLen` watermark + `state.output` | Published output string | Overwritten + watermark synced via exposed `settle()` | **Serialized** | per-step full-transcript equality | — |
 | Story turn counters / daemons | Story globals + daemon list in dynamic memory | `UMem` (+ globals digest) | Via memory restore | **Serialized** | `[F06:turn=N]` continuity + chime timing in round trips | Timed events (`read_data.time`/`routine`): stored by upstream but **never used** (Flags1 timed-input bit clear; io.js TODO) — **unsupported**, source-verified |
 | Halted/error state | `vm.quit`, shim `state.halted`, `state.errors` | `vmFlags.quit` + boundary kind | Halt predicate fields restored; no request re-issued | **Serialized** | halted-restore refusal test (no output, no state change) | — |
 | Undo machinery | `vm.undo`/`undo_len` | Not captured | Cleared on restore | **Explicitly unsupported** (upstream autosave drops it) | `@restore_undo` after restore is safe and empty (tested) | Documented, not silent |
-| JIT code cache | `vm.jit` | Never serialized | Rebuilt lazily per pc | **Reconstructed** | all round trips (behavior identical) | — |
+| JIT code / decoded-text caches | `vm.jit` | Never serialized | Fresh-start entries retained; later entries lazy | **Conditional, not generally reconstructed** | pinned fixture and #47 immutable controls pass | Mutable dictionary/code histories can diverge; see #47 below |
 | Host entropy/time dependencies | `Math.random` only (runtime.js:532); **no `Date.now`/time calls anywhere in the vendored tree** (grep-verified) | n/a | n/a — unseeded checkpoints are rejected before any interpreter exists | **Unsupported (rejected)** | unseeded capture refusal + child `E_RNG` rejection | Unseeded cross-process reproducibility: **blocked by design and enforced by rejection**; a controlled host-entropy capture/injection mechanism would be a new evidence gate |
 | Timed input, sound, graphics | upstream opcodes / Flags | n/a | n/a | **Unsupported** (no-op/absent opcodes; Flags1 timed bit clear; Flags2 cleared & 0x57) | Timed input: nonzero `time` or `routine` rejected at capture and restore (`E_TIMED_INPUT`); see Issue #42 | No timed execution or clock recovery claimed; sound/graphics declarations do not establish a rejection gate for every opcode |
 | Glk file streams / filerefs | glksim | n/a | n/a | **Explicitly unsupported** (recorded as `unexpected`) | in-game `save`/`restore` not exercised in the checkpoint suite (G1-A scope) | Production save/restore interception is a turn-layer duty (state-and-vm-bridge §8), out of G1-B scope |
 | Runtime/adapter/checkpoint identities | envelope `identity` | Serialized | Validated before restore | **Serialized** | E_STORY/E_RUNTIME tests | — |
 
-Derived caches (`jit`, `s`/`l` views, shim `currentWindow`) were rebuilt only with the behavioral evidence above passing. **No comparison was made to pass by excluding an unexplained difference**: the only allowed variance field is `undoDepth` (declared unsupported, restored ≤ source, monotonicity asserted). The former unseeded-draw normalization allowlist was removed together with the unseeded mode itself: every compared pair of runs is seeded, so equality — including the RNG seed and every draw — is exact.
+The original fixture behavioral comparisons passed, but did not prove that all derived caches were rebuilt. Issue #47 below distinguishes startup-derived reuse from lazy cache population and reconstructed `s`/`l` views; its unsupported cases do not belong to the passing recovery matrix. **No comparison was made to pass by excluding an unexplained difference**: the only allowed variance field is `undoDepth` (declared unsupported, restored ≤ source, monotonicity asserted). The former unseeded-draw normalization allowlist was removed together with the unseeded mode itself: every compared pair of runs is seeded, so equality — including the RNG seed and every draw — is exact.
 
 ## 5. Round-trip results (ifvms.js, per boundary — seeded path)
 
@@ -435,3 +435,114 @@ replay-based publication, or implement production durable commit/receipt
 recovery (#18/#21). #46 can close as this bounded qualification, with the
 mid-turn replay limitation explicitly retained; it does not complete #12/#40,
 approve D39, start #47/#14, or authorize restarting the service.
+
+
+## Issue #47 cache and window qualification
+
+Recorded 2026-11-08; source base `5166d24457aaf5bb0bdfd839f67ff9c395f9e0b2`,
+branch `codex/issue-47-cache-window-qualification`, pinned ifvms revision
+`6ac63e6b61144d4353a168df16c4ad5c22526f88`, Node 24.13.0 Windows x64.
+Final source SHA, independent review and hosted/main CI belong to the PR/issue
+closeout. This section records coordinator-executed local qualification only.
+Canonical fixture SHA-256 remains
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`.
+
+### Source inventory
+
+Paths below are under `experiments/vm-io/` unless stated otherwise. All vendor,
+adapter and shim sources are unchanged. Cache objects/functions are observed
+in test metadata only, never serialized as executable checkpoint content.
+
+| Family | Source and lifetime | Qualification / required later adapter work |
+| --- | --- | --- |
+| Compiled JIT functions | `vendor/ifvms/src/zvm.js` initializes `jit` once, dispatches cached entries per PC, compiles on a miss, and even caches dynamic addresses. `zvm/runtime.js` restart/native restore do not clear it. | Fresh startup can reuse compiled entries; later PCs compile lazily. Immutable cold/warm controls recover; dynamic-code stress shows differing cache history. Arbitrary self-modifying-code support is not claimed (#20/#21). |
+| Decoded text, shared JIT namespace | `zvm/text.js` decode checks `jit[addr]` and caches static-address results. Abbreviations use a bound deferred lookup through the abbreviation table in current RAM. | Immutable text and a changed dynamic abbreviation target recover in these controls. This does not qualify arbitrary mutable text dependencies. |
+| Dictionary cache | `init_text` parses the standard dictionary at startup; `parse_dict` caches separators/entries; `tokenise` reuses a cached explicit dictionary. Native restore does not rerun `init_text`. | A source-warmed mutable custom dictionary can remain stale while a fresh child parses its modified RAM. Cache provenance/content are absent from v2; a generic detector or reconstruction requires separate #20/#21 work. |
+| Alphabet and Unicode/reverse tables | `init_text` copies table data into arrays/maps at startup. Native restore replaces table RAM but does not reinitialize those arrays/maps. | Both source and restored runs can agree on stale lookups. That is startup reuse, not rebuilding or proof of correct mutable-table semantics. Unsupported. |
+| Stack/local views | `zvm/runtime.js` native restore reconstructs frames/stack and calls `make_stacks`. | Existing stack fingerprints plus new backing-buffer alias checks corroborate reconstruction; undo remains unsupported. |
+| Main/upper/status objects | `zvm/io.js` opens main/status at startup, opens/closes upper through split/fix operations. `glksim.js` retains role/type/parent/text/cursor objects. Checkpoint captures text/cursor/rock and logical I/O only. | New guards require matching roles/presence; no general topology creation. Status role is checked as a field relation; new stories are Z5 and do not qualify Z3 status-line behavior. |
+| Geometry / current output target | `glksim.js` reports fixed 80x24 dimensions and ignores arrangement changes; VM print synchronizes the selected window. | Logical cursor/selector/height and output comparisons are headless evidence only, not actual Glk geometry or device rendering. |
+
+### Reproducible cases and dispositions
+
+`test-support/state-support.cjs` builds eleven original 4,096-byte Z5 stories;
+`tests/cache-window.test.js` pins every generated SHA-256. The standard dictionary
+is static, an explicitly supplied tokenise dictionary is dynamic, table writes
+stay above the header in dynamic RAM, and static code/text are immutable.
+The below-high-memory, self-modifying routine is expressly diagnostic stress,
+not a portable/conforming-story compatibility claim. No canonical story is
+patched, no compiler/dependency is installed, and no cache clearing is injected.
+See [memory rules](https://inform-fiction.ifarchive.org/zmachine/standards/z1point1/sect01.html),
+[dictionary rules](https://inform-fiction.ifarchive.org/zmachine/standards/z1point1/sect13.html),
+and [screen model](https://inform-fiction.ifarchive.org/zmachine/standards/z1point1/sect08.html).
+
+| Case | Concrete observed result | Disposition |
+| --- | --- | --- |
+| Cold/warm immutable code and text | Source warmed caches differ from fresh-start child metadata, but complete immediate envelope, output/events, continuation fingerprints, windows and I/O match. | Verified for these fixtures; not a universal cache-rebuild claim. |
+| Explicit mutable dictionary | Both immediate envelopes match; source cache still finds `cat` at 0x604 (prints 1540), child parses modified `dog` and prints 0. RAM continuation differs. | Reproduced divergence; unsupported dependency history, outside qualified recovery/publication. |
+| Mutable abbreviation target | Static cached text thunk uses the restored dynamic table target; both print `b` with exact envelope/continuation. | Verified bounded control. |
+| Mutable alphabet / Unicode | RAM changes to `b` / `B`; both derived lookups and continuation remain `a` / `A`. | Reproduced stale startup state in the runtime itself; equality is not semantic support. Unsupported. |
+| Dynamic-code stress | Source cached rtrue still prints 1 after RAM becomes rfalse; fresh child compiles rfalse and prints 0. Immediate envelopes match. | Diagnostic divergence, not general Z-machine compatibility evidence. |
+| Late-opened / removed upper window | Before guards, ordinary runner announced ready then failed serialization with exit 4. Now rejects `E_WINDOW_TOPOLOGY`, exit 2, exactly one `ready:false`, no serialization/file, baseline unchanged. | Explicit unsupported topology, never silently skipped. |
+| Shrink / close / reopen | Whole envelope, logical I/O/cursors/role metadata and multi-input continuation match. | Headless control only; physical arrangements remain unqualified. |
+| Selected-upper character input | Upper text is `U\n` but published grid transcript is `U`; capture refuses existing `E_STRUCTURE` without changing the source. | Cannot qualify recovery for that path; no shim fix in this task. |
+| Growing an existing upper window | Missing `glk_window_get_stream` causes a handled VM fault and no capturable boundary. The child logs the expected TypeError to stdout, explicitly asserted by the test. | Unsupported; no hidden stderr suppression or broadened shim support. |
+| Selector/rock/type and native-change scaffolding | Honest-checksum invalid saved relations reject; malformed rock remains `E_STRUCTURE`; a per-test native-restore wrapper runs the real restore then removes upper, and the post-native guard rejects. | Guard tests, clearly separate from story-driven/process evidence. |
+
+### Guard and compatibility boundary
+
+`E_WINDOW_TOPOLOGY` validates saved selector/rock relationships and live
+role/type/parent relationships. After isolated startup, and again after native
+restore, saved/fresh presence is compared before restored input/readiness.
+These guards do not build missing windows, clear caches, or establish geometry.
+The original pre-VM data validation remains; fresh-start checks necessarily
+construct a candidate interpreter. Capture self-validation does not prove
+fresh-start compatibility. Failed candidates leave the live baseline and its
+checkpoint bytes unchanged.
+
+V2 layout is unchanged. Checkpoint core/format/capability source bytes change
+its existing adapter build identity, so prior-build envelopes require fresh
+capture (`E_RUNTIME`), with no migration. Cache-history-dependent unsupported
+families are declared in capabilities/documentation but are NOT automatically
+recognized in arbitrary envelope bytes. The accepted scope remains the pinned
+seeded fixture matrix and specifically verified controls, not arbitrary stories.
+A checksum or equal recapture is not permission to publish an unqualified case;
+production adapter, cache invalidation/provenance and complete window restoration
+remain #20/#21. Durable commit/publication stays #18/#21; #48 is not started.
+
+### Local verification and #47 acceptance
+
+Final focused suite: 14 passed; full checkpoint suite: 107 passed, preserving
+the existing 93 tests. VM-I/O: 61 passed / 1 WSL-dependent skip; fixture integrity:
+2 passed / 1 pinned-compiler skip; checkout normalization: 1 passed. Commands
+are `node --test tests/cache-window.test.js` / `node --test` in the checkpoint
+directory, `node --test` in VM-I/O and fixture directories, and
+`node --test tests/ci/checkout-normalization.test.js` at the root. All final
+commands exited 0 with empty stderr; read-back stdout is retained in `D:/projects/zirp-issue47-final-{focused,checkpoint}.{out,err}`
+and `D:/projects/zirp-issue47-{vmio,fixture,checkout}.{out,err}`.
+A separate prior-build check captured a seeded canonical checkpoint with head
+`98de24a46e4c66303b8bff93599f77a6290f14ee` (same checkpoint implementation as
+base main), then the changed ordinary runner refused it with `ready:false`,
+`E_RUNTIME`, exit 2 and empty stderr. Source capture exited 0 and the checkpoint
+file remained byte-identical; receipt: `D:/projects/zirp-issue47-compat.json`.
+The pre-guard receipt `D:/projects/zirp-issue47-red.{out,err}` records 10 passes
+and 3 expected failures (both topology cases and missing relation rejection).
+Local logs are not portable public artifacts; exact hosted evidence and the
+independent read-only verdict must be recorded separately in the PR.
+Historical VM-I/O receipts are restored rather than relabeled as new evidence.
+
+| Acceptance | Bounded disposition |
+| --- | --- |
+| Source inventory plus tests/cannot-prove findings | Inventory and exact cases above, with eleven pinned original fixtures and separate guard scaffolding. |
+| Rebuild versus startup reuse and required changes | JIT/text lazy versus startup reuse, dictionary divergence, stale alphabet/Unicode tables, deferred abbreviation lookup, stack reconstruction, and missing geometry explicitly separated. Arbitrary repair requires #20/#21 work. |
+| Preserve seeded matrix and unsupported boundaries | Full suite retains existing seeded/RNG/timed-input/identity/protocol coverage; narrow topology rejections add no general restoration support. |
+| Cross-reference arbitrary-story work | #20/#21 retain native integration and combined restoration; no premature compatibility or D39 adoption. |
+
+Unsupported characterization tests assert the discrepancy, not recovery success;
+they must not be counted as successful arbitrary-story cases. This declaration,
+plus explicit rejection of the detectable topology cases, is the approved
+qualification boundary. D39 remains proposed and owner-unapproved; #12/#40
+stay open. No #48/#14 work, service restart, live-model or host/device trial is
+performed. If review finds a silently accepted unsupported case within that
+declared qualified route, leave #47 open and identify the smallest remaining
+adapter requirement instead of broadening reconstruction.
