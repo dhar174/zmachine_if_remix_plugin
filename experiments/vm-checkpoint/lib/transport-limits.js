@@ -35,6 +35,9 @@ function decodeUtf8(bytes) {
 function parseCheckpoint(bytes) {
     if (bytes.length > LIMITS.checkpointBytes) throw fault('E_SIZE', 'checkpoint exceeds byte limit');
     const text = decodeUtf8(bytes);
+    // Equal numeric byte/character caps make this guard redundant today:
+    // valid UTF-8 has at least as many bytes as decoded UTF-16 code units.
+    // Keep the explicitly declared character check before parsing as well.
     if (text.length > LIMITS.jsonChars) throw fault('E_SIZE', 'checkpoint exceeds character limit');
     try { return JSON.parse(text); }
     catch { throw fault('E_FORMAT', 'invalid checkpoint JSON'); }

@@ -47,8 +47,8 @@ receipt replay, general sandbox or production publication claim follows. See
 ## Issue #49 transport limits
 
 Run `node --test --test-reporter=tap tests/transport-limits.test.js` for the
-21 focused cases. The full checkpoint suite has 138 passing tests on the
-recorded local Node 24.13.0 Windows run (117 prior + 21). Hosted results and
+24 focused cases. The full checkpoint suite has 141 passing tests on the
+recorded local Node 24.13.0 Windows run (117 prior + 24). Hosted results and
 final source/review SHAs belong in the PR/issue, not these local observations.
 
 `lib/transport-limits.js` owns fixed experimental limits; they are not product
@@ -90,6 +90,9 @@ requires observed exit plus pipe closure. Default response deadline: 30 seconds;
 termination deadline: 10 seconds. A fault stays ineligible even if exit is zero.
 Raw text and parsed records are both retained within a bounded input-byte
 inventory; their JS representation/temporary copies are not a memory quota.
+Callback assertion diagnostics retain their original message/code. Unexpected
+runner failures emit a bounded `E_INTERNAL` response and exit 4; broken stdout
+uses a bounded stderr fallback, with no clean-candidate claim.
 The synchronous test facade uses a separate supervising Node parent to enforce
 independent stdout/stderr limits, preserving original response text. Its outer
 timeout adds 15 seconds for termination and uses a finite 32 MiB + 64 KiB

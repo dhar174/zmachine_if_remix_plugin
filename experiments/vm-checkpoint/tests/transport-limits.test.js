@@ -8,7 +8,7 @@ const { spawn } = require('node:child_process');
 const { spawnSync: boundedSpawnSync } = require('../test-support/bounded-sync.cjs');
 const { LIMITS, readBoundedFile, parseCheckpoint, encodeCheckpoint, decodeUtf8,
     requestFramer, responseWriter } = require('../lib/transport-limits.js');
-const { supervise } = require('../test-support/bounded-child.cjs');
+const { pipeCollector, supervise } = require('../test-support/bounded-child.cjs');
 const { createInstance, line, drive, capture, machineFingerprint, runReference,
     fingerprintDiff, FIXTURE, RUNNER } = require('./helpers.js');
 const PREFIX = [line('look'), line('seed 42'), line('take brass key'), line('north')];
@@ -29,7 +29,7 @@ async function context(fn) {
                 '--story', extra.story || FIXTURE, '--checkpoint', extra.checkpoint || checkpoint, '--out', extra.out || out, ...args],
             { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
             const session = supervise(child); sessions.push(session);
-            child.stdin.end(input); return session;
+            if (!extra.keepOpen) child.stdin.end(input); return session;
         },
         synthetic(mode, lateKill = false) {
             const child = spawn(process.execPath, [path.join(__dirname, '../test-support/limits-child.cjs'), mode],
@@ -141,7 +141,7 @@ for (const kind of ['oversize', 'truncated', 'invalid-utf8', 'story-oversize']) 
         const file = path.join(c.dir, 'bad');
         if (kind.includes('oversize')) { const fd = fs.openSync(file, 'w'); fs.ftruncateSync(fd, (kind === 'story-oversize' ? LIMITS.storyBytes : LIMITS.checkpointBytes) + 1); fs.closeSync(fd); }
         else fs.writeFileSync(file, kind === 'truncated' ? Buffer.from('{') : Buffer.from([0xff]));
-        const s = c.start([], '{"op":"serialize"}\n', kind === 'story-oversize' ? { story: file } : { checkpoint: file });
+        const s = c.start([], '', kind === 'story-oversize' ? { story: file } : { checkpoint: file });
         const rows = await closed(s, 2); assert.equal(rows.length, 1); assert.equal(rows[0].ready, false);
         assert.equal(rows[0].code, kind.includes('oversize') ? 'E_SIZE' : 'E_FORMAT'); assert.equal(s.eligible, false);
         assert.equal(fs.existsSync(c.out), false);
@@ -190,6 +190,35 @@ test('synchronous test facade retains bounded diagnostics and reports collection
     assert.equal(result.error, undefined); assert.equal(result.status, 4); assert.equal(result.signal, null);
     assert.equal(result.stdout, ''); assert.match(result.stderr, /^bounded child failure: E_CHILD_OUTPUT_LIMIT\n$/);
     assert.ok(Buffer.byteLength(result.stderr) <= LIMITS.stderrBytes); assert.equal(fs.existsSync(c.out), false);
+}));
+test('collector preserves callback assertion diagnostics and keeps the fault sticky', () => {
+    const collector = pipeCollector(() => assert.fail('callback assertion preserved'));
+    collector.stdout(Buffer.from('{"valid":true}\n'));
+    assert.equal(collector.fault.code, 'ERR_ASSERTION');
+    assert.match(collector.fault.message, /callback assertion preserved/);
+    const original = collector.fault;
+    collector.stdout(Buffer.from('{"later":true}\n')); collector.end();
+    assert.equal(collector.fault, original); assert.equal(collector.records.length, 1);
+});
+test('unexpected runner failure emits a bounded diagnostic and exits 4', async () => context(async c => {
+    // Explicit guard scaffolding; no production hook or altered VM execution.
+    const preload = path.join(c.dir, 'unexpected.cjs');
+    const source = 'require(' + JSON.stringify(require.resolve('../lib/fingerprint.js'))
+        + ').machineFingerprint = () => { throw new Error("synthetic internal failure"); };\n';
+    fs.writeFileSync(preload, source); assert.equal(fs.readFileSync(preload, 'utf8'), source);
+    const s = c.start([], '', { preload }); const rows = await closed(s, 4);
+    assert.equal(rows.length, 1); assert.equal(rows[0].code, 'E_INTERNAL'); assert.equal(rows[0].failed, true);
+    assert.equal(rows[0].detail, 'synthetic internal failure'); assert.equal(s.eligible, false);
+    assert.ok(Buffer.byteLength(JSON.stringify(rows[0]) + '\n') <= LIMITS.diagnosticBytes);
+    assert.equal(s.collector.stderr, ''); assert.equal(fs.existsSync(c.out), false);
+}));
+test('broken stdout uses bounded stderr failure evidence and remains ineligible', async () => context(async c => {
+    const s = c.start([], '', { keepOpen: true });
+    await s.wait(() => s.collector.records[0]); assert.equal(s.collector.records[0].ready, true);
+    s.child.stdout.destroy(); s.child.stdin.end('{"op":"fingerprint"}\n');
+    await closed(s, 4); assert.equal(s.eligible, false);
+    assert.equal(s.collector.stderr, 'runner internal failure (E_INTERNAL)\n');
+    assert.ok(Buffer.byteLength(s.collector.stderr) <= LIMITS.stderrBytes); assert.equal(fs.existsSync(c.out), false);
 }));
 for (const mode of ['record', 'aggregate', 'stderr', 'partial', 'malformed', 'zero', 'stall']) {
     test('bounded synthetic child: ' + mode, { timeout: 120000 }, async t => context(async c => {

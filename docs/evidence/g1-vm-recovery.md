@@ -715,25 +715,37 @@ Canonical fixture: 88,576 bytes, SHA256
 Pinned ifvms revision `6ac63e6b61144d4353a168df16c4ad5c22526f88`, runtime build
 `d225d898a0c93b7efc020549d16bda391561632c3cc5b06dc62119d498863454` unchanged.
 New adapter source identity:
-`8cfef9e33abd8bbf9680744d3356f7ea68dc6aeda2aa7de88729dd82d1a1aeb2`.
+`2fd2b4f6ffcd00759e8d73c76c09633f833595f47b3bb2d651e817494d36b736`.
 Transport is included in the source inventory and mutation regression. V2 layout,
 checkpoint state semantics and fingerprint oracle are unchanged; prior builds
 reject `E_RUNTIME` and require fresh captures. No migration is claimed.
 
+R1 independent review approved the original candidate with two non-blocking
+diagnostic findings. Callback assertions now retain their original error/code,
+and unexpected runner failures emit bounded `E_INTERNAL` evidence with exit 4
+(or bounded stderr fallback for broken stdout). Three regressions cover those
+paths. A comment clarifies that the equal numeric byte cap currently subsumes
+the character cap. Counters stop after failure; excess bytes are discarded, not
+retained or included in counter totals. Startup-refusal tests send no queued
+input, avoiding an unnecessary stdin-EPIPE race. All synchronous runner cases,
+including copied-tree identity checks, import the bounded facade; the local
+name `spawnSync` does not imply a raw Node call. Renewed exact-head review is a
+separate required gate; no approval is inferred for these changed bytes.
+
 ### Tests, acceptance and remaining risks
 
 Local Node 24.13.0 Windows x64 focused command in the checkpoint directory:
-`node --test --test-reporter=tap tests/transport-limits.test.js`: **21/21 pass**.
-Full checkpoint `node --test --test-reporter=tap`: **138/138 pass**, preserving
-117 prior cases plus 21 new. The same full command in VM-I/O: **61 pass / 1
+`node --test --test-reporter=tap tests/transport-limits.test.js`: **24/24 pass**.
+Full checkpoint `node --test --test-reporter=tap`: **141/141 pass**, preserving
+117 prior cases plus 24 new. The same full command in VM-I/O: **61 pass / 1
 WSL-dependent skip**; fixture directory: **2 pass / 1 pinned-compiler skip**.
 Root `node --test --test-reporter=tap tests/ci/checkout-normalization.test.js`:
 **1/1 pass**. Final commands exit 0 with empty command stderr. Expected child
 fault diagnostics are captured/asserted within tests. Initial implementation
 failures were fixed; their raw logs remain separate, not passing evidence.
 
-Local-only raw logs: `D:/projects/zirp-issue49-focused-r6.{out,err}` and
-`D:/projects/zirp-issue49-{checkpoint-r4,vmio-r1,fixture-r1,checkout-r1}.{out,err}`.
+Local-only raw logs: `D:/projects/zirp-issue49-focused-r8.{out,err}` and
+`D:/projects/zirp-issue49-{checkpoint-r5,vmio-r1,fixture-r1,checkout-r1}.{out,err}`.
 The latter runs have `.json` receipts with actual cwd, command, exit and hashes.
 These paths are not portable public receipts. Final source/review SHAs,
 Windows/Ubuntu hosted logs, verdict and issue disposition belong in the PR and

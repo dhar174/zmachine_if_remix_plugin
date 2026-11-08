@@ -18,11 +18,12 @@ function pipeCollector(onRecord = () => {}, onFault = () => {}) {
                 if (stop > start) parts.push(Buffer.from(chunk.subarray(start, stop)));
                 lineBytes += stop - start;
                 if (end < 0) break;
-                try {
-                    const text = decodeUtf8(Buffer.concat(parts, lineBytes)), value = JSON.parse(text);
-                    completeBytes += lineBytes + 1;
-                    parts = []; lineBytes = 0; texts.push(text + '\n'); records.push(value); onRecord(value);
-                } catch (error) { fail(fault('E_CHILD_PROTOCOL', 'invalid child stdout record')); }
+                let text, value;
+                try { text = decodeUtf8(Buffer.concat(parts, lineBytes)); value = JSON.parse(text); }
+                catch { fail(fault('E_CHILD_PROTOCOL', 'invalid child stdout record')); return; }
+                completeBytes += lineBytes + 1;
+                parts = []; lineBytes = 0; texts.push(text + '\n'); records.push(value);
+                try { onRecord(value); } catch (error) { fail(error); }
                 start = end + 1;
             }
         },

@@ -30,10 +30,13 @@ function parseArgv(argv) {
 const short = value => String(value).slice(0, 160);
 const slimResult = res => ({ status: res.status, delta: res.delta, output: res.output,
     gridOutput: res.gridOutput, requestLog: res.requestLog, errors: res.errors, unexpectedGlk: res.unexpectedGlk });
+// Write callbacks carry pipe errors into main's failure path; absorb the
+// matching stream event so it cannot bypass bounded diagnostic handling.
+process.stdout.on('error', () => {});
+const writer = responseWriter(text => new Promise((resolve, reject) => {
+    process.stdout.write(text, error => error ? reject(error) : resolve());
+}));
 async function main() {
-    const writer = responseWriter(text => new Promise((resolve, reject) => {
-        process.stdout.write(text, error => error ? reject(error) : resolve());
-    }));
     let opts, story, storySha256, adapter;
     try {
         opts = parseArgv(process.argv);
@@ -123,4 +126,14 @@ async function main() {
     } finally { process.stdin.destroy(); }
     process.exitCode = forcedExit === null ? (failed ? 4 : 0) : forcedExit;
 }
-main().catch(() => { process.stdin.destroy(); process.exitCode = 4; });
+main().catch(async error => {
+    process.stdin.destroy(); process.exitCode = 4;
+    const detail = String(error?.message || error).replace(/[^\x20-\x7e]/g, '?').slice(0, 160);
+    try { await writer.diagnostic({ error: 'internal-runner-failure', code: 'E_INTERNAL', failed: true, detail }); }
+    catch {
+        // A broken stdout pipe cannot deliver JSON. Keep the fallback bounded;
+        // neither broken output channel can make this a clean candidate.
+        process.stderr.once('error', () => {});
+        process.stderr.write('runner internal failure (E_INTERNAL)\n', () => {});
+    }
+});
