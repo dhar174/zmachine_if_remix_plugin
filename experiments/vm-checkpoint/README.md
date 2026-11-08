@@ -130,6 +130,33 @@ RNG semantics — forbidden by state-and-vm-bridge §8 and Issue #12's
 fail-explicitly rule. Seeded continuation is exact (identical draws and
 seed across process death).
 
+**RNG qualification (Issue #46):** `restart` / confirmation returns the fixture
+to seed zero; capture rejects with `E_RNG`, and ordinary-runner serialization
+fails with exit 4 without writing a new checkpoint. A nonzero final seed is
+necessary for current capture, but is not proof of replaying the preceding
+turn: a test-only Z5 story switches to host RNG, retains/prints a draw, then
+reseeds before the next prompt. Two controlled child runs produce different
+output/memory with the same final seed. Both final snapshots are accepted by
+current capture and each restores its own seeded continuation exactly; this
+does not reconstruct the earlier draw or make the two histories equivalent.
+
+The new tests keep startup, per-input and suffix host-draw counts separate.
+The canonical fixture library makes 100 warm-up draws at startup, including
+transient fresh-restore startup, and another 100 on confirmed restart. Its
+qualified seeded turns consume no host entropy. The minimal story has no
+startup draws. Controlled `Math.random` exists only inside disposable test
+children, not in the adapter or ordinary runner.
+
+Publication is demonstrated only by a parent-owned, fixture-allowlisted test
+store: successful capture, trusted validation, whole-envelope fresh recapture,
+matching continuation, and clean child exit precede the write. Failed restart
+capture and a corrupt final envelope publish nothing. The entropy experiment
+is outside that replay-qualified path. There is no general entropy detector or
+production publication implementation; durable head/receipt work remains
+#18/#21. Broader startup/replay support needs a separately approved gate that
+controls or records host entropy before startup and through restart/mid-turn
+execution, binds it to recovery, and proves reconstruction. D39 remains proposed.
+
 **Timed-input policy (Issue #42):** the pinned `read` and `read_char`
 methods copy the optional `time` and `routine` arguments into `read_data`,
 but neither the runtime nor the Glk shim schedules their callbacks. Missing
@@ -187,6 +214,11 @@ a VM error on demand).
 
 ## Tests
 
+- `tests/rng-transitions.test.js` — restart/unseeded refusal, an ordinary-runner
+  rejected serialization, controlled mid-turn entropy/reseed counterexample,
+  exact recovery of each resulting snapshot, and parent-only publication
+  controls. `test-support/rng-story.cjs` generates an original 2,048-byte Z5
+  fixture; `rng-child.cjs` confines controlled entropy to a fresh test process.
 - `tests/runner-protocol.test.js` — ordinary-child protocol failures with EOF
   and explicit exit, sticky failures across requests, a temporarily paused
   stdout reader, clean input/serialization, and distinct argument, output-limit
