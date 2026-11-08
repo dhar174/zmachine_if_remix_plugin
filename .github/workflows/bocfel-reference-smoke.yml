@@ -1,0 +1,58 @@
+name: bocfel-reference-smoke
+
+on:
+  push:
+    branches: [main, codex/issue-51-bocfel-autosave-repro]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: reference unit (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Portable parser, fixture and comparison tests
+        run: python -m unittest discover -s experiments/bocfel-autosave/tests -v
+
+  reference:
+    name: pinned Bocfel 2.6 (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Provision source-build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y g++ make libncurses-dev
+      - name: Obtain pinned upstream archive
+        shell: bash
+        run: |
+          curl --fail --location --retry 2 --output "$RUNNER_TEMP/bocfel-2.6.tar.gz" https://cspiegel.github.io/bocfel/downloads/bocfel-2.6.tar.gz
+          echo '8541a1c59271f7977e81680e29d9be60d633311870f05bb579f317a6fb37c7b8  '"$RUNNER_TEMP/bocfel-2.6.tar.gz" | sha256sum --check --strict
+      - name: Build and qualify all repeated comparisons
+        shell: bash
+        run: |
+          python experiments/bocfel-autosave/reproduce.py --archive "$RUNNER_TEMP/bocfel-2.6.tar.gz" --out "$RUNNER_TEMP/bocfel-reference" --require-reference
+          python experiments/bocfel-autosave/reproduce.py --verify-bundle "$RUNNER_TEMP/bocfel-reference"
+      - name: Retain reference artifacts, including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bocfel-reference-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bocfel-reference/
+          if-no-files-found: error
+          retention-days: 90

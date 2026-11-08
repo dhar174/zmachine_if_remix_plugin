@@ -1,0 +1,147 @@
+{
+  "argv": [
+    "/tmp/zirp-bocfel-reference-bpb1wwa2/bocfel-2.6/bocfel",
+    "-C",
+    "-m",
+    "-Z",
+    "/tmp/zirp-bocfel-reference-bpb1wwa2/random-mode-1/entropy.bin",
+    "/tmp/zirp-bocfel-reference-bpb1wwa2/random-mode-1/fixture.z5"
+  ],
+  "counts": {
+    "stderr": 0,
+    "stdout": 1065
+  },
+  "cwd": "/tmp/zirp-bocfel-reference-bpb1wwa2/random-mode-1/candidate",
+  "environment": {
+    "BOCFEL_AUTOSAVE": "1",
+    "BOCFEL_AUTOSAVE_DIRECTORY": "/tmp/zirp-bocfel-reference-bpb1wwa2/random-mode-1/candidate/autosaves",
+    "BOCFEL_AUTOSAVE_LIBRARYSTATE": "0",
+    "BOCFEL_PERSISTENT_TRANSCRIPT": "0",
+    "BOCFEL_SKIP_AUTORESTORE": "0",
+    "HOME": "/tmp/zirp-bocfel-reference-bpb1wwa2/random-mode-1/candidate/home",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/bin:/usr/bin",
+    "TERM": "dumb",
+    "TZ": "UTC",
+    "XDG_CONFIG_HOME": "/tmp/zirp-bocfel-reference-bpb1wwa2/random-mode-1/candidate/home/config",
+    "XDG_DATA_HOME": "/tmp/zirp-bocfel-reference-bpb1wwa2/random-mode-1/candidate/home/data"
+  },
+  "events": [
+    {
+      "argv": [
+        "/tmp/zirp-bocfel-reference-bpb1wwa2/bocfel-2.6/bocfel",
+        "-C",
+        "-m",
+        "-Z",
+        "/tmp/zirp-bocfel-reference-bpb1wwa2/random-mode-1/entropy.bin",
+        "/tmp/zirp-bocfel-reference-bpb1wwa2/random-mode-1/fixture.z5"
+      ],
+      "event": "spawn",
+      "pid": 135,
+      "seconds": 0.0004911999999990257,
+      "stderr_offset": 0,
+      "stdout_offset": 0
+    },
+    {
+      "event": "boundary",
+      "opcode": 0,
+      "save_sha256": "f7d7929778445dfbabb14b329e9b9940cb3a57af550429129c465a6151339286",
+      "seconds": 0.00307420000000036,
+      "stderr_offset": 0,
+      "stdout_offset": 523
+    },
+    {
+      "event": "input",
+      "hex": "6c6f6f6b0a",
+      "seconds": 0.0030835000000024593,
+      "stderr_offset": 0,
+      "stdout_offset": 523
+    },
+    {
+      "event": "boundary",
+      "opcode": 0,
+      "save_sha256": "90a8c777b7240d3ab529b2e8bd75044c4a1fbd9dae62f99b1bd19a78f4bdb129",
+      "seconds": 0.004319500000001142,
+      "stderr_offset": 0,
+      "stdout_offset": 716
+    },
+    {
+      "event": "input",
+      "hex": "6e6f7274680a",
+      "seconds": 0.004341300000000103,
+      "stderr_offset": 0,
+      "stdout_offset": 716
+    },
+    {
+      "event": "boundary",
+      "opcode": 0,
+      "save_sha256": "e172551a8a3268d96e34a2e275c5eb246818795b72f7c9508e3f26011cdb1c4a",
+      "seconds": 0.005704999999998961,
+      "stderr_offset": 0,
+      "stdout_offset": 995
+    },
+    {
+      "event": "input",
+      "hex": "726f6c6c0a",
+      "seconds": 0.005728599999997641,
+      "stderr_offset": 0,
+      "stdout_offset": 995
+    },
+    {
+      "event": "boundary",
+      "opcode": 0,
+      "save_sha256": "ab82cf9718bc1ab97ea684feef0295442c443e527a24ece9f6a3897477c74eef",
+      "seconds": 0.0068041999999977065,
+      "stderr_offset": 0,
+      "stdout_offset": 1065
+    },
+    {
+      "event": "kill-request",
+      "seconds": 0.02679249900000258,
+      "signal": "SIGKILL",
+      "stderr_offset": 0,
+      "stdout_offset": 1065
+    },
+    {
+      "event": "pipe-eof",
+      "pipe": "stderr",
+      "seconds": 0.02710949899999804,
+      "stderr_offset": 0,
+      "stdout_offset": 1065
+    },
+    {
+      "event": "pipe-eof",
+      "pipe": "stdout",
+      "seconds": 0.027113999000000888,
+      "stderr_offset": 0,
+      "stdout_offset": 1065
+    },
+    {
+      "event": "exit",
+      "returncode": -9,
+      "seconds": 0.027130399000000693,
+      "stderr_offset": 0,
+      "stdout_offset": 1065
+    },
+    {
+      "event": "reaped",
+      "pipes": [
+        "stderr",
+        "stdout"
+      ],
+      "returncode": -9,
+      "seconds": 0.027136398999999756,
+      "stderr_offset": 0,
+      "stdout_offset": 1065
+    }
+  ],
+  "exit_observed": true,
+  "killed_by_harness": true,
+  "pid": 135,
+  "pipes_closed": [
+    "stderr",
+    "stdout"
+  ],
+  "returncode": -9
+}
