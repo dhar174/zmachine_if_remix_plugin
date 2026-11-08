@@ -102,3 +102,102 @@ This recommendation is **conditional and provisional**. The roadmap and the prob
 - **Known obstacles to reliable restoration:** ifvms has no public snapshot API (autosave requires a Dialog; internals are undocumented and pinned); ifvms header-length non-validation weakens wrong-checkpoint rejection (must be compensated at the adapter layer); ifvms `resume()` after a halt re-processes the last answered event (no quit guard in `run()`), so #12 must characterize quit/resume-past-halt semantics and halted-signal reliability — including input delivered at or after a terminal state — before building candidate isolation or restore probes on top; Bocfel random-mode RNG state is not serialized; Bocfel non-Glk autosave is platform-dependent; Quetzal alone does not cover pending-input continuation at character boundaries.
 
 Per the probe brief: **advance to #12 only because the fixture and the input boundary are reproducible** — runtime acceptance remains blocked until #12 independently proves recovery.
+
+## 8. Issue #50 evidence-writer qualification
+
+**2026-11-08; bounded G1 evidence harness correction.** Sections 1–7 retain
+their historical observations and counts. This follow-up does not replace or
+redate their retained receipts or select a runtime. Baseline:
+`b409caca8841a347b790aa155efd658cbaf58c68`; implementation/test source:
+`4ce87f325920fd33e966f3ee5ec19dfb3bf2de67`. Final reviewed source head, independent
+verdict and hosted Windows/Ubuntu results are recorded in the #50 PR/closeout;
+local logs below are not portable hosted receipts.
+
+The former `outPath + '.tmp'` path is replaced by an exclusively created,
+unique same-directory stage and a mandatory per-target publication guard.
+[`evidence-writer.js`](../../experiments/vm-io/evidence-writer.js) runs for both
+direct `runSequence()` and CLI publication. An overlapping critical section
+fails `E_EVIDENCE_CONFLICT`; another adapter may publish independently, and
+sequential complete publishers may both succeed. This is not CAS or a durable
+transaction. Existing JSONL metadata/step/run_end ordering and raw native
+output are unchanged, including complete reports of failed native runs.
+
+The separate outer test lock owns save/run/read/restore cycles. Its active
+lease, file identity and token are checked before reads/restores and at release;
+lost/released leases cannot authorize restoration or unlink a replacement.
+Failure tests now preserve only their locked adapter and restore existing bytes
+through the guarded publisher; originally absent evidence remains absent.
+Neither layer automatically steals old locks. The [probe README](../../experiments/vm-io/README.md#evidence-publication-ownership-50)
+describes deliberate recovery after an unsupervised crash and the exact scope
+of these cooperating-writer guarantees.
+
+### Deterministic evidence and acceptance
+
+[`evidence-writer.test.js`](../../experiments/vm-io/tests/evidence-writer.test.js)
+uses isolated temporary targets/lock roots, actual exclusive opens/writes/closes/
+renames, and fresh Node children with a separate IPC channel. Listeners precede
+startup; acknowledgments/releases bind candidate, phase and sequence. Timeouts
+(30 s acknowledgment, 10 s termination, 120 s child cases) contain failures,
+never establish that execution reached a phase. Child stdout/stderr are private,
+bounded, and expected empty. Tests require observed exit and final pipe closure
+before supervised artifact removal. Ordinary host-user permissions/environment
+are inherited; this is not filesystem isolation or descendant containment.
+
+| Acknowledged interruption | Verified artifact state before/after termination |
+| --- | --- |
+| `guard-acquired` | Owned metadata exists; no stage; canonical/peer bytes unchanged. |
+| `stage-progress` | Actual stage is the exact first **52 of 105 UTF-8 bytes** of the synthetic JSONL; canonical/peer bytes unchanged. |
+| `stage-closed` | Complete stage equals all 105 bytes; canonical remains the complete old report. |
+| `published` | Canonical equals the complete new report; stage is absent; guard remains until supervised cleanup. |
+
+All four local interruptions reported `code:null, signal:SIGKILL` at **both**
+exit and close. Subsequent publication first fails closed on the retained guard;
+the supervisor verifies its token/PID/path after reaping, removes only its
+artifacts, verifies the inventory, and proves publication works again.
+This exercises real publisher operations with a test-controlled short-write
+wrapper/barriers, not interruption inside an arbitrary OS write or power loss.
+
+| #50 acceptance | Named regression / bounded disposition |
+| --- | --- |
+| Parallel writers cannot corrupt stages/canonical JSONL; conflict reports failure | `overlapping publishers conflict...` pauses a real prefix writer, rejects a fresh contender with exit 1, compares the owner's prefix and canonical bytes, and publishes another target independently. Positive sequential publication and exact pre/post-rename JSONL checks prevent universal rejection. `exclusive stage collision...` preserves a peer sentinel. |
+| No temp leakage on expected failures; enforced assumption explicit | `handled create/write/close/rename/owner-write failure...` and `short writes...` verify unchanged canonical/peer bytes and exact inventories. Four acknowledged interruption cases prove reaping and supervised cleanup. `replaced internal guard...`, `replaced guard at release...`, `outer lock folder replacement...`, `internal publication guard still excludes...`, `old outer locks...`, and `released outer lease...` cover ownership loss, replacement preservation, no timestamp stealing and inactive leases. Existing `evidence-lock.test.js` retains exclusion while `tmp-negative` is deleted. |
+| VM-I/O and checkpoint remain green on supported hosts | Local commands/counts below; real successful ifvms CLI and injected/missing-Bocfel incomplete-run regressions retain exit/JSONL behavior. `adapter-specific preservation...` proves peer updates and original absence survive restore. Hosted Windows/Ubuntu remains a required PR and merge-commit gate. |
+| Atomic reader visibility is distinct from crash durability; #18/#21 retained | Guarded same-directory rename, coordinated complete old/new reads, and `Windows open-reader rename refusal...` qualify visibility/failure behavior. `cleanup failure after rename...` verifies a nonzero failure with `published=true`, complete new bytes, no rollback and an explicitly retained empty guard. No fsync, durable transaction, power-loss recovery or receipt replay is proven. |
+
+### Reproduction and provenance
+
+Local Windows x64, Node **24.13.0**, V8 `13.6.233.17-node.37`:
+
+| Working directory | Command | Observed result |
+| --- | --- | --- |
+| Repository root | `node --test --test-reporter=tap experiments/vm-io/tests/evidence-writer.test.js experiments/vm-io/tests/evidence-lock.test.js experiments/vm-io/tests/probe-failure.test.js` | **27/27 pass** (21 new writer cases + 6 existing lock/failure cases). |
+| `experiments/vm-io` | `node --test --test-reporter=tap` | **82 pass / 1 WSL-dependent skip**, 83 total (62 prior + 21 new). |
+| `experiments/vm-checkpoint` | `node --test --test-reporter=tap` | **141/141 pass**, unchanged baseline. |
+| `tests/fixtures/zmachine` | `node --test --test-reporter=tap` | **2 pass / 1 pinned-compiler skip**; compiler not installed for this task. |
+| Repository root | `node --test --test-reporter=tap tests/ci/checkout-normalization.test.js` | **1/1 pass**. |
+
+Final commands exit 0 with empty command stderr; asserted child failures remain
+negative-case evidence. Raw local logs: `D:/projects/zirp-issue50-focused-r3.{out,err}`,
+`D:/projects/zirp-issue50-vmio-r3.{out,err}`, and
+`D:/projects/zirp-issue50-{checkpoint,fixture,checkout}-r1.{out,err,json}`.
+Earlier iterations are not substituted for final passing evidence. The initial
+partial-barrier assertion exposed an extra prefix acknowledgment and was fixed;
+concurrent Windows reads exposed rename sharing refusal, now a deterministic
+negative regression rather than a claim of guaranteed rename success.
+
+Protected identities remain: canonical fixture **88,576 bytes**, SHA-256
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`;
+vendored revision `6ac63e6b61144d4353a168df16c4ad5c22526f88`;
+runtime build `d225d898a0c93b7efc020549d16bda391561632c3cc5b06dc62119d498863454`;
+checkpoint adapter build `2fd2b4f6ffcd00759e8d73c76c09633f833595f47b3bb2d651e817494d36b736`.
+This publisher is outside the checkpoint source fingerprint; no envelope,
+capability, build-identity or portability change is intended. Generated canonical
+receipts are restored to baseline bytes after tests, not committed as new trials.
+
+Detected guard/lease replacement is rejected at the tested barriers. Arbitrary
+same-user changes between the final ownership check and rename/unlink are outside
+the guarantee. An unsupervised hard crash may leave artifacts and requires
+deliberate recovery; age/PID alone cannot authorize it. OS/fsync durability,
+network-filesystem semantics, hostile actors and product persistence remain
+unqualified. #18/#21 own durable commit/receipt recovery. D39 remains proposed
+and owner-unapproved; #12/#40 stay open. No #51/#14 work or service restart.
