@@ -13,10 +13,9 @@
 //   - the baseline's published transcript is unchanged;
 //   - the baseline continues identically to a control run that never saw a
 //     candidate (A15);
-//   - killing a candidate during bootstrap, at the boundary, during the
-//     serialization phase, or before the simulated publication boundary
-//     cannot affect the baseline (A28 candidate-process half; durable-store
-//     recovery belongs to #18/#21);
+//   - deterministic acknowledged interruption and publication-gate cases
+//     live in interruption-phases.test.js (A28 candidate-process/test-harness
+//     half only; durable-store recovery belongs to #18/#21);
 //   - malformed/hostile checkpoints are rejected in the child (exit nonzero)
 //     with the baseline untouched (A34).
 // The simulated publication store is a file ONLY the parent writes; child
@@ -128,81 +127,6 @@ test('discarded candidates leave the baseline completely unchanged (A15)', { tim
         assert.deepStrictEqual(diffs, [], 'baseline final state equals the never-candidated control');
         assertStoreUnchanged('baseline continuation');
     } finally {
-        fs.rmSync(STORE, { force: true });
-    }
-});
-
-test('killing a candidate during bootstrap, at the boundary, during serialization, and pre-publication cannot affect the baseline', { timeout: 240000 }, async () => {
-    setUpStore();
-    const baseline = makeBaseline();
-    const envPath = writeEnvelope(baseline.envelope, 'iso-kill.json');
-    const childProcesses = [];
-
-    try {
-        // (a) Kill during bootstrap/startup: terminate while the child is
-        // still loading node + vendored sources + restoring (before any
-        // ready signal).
-        {
-            const child = spawnRestore(envPath);
-            childProcesses.push(child);
-            child.child.kill();
-            const code = await awaitExit(child, 10000);
-            assert.notStrictEqual(code, 0, 'bootstrap-killed child exits nonzero');
-        }
-        assertBaselineUnchanged(baseline, 'bootstrap kill');
-
-        // (b) Kill while idle at the restored boundary.
-        {
-            const child = spawnRestore(envPath);
-            childProcesses.push(child);
-            const boot = await child.nextMessage(30000);
-            assert.strictEqual(boot.ready, true, 'child reached the boundary before the kill');
-            child.child.kill();
-            const code = await awaitExit(child, 10000);
-            assert.notStrictEqual(code, 0, 'boundary-killed child exits nonzero');
-        }
-        assertBaselineUnchanged(baseline, 'boundary kill');
-
-        // (c) Kill during the serialization phase: the child is configured to
-        // busy-stall inside its serialize op so the parent can kill it there;
-        // no checkpoint file may appear.
-        {
-            const outPath = path.join(RESULTS_DIR, 'iso-serialize-target.json');
-            fs.rmSync(outPath, { force: true });
-            const child = spawnRestore(envPath, { stallSerializeMs: 30000, out: outPath });
-            childProcesses.push(child);
-            await child.nextMessage(30000); // ready
-            child.child.stdin.write(JSON.stringify({ op: 'serialize' }) + '\n');
-            await new Promise((r) => setTimeout(r, 500)); // let it enter the stall
-            child.child.kill();
-            const code = await awaitExit(child, 10000);
-            assert.notStrictEqual(code, 0, 'serialization-killed child exits nonzero');
-            await new Promise((r) => setTimeout(r, 200));
-            assert.strictEqual(fs.existsSync(outPath), false, 'killed serialization wrote no checkpoint file');
-        }
-        assertBaselineUnchanged(baseline, 'serialization kill');
-
-        // (d) Kill after a mutation was dispatched but before the parent
-        // reads the candidate transcript (simulated pre-publication kill;
-        // timing-based kill ~120 ms after dispatch).
-        {
-            const child = spawnRestore(envPath);
-            childProcesses.push(child);
-            const boot = await child.nextMessage(30000);
-            assert.strictEqual(boot.ready, true);
-            child.child.stdin.write(JSON.stringify({ input: line('seed 9') }) + '\n');
-            await new Promise((r) => setTimeout(r, 120)); // mutation likely in flight/done
-            child.child.kill();
-            const code = await awaitExit(child, 10000);
-            assert.notStrictEqual(code, 0, 'pre-publication-killed child exits nonzero');
-        }
-        assertBaselineUnchanged(baseline, 'pre-publication kill');
-    } finally {
-        // Sweep any child that a failed assertion left alive: a live child's
-        // open pipes would hang this test-file process.
-        for (const child of childProcesses) {
-            try { child.child.kill(); await awaitExit(child, 5000); } catch { /* already gone */ }
-        }
         fs.rmSync(STORE, { force: true });
     }
 });

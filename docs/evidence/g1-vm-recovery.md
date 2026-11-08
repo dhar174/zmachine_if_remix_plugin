@@ -271,10 +271,10 @@ Baseline model: a live in-parent interpreter at a captured checkpoint; candidate
 | --- | --- | --- |
 | Candidate mutates inventory/location/time/RNG/output, then is discarded → baseline checkpoint byte-identical on re-capture, transcript unchanged, continuation equal to a never-candidated control | **Demonstrated** (A15) | isolation: discarded candidates… |
 | Two sequential candidates from the same checkpoint (shared-memory / global-RNG / shared-Glk detection) | **Demonstrated** | same test, candidate 2 |
-| Kill during bootstrap (before ready signal) | **Demonstrated** — child exits nonzero; baseline untouched | isolation: killing a candidate… |
-| Kill while idle at the restored boundary | **Demonstrated** | same test |
-| Kill during the serialization phase (test-only busy-stall inside the serialize op) — no checkpoint file written | **Demonstrated** | same test |
-| Kill after a mutation was dispatched, before the parent reads the candidate transcript (simulated pre-publication; timing-based kill ~120 ms after dispatch) — the parent never reads the candidate's step output, so nothing can be published | **Demonstrated** | same test |
+| Startup interruption | Historical unacknowledged pre-ready kill; superseded by #48 startup acknowledgment before loading/restoring the VM (not interruption inside startup). Baseline unchanged. | `interruption-phases.test.js`; #48 qualification below |
+| Kill while idle at the restored boundary | **Demonstrated** after an explicit restored-boundary acknowledgment, with exact pending input/fingerprint and observed exit/pipe closure. | `interruption-phases.test.js` |
+| Serialization/write interruption | Historical busy-stall was **before capture/write**, not inside either operation. #48 tests acknowledged pre-capture, post-capture and real partial-file barriers in a separate test writer; interruption inside the ordinary runner remains unproven. | `interruption-phases.test.js`; #48 qualification below |
+| Before simulated publication | Historical timed post-dispatch kill did not prove mutation completion, and its helper already buffered stdout. #48 proves acknowledged mutation/finished-candidate kills and separately parent cancellation after clean exit; private output is consumed, but no publication occurs. | `interruption-phases.test.js`; #48 qualification below |
 | Nonrecursive infinite loop, fresh child, parent-enforced deadline → killed, reaped (exit observed), nonzero | **Demonstrated** (G1-A additionally proves worker-thread preemption for in-process cases) | isolation: unbounded candidate… |
 | Output limit stops a chatty candidate, exit 3 | **Demonstrated** | isolation: output limit… |
 | Wrong story / wrong runtime / corrupt / truncated / digest-liar / bad-boundary / non-JSON checkpoints, plus nested-state malformations (empty io table, missing main window, empty character readData, transcript/window disagreement, pending memory-output-stream stack entries) and an honest unseeded envelope → rejected in child, exit 2, baseline re-capture byte-identical after every rejection; honest-digest read-continuation span/image mutants (bufaddr/parseaddr = 0xFFFFFF, near-end overflowing text-buffer span, truncated/overflowing parse table, parseaddr inside the text write span, buffer-capacity mismatch, forged static base, forged version byte, duplicate UMem chunk, straddling IFF chunk header, high-bit-mutated FourCC tags on FORM/IFZS/UMem) → rejected in child with `E_BOUNDARY`/`E_STRUCTURE` before readiness, with the remaining container constructions (compressed CMem chunk, FORM-size inconsistency, trailing bytes beyond the declared FORM area) asserted at the validation layer, and capture-side self-validation regression-tested by corrupting the live `read_data` addresses on a seeded adapter (capture refuses `E_BOUNDARY`, mutation restored, baseline recapture byte-identical) (Issue #41) | **Demonstrated** (A34) | isolation: malformed and hostile…; continuation: honest-digest continuation-span mutations… |
@@ -322,9 +322,9 @@ The pre-existing failure was a genuine G1-A harness defect, found because this m
 
 | Row | Requirement (verbatim intent) | Status here |
 | --- | --- | --- |
-| A15 | Speculative native attempt rejected before commit; candidate discarded completely including RNG, output, pending input | **Demonstrated** (candidate layer): discard + kills + byte-identical baseline recapture + control-equal continuation (`isolation.test.js`) |
+| A15 | Speculative native attempt rejected before commit; candidate discarded completely including RNG, output, pending input | **Demonstrated** (candidate layer): discard + kills + byte-identical baseline recapture + control-equal continuation (`isolation.test.js` discard controls; `interruption-phases.test.js` acknowledged kills and parent publication controls) |
 | A16 | VM waiting for a character/menu response; correct input path; no line injected into read_char | **Demonstrated**: char-boundary capture/restore + kind-correct re-issued request; wrong-boundary delivery semantics remain G1-A adapter behavior (mismatch logged, first-char parity) |
-| A28 | Crash before checkpoint/head publication → no live change; orphan candidate recoverable/collectable | **Candidate-process evidence only**: pre-publication kill + bootstrap/serialization kills leave baseline untouched. Durable-store orphan collection/receipt recovery is #18/#21; production requirements documented in §6 |
+| A28 | Crash before checkpoint/head publication → no live change; orphan candidate recoverable/collectable | **Candidate-process/test-harness evidence only**: acknowledged interruption barriers and parent cancellation leave the baseline/store unchanged; the test writer's partial-file evidence does not establish ordinary-runner write interruption. Durable-store orphan collection/receipt recovery is #18/#21; production requirements documented in §6 |
 | A29 | Crash after durable commit before response → retry returns saved receipt without replay | **Not in scope** — no durable store exists in this probe. Production requirement recorded in §6 (envelope durable before head publication; idempotent retry returns the receipt) |
 | A31 | Combined restore at line and character prompts: memory/frames/continuation/I/O/RNG match expected checkpoint | **Demonstrated** for the native half (memory/frames/continuation/I-O/RNG) at both boundaries with fingerprint + transcript equality, **on the seeded path** (the only supported RNG mode — unseeded checkpoints are rejected per §1). Overlay/policy halves are #14+ (no combined world exists in this probe) |
 | A34 | Checkpoint with wrong story/runtime/schema or corrupt → import/restore fails without modifying the active session | **Demonstrated**: twenty-six hostile variants rejected in fresh children — thirteen in the isolation suite and thirteen honest-digest read-continuation span/image mutants in the continuation suite (Issue #41) — **all twenty-six with stable `E_*` codes** (incl. `E_RNG` for unseeded, `E_BOUNDARY` for out-of-range/overflowing/overlapping continuation addresses and spans, and `E_STRUCTURE` for nested-state malformations, capacity/header inconsistencies, and malformed quetzal containers — among them a pending memory-output-stream stack entry that previously restored `ready:true` and crashed on the next print); the VM-level `IFhd` gate is additionally demonstrated in-process behind the envelope (an envelope whose payload is fixture-consistent but whose `IFhd` claims a different release — `E_STORY_QUETZAL`); baseline byte-identical after every child rejection; capture-side self-validation additionally regression-tested (corrupted live `read_data` addresses refused at the source with `E_BOUNDARY`, baseline recapture byte-identical) |
@@ -546,3 +546,115 @@ stay open. No #48/#14 work, service restart, live-model or host/device trial is
 performed. If review finds a silently accepted unsupported case within that
 declared qualified route, leave #47 open and identify the smallest remaining
 adapter requirement instead of broadening reconstruction.
+
+## Issue #48 deterministic interruption qualification
+
+Recorded 2026-11-08; source base `4857a4226e238f3b5788d849863d05eef6d7f1c8`,
+branch `codex/issue-48-deterministic-interruption`. The approved approach is a
+separate test-only phased child, not instrumentation of the ordinary runner.
+Final source/review/CI SHAs and hosted logs are recorded separately in the PR
+and issue closeout. The original four-phase timing-dependent kill test is
+replaced, while its dated source observations are retained above.
+
+### Unchanged implementation and exact fixture
+
+Canonical original Z5 fixture: 88,576 bytes,
+`96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bbe15bd455190c2b`.
+Pinned ifvms: `6ac63e6b61144d4353a168df16c4ad5c22526f88`;
+runtime source build `d225d898a0c93b7efc020549d16bda391561632c3cc5b06dc62119d498863454`;
+adapter source build `15cfa97b6299dbd85d0d4b72b6a14f625034688a0ff9aca87f78ba4ba1668cd7`.
+The runner, checkpoint implementation, capability statement, v2 layout,
+fingerprint oracle, adapter/shim/vendor and canonical fixture are unchanged.
+No compatibility migration or new production interface is introduced.
+
+`test-support/interruption-child.cjs` uses real restore/capture and real fixture
+inputs. Its support module imports only Node builtins before the startup gate.
+The prefix is `look; seed 42; take brass key; north`, mutations are
+`seed 7; roll; south; inventory`, and the baseline/qualified-candidate suffix is
+`inventory; seed 42; roll; look`. Uninterrupted controls execute the same inputs.
+
+### Observed barriers and publication disposition
+
+| Acknowledged child barrier | Exact observation before termination |
+| --- | --- |
+| `startup-entered` | Child entered its scaffold, before loading/restoring the VM. This is not interruption inside VM initialization. |
+| `restored-boundary` | Real restore returned; live fingerprint and pending request/readData match the source boundary. |
+| `mutation-complete` | All four real inputs returned; exact private steps, RNG marker, changed output, fingerprint and pending input match the uninterrupted candidate control. |
+| `serialization-entered` | Explicit **before-capture** gate; no claim of pausing inside synchronous serialization. |
+| `capture-complete` | Real capture/JSON encoding returned; byte count and digest match the control; no output checkpoint exists yet. |
+| `partial-write-complete` | Actual strict prefix written through a short-write-aware loop, handle closed, exact prefix read back; child waits before writing remaining bytes. |
+| `candidate-finished` | Complete checkpoint bytes match the control, final private stdout record received, child paused before clean exit. Valid bytes do not permit publication after a kill. |
+
+The parent queues IPC acknowledgments and private stdout separately. It waits
+for exact candidate/phase/sequence matches; each child installs the release
+receiver before sending its acknowledgment. Phase acknowledgments cannot be
+lost merely because a consumer has not awaited them. Deliberately releasing the
+wrong sequence makes the child exit 4 with its expected diagnostic; no next
+phase or checkpoint appears. Normal cases require empty child stderr.
+
+Every kill occurs after an acknowledgment while the child is still live.
+Both exit and pipe-close observations are required, with a 10-second termination
+deadline, 30-second phase deadline and 120-second per-case timeout. Deadlines
+contain failure, not prove a phase. Local kill cases observed code null and
+signal SIGKILL at both exit/close; the TAP diagnostics retain the actual values.
+All temporary cleanup is path-guarded and happens after observed termination.
+
+On Node 24.13.0 Windows x64, the controlled partial file contains **9,196 of
+18,393 bytes**. It remains the exact prefix after killing/reaping the child.
+The unchanged ordinary runner rejects it with one `ready:false`, `E_FORMAT`,
+exit 2, no successful serialization and no new output file. This is a chunked
+**test-writer** experiment, not interruption of the runner's `writeFileSync()`,
+VM capture, fsync, kernel/device writes, power loss or durable orphan recovery.
+The legacy stall option remains unchanged and precedes capture/write.
+
+Private candidate stdout is actually consumed and compared, including nonempty
+speculative output; it is not the user-visible publication channel. The
+parent-owned simulated store path is never sent to children, which is ownership
+discipline, **not a filesystem/OS security boundary**. Publication requires clean
+child completion/pipe closure, valid trusted-identity envelope, exact fresh-child
+recapture and matching seeded continuation. The same gate proves:
+
+- Killed finished candidate: complete valid bytes, non-clean exit, no publication.
+- Invalid final envelope after clean exit: `E_DIGEST`, no publication.
+- Parent pre-publication cancellation after clean exit and complete qualification:
+  eligible candidate discarded, zero publication calls; no claim of killing a dead child.
+- Positive control: same qualification succeeds, one parent write, exact changed store bytes.
+
+After every negative, the baseline file, whole live recapture, fingerprint,
+transcript, pending input and store bytes remain unchanged. The baseline's
+subsequent exact steps and final state match a never-candidated control.
+Candidate continuation comparisons retain only the existing declared undo-depth
+variance; whole envelopes and output/events are compared without exclusions.
+
+### Commands, acceptance and limits
+
+Focused: `node --test --test-reporter=tap tests/interruption-phases.test.js`
+in the checkpoint directory: **11/11 pass**. Full checkpoint `node --test
+--test-reporter=tap`: **117/117 pass** (107 previous tests minus the replaced
+combined kill test plus eleven new cases). VM-I/O: **61 pass / 1 WSL-dependent
+skip**; fixture integrity: **2 pass / 1 pinned-compiler skip**; both use the same
+full-suite Node command in their directories. Root
+`node --test --test-reporter=tap tests/ci/checkout-normalization.test.js`: **1 pass**.
+All final commands exited 0, stderr empty. Expected wrong-release child stderr
+is captured and asserted inside its test, not treated as a clean child.
+Raw logs: `D:/projects/zirp-issue48-focused-r3.{out,err}`,
+`D:/projects/zirp-issue48-checkpoint-r2.{out,err}` and
+`D:/projects/zirp-issue48-{vmio,fixture,checkout}-r1.{out,err}`;
+these local-only paths are not portable public receipts. TAP diagnostics retain
+phase sequences, artifact sizes/digests, exit/close, private-record counts,
+baseline continuation and publication-call outcomes. The final focused/full
+checkpoint reruns also retain explicit working directories and exits in their
+matching `.json` command receipts. No historical receipt is
+rewritten as fresh evidence; hosted CI and independent verdict belong in the PR.
+
+| #48 acceptance / deliverable | Test or explicit limit |
+| --- | --- |
+| Deterministic barriers replace timing-dependent claims | Seven named `acknowledged interruption at ...` cases replace the old four-phase delay test; exact IPC release protocol and wrong-sequence negative. |
+| Exact transition, cleanup, no secretly published output | Real phase-state/file assertions; observed exit and pipe closure; baseline/store/continuation checks; complete-checkpoint killed-candidate and invalid-envelope negatives; path-guarded cleanup. |
+| Private stdout versus user-visible publication | Private nonempty output verified before mutation/later kills; parent publication-call counter and store checked; cancel and positive controls exercise the same qualified gate. |
+| A28-A29 remain candidate-process-only | A15/A28 are candidate-process/test-harness evidence. A29 durable head/receipt commit and idempotent retry are **not proven**, owned by #18/#21. Ordinary-runner partial-write interruption and real storage durability remain unproven. |
+
+D39 remains proposed and owner-unapproved; #12/#40 remain open. No #49/#14
+work, general input/output hardening, sandbox, production coordinator, service
+restart, live-model or host/device trial is performed. An unmet independent
+review/CI gate or a discrepancy within the declared route leaves #48 open.

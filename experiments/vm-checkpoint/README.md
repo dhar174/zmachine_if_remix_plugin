@@ -25,6 +25,25 @@ Node >= 18 (tested on v24.13.0, Windows). Zero npm dependencies. Run from
 this directory only (`node --test` does not honor .gitignore when sweeping
 wider trees). Evidence and scratch files land in gitignored `results/`.
 
+Issue #48 interruption qualification uses unique OS temporary directories,
+removed only after every child has exited and its pipes have closed. Run its
+focused cases with `node --test tests/interruption-phases.test.js`. Seven IPC
+acknowledgments identify startup entry (before VM load), restored boundary,
+mutation complete, serialization entry (before capture), capture complete,
+partial write complete and candidate finished. Each waits for a matching parent
+release; kills occur at observed barriers, never after a guessed delay. Child
+stdout is consumed privately; only the parent test publication operation changes
+the simulated visible store. A clean-exit cancellation control and a positive
+qualified-publication control exercise the same gate.
+
+The partial-write path is a **test-only chunked writer** using real captured
+envelope bytes. It does not instrument `runner.js`, synchronous VM capture or
+the runner's `writeFileSync()`. The legacy `--stall-serialize-ms` option and its
+source comments must not be read as proof of interruption inside serialization:
+that stall precedes capture/write. No durable commit, fsync/power-loss recovery,
+receipt replay, general sandbox or production publication claim follows. See
+[the phase/acceptance evidence](../../docs/evidence/g1-vm-recovery.md#issue-48-deterministic-interruption-qualification).
+
 ## Design (envelope v2)
 
 A checkpoint is a versioned, **data-only** JSON envelope
@@ -298,10 +317,14 @@ a VM error on demand).
   duplicate delivery); seeded RNG across draws and reseeding (exact draws +
   seed); endgame prompt → halt; the unseeded capture gate; restored-halt
   input refusal; declared-unsupported undo safety.
+- `tests/interruption-phases.test.js` — seven acknowledged child barriers,
+  real test-writer partial files, killed/invalid candidate rejection, clean-exit
+  parent cancellation and a positive simulated-publication control (Issue #48).
+  Phase control uses IPC; candidate stdout is collected privately and is not
+  publication. The ordinary runner and its synchronous write path are unchanged.
 - `tests/isolation.test.js` — candidate discard (two sequential candidates;
   baseline checkpoint byte-identical, transcript unchanged, continuation
-  equal to a never-candidated control) (A15); kills during bootstrap, at the
-  boundary, during the serialization phase, and pre-publication; unbounded
+  equal to a never-candidated control) (A15); unbounded
   spinloop child preempted by a parent deadline and reaped; output limit;
   thirteen hostile-checkpoint variants rejected in children — nested-state
   malformations (empty io, missing main window, empty char readData,
