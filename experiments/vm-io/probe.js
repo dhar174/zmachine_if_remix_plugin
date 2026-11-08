@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
+const { publishEvidence } = require('./evidence-writer.js');
 const { createIfvmsAdapter } = require('./adapters/ifvms-adapter.js');
 const { createBocfelAdapter } = require('./adapters/bocfel-adapter.js');
 
@@ -101,15 +102,10 @@ async function runSequence(adapterName, options) {
 
     const adapter = createAdapter(adapterName, story);
 
-    // Records are buffered and written ATOMICALLY at the end of the run
-    // (temp file + rename): the canonical evidence path never holds a
-    // partially written state.  This closes a residual tear mode observed on
-    // Windows (2026-10-23): two lock-holding writers whose byte streams
-    // interleaved mid-record when the file was streamed in place -- the
-    // per-adapter evidence lock serializes the writers, but not the OS-level
-    // interleave of an in-flight incremental write against another writer's
-    // truncate/rewrite.  A hard crash mid-run leaves the .tmp beside the
-    // target instead of a torn canonical file.
+    // Buffer complete records, then publish through a mandatory per-target
+    // guard and unique stage. The 2026-10-23 in-place interleaving observation
+    // motivated rename publication; #50 removes its shared staging filename.
+    // Atomic reader visibility is not fsync/power-loss durability.
     const records = [];
     const write = (obj) => records.push(JSON.stringify(obj) + '\n');
 
@@ -199,9 +195,7 @@ async function runSequence(adapterName, options) {
             && JSON.stringify(rolls.slice(0, 3)) === JSON.stringify(rolls.slice(3, 6)),
         turn_marker_values: turnMarkers,
     });
-    const tmpPath = outPath + '.tmp';
-    fs.writeFileSync(tmpPath, records.join(''), 'utf8');
-    fs.renameSync(tmpPath, outPath);
+    await publishEvidence(outPath, records.join(''));
     return { steps, finalStatus: statusBefore, stepErrors };
 }
 

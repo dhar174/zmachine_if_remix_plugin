@@ -26,15 +26,20 @@ const EVIDENCE_BOCFEL = path.join(RESULTS_DIR, 'probe-bocfel.jsonl');
 function runFor(adapterName) {
     const cacheKey = 'run-' + adapterName;
     if (!globalThis[cacheKey]) {
-        globalThis[cacheKey] = withLocks([adapterName], 300000, () => runSequence(adapterName));
+        globalThis[cacheKey] = withLocks([adapterName], 300000, async (lease) => {
+            lease.assertOwned();
+            return runSequence(adapterName);
+        });
     }
     return globalThis[cacheKey];
 }
 
 async function readRunEnd(adapterName) {
     const p = adapterName === 'ifvms' ? EVIDENCE_IFVMS : EVIDENCE_BOCFEL;
-    return withLocks([adapterName], 60000, () =>
-        fs.readFileSync(p, 'utf8').trim().split('\n').map(JSON.parse).find((r) => r.type === 'run_end'));
+    return withLocks([adapterName], 60000, (lease) => {
+        lease.assertOwned();
+        return fs.readFileSync(p, 'utf8').trim().split('\n').map(JSON.parse).find((r) => r.type === 'run_end');
+    });
 }
 
 function integrate(adapterName, skipReason) {
