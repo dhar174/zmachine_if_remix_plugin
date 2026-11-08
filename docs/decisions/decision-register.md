@@ -116,6 +116,19 @@ qualification or schema migration is added. V2 source-build identity changes
 require fresh captures. See the [qualification inventory](../evidence/g1-vm-recovery.md#issue-47-cache-and-window-qualification).
 D39 remains proposed and owner-unapproved; #12/#40 remain open.
 
+**D39 interruption qualification (Issue #48):** Acknowledged barriers in a
+separate test child replace timing-dependent kill claims. Real fixture mutation
+and checkpoint capture run unchanged; a deliberately chunked test writer proves
+a specific partial file, which the ordinary runner rejects. This is not
+interruption inside synchronous VM capture or the runner's `writeFileSync()`.
+Private child output can already be buffered by the parent without being
+published. A killed finished candidate, an invalid final envelope, and parent
+cancellation after clean child exit publish nothing; a positive fixture-scoped
+control exercises the same test gate. A15/A28 evidence remains candidate-process/
+test-harness only. A29 durable commit/receipt retry remains #18/#21, resource and
+sandbox work is not started here, and D39 remains proposed and owner-unapproved.
+See the [phase evidence](../evidence/g1-vm-recovery.md#issue-48-deterministic-interruption-qualification).
+
 **G1-C recommendation (historical, superseded by the bounded dispositions below):** Issue #13's isolated [chat-host probe](../evidence/g1-chat-host.md) demonstrates local/protocol controls and bounded actual authenticated ChatGPT web/Classic reads, separately personally approved reversible edits, receipt recovery, private external fixture-byte import and process recovery through the owner-authorized private Secure MCP Tunnel and Auth0 setup. Web Work additionally invoked one installed standalone cloud workflow skill with successful tool reads; native desktop Work passed state/receipt reads but did not discover that skill. Recommend retaining Streamable HTTP, a separately authenticated exact-diff approval page and the explicitly disclosed external upload fallback for further authorized trials. Native attachment-to-service import remains BLOCKED: attachment acceptance did not establish a valid file object or received bytes, and the CLI's origin gate remains closed. Full host schemas, native Work writes/approval/import, real second-principal denial, Android, workspace type and enforced independent review remain unqualified as specified in the evidence. This does not select a production language/hosting/budget, amend D38/D39, satisfy full product acceptance, or authorize a later issue.
 
 **G1-C owner acceptance (2026-11-06):** The owner accepted G1-C for the documented synthetic web Chat and Classic desktop Chat route, including the disclosed external fixture upload and separate exact-diff approval, with the retained limits. The [owner decision](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13#issuecomment-6693577279) resolves R5; Issue #13 was closed as completed. The [acceptance audit](../evidence/g1-chat-host-acceptance-audit.md) records R1 as an owner-accepted limit on full host definitions; R2 as real second-identity denial at service entry, not two-allowed-principal object authorization; R3 as the observed Personal workspace route; and R4 as the approved bounded route. See the [bounded closeout](../evidence/g1-chat-host-closeout.md) for criterion mapping and retained limits. Native attachment-to-service import remains blocked and disabled. This acceptance does not establish product readiness, approve D39, start #14, qualify broader clients or authorize restarting the service. Production hosting, language and budget remain undecided. Prior probe shutdown observations are historical; no fresh shutdown check is asserted here.
