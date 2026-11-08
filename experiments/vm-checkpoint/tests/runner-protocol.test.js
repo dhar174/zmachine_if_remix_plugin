@@ -8,7 +8,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
+const { spawn } = require('node:child_process');
+const { spawnSync } = require('../test-support/bounded-sync.cjs');
+const { supervise } = require('../test-support/bounded-child.cjs');
 const {
     createInstance, line, drive, capture, machineFingerprint, fingerprintDiff,
     FIXTURE, RUNNER, spawnRestore, awaitExit,
@@ -145,51 +147,24 @@ test('protocol evidence drains before immediate EOF or explicit exit', { timeout
 
 test('a temporarily paused stdout reader receives all queued failures', { timeout: 60000 }, async () => {
     const child = spawn(process.execPath, [RUNNER, '--story', FIXTURE, '--checkpoint', checkpoint],
-        { stdio: ['pipe', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    let stdinError = null;
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.stdin.on('error', (error) => { stdinError = error; });
-    const exited = new Promise((resolve, reject) => {
-        child.once('error', reject);
-        child.once('close', (code, signal) => resolve({ code, signal }));
-    });
-    const ready = new Promise((resolve, reject) => {
-        child.once('error', reject);
-        child.once('close', () => reject(new Error('child closed before readiness')));
-        child.stdout.on('data', (chunk) => {
-            stdout += chunk;
-            if (stdout.includes('\n')) resolve();
-        });
-    });
-    const watchdog = setTimeout(() => child.kill(), 30000);
+        { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const session = supervise(child);
     try {
-        await ready;
-        assert.equal(JSON.parse(stdout.split('\n')[0]).ready, true);
+        await session.wait(() => session.collector.records[0]);
+        assert.equal(session.collector.records[0].ready, true);
         child.stdout.pause();
         child.stdin.end(Array(10000).fill('{').join('\n') + '\n{"op":"exit"}\n');
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 300));
         child.stdout.resume();
-        const result = await exited;
-        assert.equal(result.signal, null);
-        assert.equal(result.code, 4);
-        assert.equal(stdinError, null);
-        assert.equal(stderr, '');
-        const rows = stdout.split('\n').filter(Boolean).map((row) => JSON.parse(row));
+        const result = await session.close();
+        assert.equal(result.signal, null); assert.equal(result.code, 4);
+        assert.equal(session.collector.fault, null); assert.equal(session.collector.stderr, '');
+        const rows = session.collector.records;
         assert.equal(rows.length, 10001, 'missing queued responses after reader resumed');
         for (const row of rows.slice(1)) {
-            assert.equal(row.error, 'bad request line');
-            assert.equal(row.failed, true);
+            assert.equal(row.error, 'bad request line'); assert.equal(row.failed, true);
         }
-    } finally {
-        clearTimeout(watchdog);
-        child.stdout.resume();
-        if (child.exitCode === null && child.signalCode === null) child.kill();
-        await exited.catch(() => {});
-    }
+    } finally { child.stdout.resume(); await session.terminate(); assert.ok(session.exit && session.closed); }
 });
 
 test('explicit exit terminates while the parent keeps stdin open', { timeout: 60000 }, async () => {

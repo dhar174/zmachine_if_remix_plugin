@@ -44,6 +44,78 @@ that stall precedes capture/write. No durable commit, fsync/power-loss recovery,
 receipt replay, general sandbox or production publication claim follows. See
 [the phase/acceptance evidence](../../docs/evidence/g1-vm-recovery.md#issue-48-deterministic-interruption-qualification).
 
+## Issue #49 transport limits
+
+Run `node --test --test-reporter=tap tests/transport-limits.test.js` for the
+24 focused cases. The full checkpoint suite has 141 passing tests on the
+recorded local Node 24.13.0 Windows run (117 prior + 24). Hosted results and
+final source/review SHAs belong in the PR/issue, not these local observations.
+
+`lib/transport-limits.js` owns fixed experimental limits; they are not product
+budgets or OS security boundaries. Ordinary callers cannot disable/raise them.
+
+| Boundary | Limit |
+| --- | --- |
+| Runner story file | 4 MiB |
+| Checkpoint file / encoded checkpoint | 32 MiB UTF-8 bytes |
+| Decoded checkpoint JSON (`CAPS.jsonChars`) | 32 Mi UTF-16 code units |
+| Request line before LF / total runner input | 64 KiB / 8 MiB |
+| Encoded stdout record including LF / cumulative stdout | 8 MiB / 32 MiB |
+| Parent-retained stderr / reserved terminal diagnostic | 64 KiB / 1 KiB |
+
+Opened descriptors must describe regular files. Reads handle short reads and
+enforce cap-plus-one detection independently of the initial size metadata;
+descriptors close on success/refusal. Checkpoint byte/character checks precede
+JSON parsing; invalid UTF-8 and truncated JSON fail `E_FORMAT`, oversize fails
+`E_SIZE`, with `ready:false`, exit 2. The same encoded checkpoint cap is checked
+before opening/replacing an output file; serialization oversize is sticky
+`E_SIZE`, exit 4, with no successful serialization response.
+
+Requests are byte-framed with bounded fragments. Line/total input overflow is
+terminal `E_INPUT_LIMIT`, `failed:true`, exit 4; no later requests execute.
+Below-limit ordinary protocol failures retain Issue #44's sticky semantics.
+Awaited stdout writes apply backpressure before more input is processed.
+
+`--output-limit` still counts cumulative `delta.length` in UTF-16 code units.
+It defaults to 4 Mi units and accepts only positive safe integers up to that
+ceiling; explicit zero, negative, nonfinite, missing or excessive values reject
+with exit 2. A story-output or encoded-record/aggregate limit emits only a
+bounded `E_OUTPUT_LIMIT` / `error:"output-limit-exceeded"` diagnostic and exits
+3. The offending step/transcript/fingerprint is omitted; no later requests run.
+All response fields count toward wire limits, independently of `delta.length`.
+
+`test-support/bounded-child.cjs` counts raw bytes before decoding/parsing, queues
+early records, kills failed live children, drains/discards excess data and
+requires observed exit plus pipe closure. Default response deadline: 30 seconds;
+termination deadline: 10 seconds. A fault stays ineligible even if exit is zero.
+Raw text and parsed records are both retained within a bounded input-byte
+inventory; their JS representation/temporary copies are not a memory quota.
+Callback assertion diagnostics retain their original message/code. Unexpected
+runner failures emit a bounded `E_INTERNAL` response and exit 4; broken stdout
+uses a bounded stderr fallback, with no clean-candidate claim.
+The synchronous test facade uses a separate supervising Node parent to enforce
+independent stdout/stderr limits, preserving original response text. Its outer
+timeout adds 15 seconds for termination and uses a finite 32 MiB + 64 KiB
+`maxBuffer`; outer supervision failure is unverified child cleanup, never a pass.
+The cache diagnostic scaffold now retains a handled VM console error/stack as
+bounded `vmDiagnostics` JSON data. The VM still errors and capture still refuses;
+a diagnostic process returning zero is not successful candidate execution.
+
+Children inherit the parent cwd/environment and ordinary host-user permissions;
+the interruption scaffold copies the environment and removes only
+`NODE_TEST_CONTEXT`. No permission, filesystem/network, account or sandbox
+restriction is installed. The synchronous VM and JSON encoder can allocate or
+loop before transport checks. Object APIs receive already-built data; byte
+caps do not bound JSON complexity, CPU/memory/IO, request rate or descendant
+processes. Private/untrusted-story imports are not authorized. #30 owns real
+sandbox/quotas/rate limits, #22 private imports, #18/#21 durable commit/receipts.
+#50's shared-filename work is not included.
+
+Envelope v2 layout/state semantics are unchanged. Runner/transport/capability
+source identity changes require fresh captures (`E_RUNTIME` for prior builds),
+with no migration. D39 remains proposed and owner-unapproved. See the
+[acceptance mapping](../../docs/evidence/g1-vm-recovery.md#issue-49-probe-transport-limits).
+
 ## Design (envelope v2)
 
 A checkpoint is a versioned, **data-only** JSON envelope

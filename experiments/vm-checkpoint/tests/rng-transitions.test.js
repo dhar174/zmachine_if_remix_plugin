@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawnSync } = require('../test-support/bounded-sync.cjs');
 const { createInstance, line, key, drive, capture, FIXTURE, RUNNER,
     STORY, STORY_SHA256, REVISION, machineFingerprint } = require('./helpers.js');
 const { sha256Hex, validateEnvelope, CheckpointError } = require('../lib/checkpoint-format.js');

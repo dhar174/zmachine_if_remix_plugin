@@ -31,6 +31,7 @@
 // ==============================================================================
 
 const crypto = require('node:crypto');
+const { LIMITS } = require('./transport-limits.js');
 const { SCHEMA_VERSION, RUNTIME_NAME, implementationIdentity, capabilityStatement } = require('./checkpoint-contract.js');
 
 const FORMAT = 'zirp-g1b-checkpoint';
@@ -41,10 +42,10 @@ const SUPPORTED_BOUNDARIES = ['line', 'char', 'halted'];
 // structures, not as a security boundary.
 const CAPS = {
     quetzalBase64Chars: 4 * 1024 * 1024,
-    outputChars: 4 * 1024 * 1024,
+    outputChars: LIMITS.outputChars,
     requestLogEntries: 10000,
     readDataBufferEntries: 4096,
-    jsonChars: 32 * 1024 * 1024,
+    jsonChars: LIMITS.jsonChars,
 };
 
 class CheckpointError extends Error {
