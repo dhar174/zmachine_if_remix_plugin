@@ -78,9 +78,9 @@ function capabilityStatement() {
             rng: 'seeded mode only (xorshift seed serialized and re-applied after restore_file); unseeded capture and restore are REJECTED with E_RNG -- host Math.random state can be neither captured nor reconstructed (bridge section 8), and Issue #12 requires unsupported modes to fail explicitly',
             ioStreamsAndFlags: 'serialized (plain-data clone); the input stream must be keyboard (slot 0 = 0) and the memory-output-stream stack (slot 3) must be empty — pending output_stream 3 writes, file-backed transcript/command streams (mode 2 / open Glk references), and redirected input are rejected at capture and validation with E_STRUCTURE',
             pendingInput: 'serialized (read_data + re-issued Glk request); line-continuation buffer addresses and spans are validated against the checkpointed dynamic-memory layout (static base, buffer/parse capacity bytes, trusted story header) before any interpreter is constructed -- out-of-range or overflowing continuation spans are rejected with E_BOUNDARY, capacity inconsistencies with E_STRUCTURE (Issue #41)',
-            windowTextAndCursor: 'serialized (main/upper/status window objects)',
+            windowTextAndCursor: 'serialized for matching pinned main/upper/status roles only; selector/rock relations checked at capture/validation; saved versus fresh window presence checked after startup and native restore, before restored input/readiness (E_WINDOW_TOPOLOGY); no general window recreation or real geometry restoration',
             publishedTranscript: 'serialized (buffer + grid window text)',
-            jittedCodeCache: 'reconstructed (rebuilt lazily per pc; never serialized)',
+            jittedCodeCache: 'not serialized: fresh-start JIT/decoded-text entries survive native restore; later entries are lazy. Immutable code/text controls pass; mutable dictionary and diagnostic dynamic-code histories can diverge despite equal envelopes. Alphabet/Unicode tables are startup-derived; abbreviation lookup reads restored RAM. Mutable cache dependencies are unsupported, not generally detected (#47; #20/#21)',
             stackViews: 'reconstructed (make_stacks rebuilds s/l from the stack buffer)',
             interpreterNumberVersionHeader: 'unsupported (vendored ZVM never writes them)',
             undoHistory: 'unsupported (dropped on restore, upstream autosave semantics)',
@@ -91,7 +91,7 @@ function capabilityStatement() {
             memoryOutputStreams: 'unsupported (pending output_stream 3 stack writes rejected: the [address, text] write-back path has no round-trip evidence in the experimental envelope)',
             redirectedInputStream: 'unsupported (input_stream redirection holds a live Glk stream reference the data-only envelope cannot carry)',
         },
-        unsupported: ['timed-input', 'sound', 'graphics', 'glk-file-streams', 'undo-history', 'interpreter-number-version', 'unseeded-rng', 'memory-output-stream-writes', 'redirected-input'],
+        unsupported: ['timed-input', 'sound', 'graphics', 'glk-file-streams', 'undo-history', 'interpreter-number-version', 'unseeded-rng', 'memory-output-stream-writes', 'redirected-input', 'mutable-cache-dependencies', 'window-topology-mismatch', 'real-window-geometry'],
         schemaVersion: SCHEMA_VERSION,
     };
 }

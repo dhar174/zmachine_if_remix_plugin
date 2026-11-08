@@ -4,7 +4,7 @@
 // ------------------------------------------------------------------------------
 // Probe code for Issue #12, not a production format.  The envelope is a
 // versioned, DATA-ONLY JSON document: executable code is never serialized
-// (the ZVM JIT cache is deliberately excluded; it is rebuilt on demand), and
+// (caches are excluded; startup entries can persist and later entries are lazy), and
 // restore validates the whole envelope before any interpreter is touched.
 //
 // Envelope v2 layout (see docs/evidence/g1-vm-recovery.md for the full
@@ -186,6 +186,9 @@ function validateEnvelope(envelope, expected) {
     validateIo(p.io);
     if (!isPlainObject(p.windows)) throw new CheckpointError('E_STRUCTURE', 'windows section missing');
     validateWindows(p.windows);
+    if (p.io.currentwin === 1 && !p.windows.upper) {
+        throw new CheckpointError('E_WINDOW_TOPOLOGY', 'selected upper window is missing');
+    }
     if (!isPlainObject(p.publishedOutput)
         || typeof p.publishedOutput.output !== 'string'
         || typeof p.publishedOutput.gridOutput !== 'string'
@@ -597,6 +600,11 @@ function validateWindows(windows) {
     one('main', windows.main);
     one('upper', windows.upper === undefined ? null : windows.upper);
     one('status', windows.status === undefined ? null : windows.status);
+    for (const [role, rock] of [['main', 201], ['upper', 203], ['status', 202]]) {
+        if (windows[role] && windows[role].rock !== rock) {
+            throw new CheckpointError('E_WINDOW_TOPOLOGY', 'windows.' + role + ' does not match its pinned shim rock');
+        }
+    }
 }
 
 module.exports = {

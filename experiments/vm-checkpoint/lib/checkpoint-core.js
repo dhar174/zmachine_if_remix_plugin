@@ -27,7 +27,9 @@
 //
 //   What is deliberately NOT preserved (declared, tested, not silent):
 //   in-memory undo history (upstream autosave drops it too), timed input,
-//   sound, graphics, Glk file streams, and the JIT cache (rebuilt on demand).
+//   sound, graphics, Glk file streams, and caches. Startup-derived caches can
+//   survive restore; later code/text entries are populated lazily. Mutable
+//   dependency histories are unqualified, not generally detected here (#47).
 // ==============================================================================
 
 const { createIfvmsAdapter, getAdapterStoryIdentity, REVISION } = require('../../vm-io/adapters/ifvms-adapter.js');
@@ -69,6 +71,8 @@ function captureCheckpoint(adapter, context) {
         throw new CheckpointError('E_RNG',
             'cannot checkpoint an unseeded interpreter: draws come from host Math.random whose state is not reconstructable; put the game in seeded mode first (e.g. the fixture SEED command)');
     }
+
+    assertLiveWindowTopology(vm);
 
     // Upstream primitive: full Quetzal (IFhd + UMem + Stks) at the current pc.
     const quetzal = Buffer.from(vm.save_file(vm.pc, 1));
@@ -131,8 +135,9 @@ function captureCheckpoint(adapter, context) {
     };
     envelope.integrity.envelopeSha256 = sha256Hex(canonicalEnvelopeString(envelope));
 
-    // Self-validate: capture must never emit an envelope restore would reject,
-    // so the single validation rulebook governs both sides.  Beyond digest
+    // Self-validate the data contract using the same rulebook as restore.
+    // Fresh-start window compatibility additionally needs a fresh interpreter
+    // and is checked only at restore (#47); capture is not that proof. Beyond digest
     // honesty this refuses AT THE SOURCE the I/O surfaces schema v2 cannot
     // carry (mirroring the E_RNG policy): a nonempty memory-output-stream
     // stack (pending output_stream 3 writes), file-backed
@@ -158,8 +163,9 @@ function windowsPayload(vm) {
 }
 
 // Restore into a FRESH interpreter built from the pinned story bytes.  The
-// envelope is fully validated first; any rejection happens before a ZVM is
-// constructed, so an invalid checkpoint cannot disturb an active baseline.
+// envelope's data contract is validated before VM construction. Fresh-start
+// topology qualification is checked afterward, still inside the isolated
+// candidate and before restored requests/readiness (#47).
 // Returns the restored adapter (same interface as createIfvmsAdapter).
 function restoreCheckpoint(envelope, storyBytes, expected = {}) {
     // Derive identity from the supplied story bytes, never from the envelope
@@ -196,6 +202,7 @@ function restoreCheckpoint(envelope, storyBytes, expected = {}) {
     // below; it also guarantees restore_file finds windows, origram and a
     // pristine stack, exactly like upstream's autorestore path.
     adapter.start();
+    assertMatchingWindowTopology(vm, envelope.payload.windows);
 
     // Core VM state: memory, stacks, frames, pc.  A Quetzal IFhd mismatch
     // (wrong story bytes) returns 0 -> explicit rejection.
@@ -205,6 +212,8 @@ function restoreCheckpoint(envelope, storyBytes, expected = {}) {
     if (rc === 0) {
         throw new CheckpointError('E_STORY_QUETZAL', 'quetzal IFhd does not match the loaded story (wrong story bytes)');
     }
+    // Native restore can itself affect windows (notably the v3 collapse).
+    assertMatchingWindowTopology(vm, envelope.payload.windows);
 
     // Interpreter-owned header fields: restore the source's block verbatim
     // (see captureCheckpoint for why update_header()'s recomputation is not
@@ -224,6 +233,7 @@ function restoreCheckpoint(envelope, storyBytes, expected = {}) {
     // bookkeeping).  Applied after restore_file so its header update cannot
     // overwrite restored flags.
     vm.io = cloneJson(envelope.payload.io);
+    assertLiveWindowTopology(vm);
 
     // RNG: re-applied AFTER restore_file because update_header() zeroes the
     // seed (upstream do_autorestore re-applies the seed for the same reason).
@@ -268,7 +278,8 @@ function restoreCheckpoint(envelope, storyBytes, expected = {}) {
 
 function applyWindows(vm, windows) {
     const apply = (w, saved) => {
-        if (!w || !saved) return;
+        if (!!w !== !!saved) throw new CheckpointError('E_WINDOW_TOPOLOGY', 'window presence changed before applying saved content');
+        if (!saved) return;
         w.text = saved.text;
         w.cursorX = saved.cursorX;
         w.cursorY = saved.cursorY;
@@ -276,6 +287,35 @@ function applyWindows(vm, windows) {
     apply(vm.mainwin, windows.main);
     apply(vm.upperwin, windows.upper);
     apply(vm.statuswin, windows.status);
+}
+
+// Only the pinned shim's main/upper/status roles are qualified. No window
+// creation, cache repair, real geometry restoration, or general Glk support.
+function assertLiveWindowTopology(vm) {
+    for (const [name, type, rock] of [['mainwin', 3, 201], ['upperwin', 4, 203], ['statuswin', 4, 202]]) {
+        const win = vm[name];
+        if (!win) {
+            if (name === 'mainwin') throw new CheckpointError('E_WINDOW_TOPOLOGY', 'live main window is missing');
+            continue;
+        }
+        if (win.type !== type || win.rock !== rock
+            || (name === 'mainwin' ? win.parent != null : win.parent !== vm.mainwin)) {
+            throw new CheckpointError('E_WINDOW_TOPOLOGY', 'live ' + name + ' does not match its pinned shim role');
+        }
+    }
+    if (vm.io.currentwin === 1 && !vm.upperwin) {
+        throw new CheckpointError('E_WINDOW_TOPOLOGY', 'selected upper window is missing');
+    }
+}
+
+function assertMatchingWindowTopology(vm, saved) {
+    assertLiveWindowTopology(vm);
+    for (const [role, name] of [['main', 'mainwin'], ['upper', 'upperwin'], ['status', 'statuswin']]) {
+        const win = vm[name], entry = saved[role];
+        if (!!win !== !!entry || win && win.rock !== entry.rock) {
+            throw new CheckpointError('E_WINDOW_TOPOLOGY', 'saved ' + role + ' window does not match fresh-start topology');
+        }
+    }
 }
 
 module.exports = { captureCheckpoint, restoreCheckpoint, capabilityStatement };
