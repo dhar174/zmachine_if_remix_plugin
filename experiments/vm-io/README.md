@@ -119,10 +119,65 @@ canonical evidence files (`results/probe-*.jsonl`) — the integration tests
 and the failure-injection tests — serialize access with
 `tests/evidence-lock.js` (exclusive lock files under the OS temp dir
 `os.tmpdir()/zirp-vm-io-evidence-locks`, deliberately outside
-`results/tmp-negative/`, which negative tests delete recursively; stale
-locks stolen after 10 minutes). Probe CLI children are serialized
-because their parent holds the lock. Any new suite that touches probe
-evidence files must acquire the lock too.
+`results/tmp-negative/`, which negative tests delete recursively). These
+**outer locks own save/run/read/restore cycles**. They carry an unpredictable
+owner token/PID and file identity; reads/restores assert the lease is active
+and still owned, and release refuses to unlink a replacement. Failure tests
+preserve only the adapter whose lock they hold. CLI children participate in
+this longer cycle only when their test parent holds the outer lock. Any new
+suite that touches canonical evidence must acquire it too.
+
+### Evidence publication ownership (#50)
+
+Every `runSequence()` and CLI publication additionally uses
+`evidence-writer.js`, regardless of outer-lock use. A nonblocking, per-target
+`<target>.publish.lock/` directory owns the final publication critical section;
+its `owner.json` records a random token and diagnostic PID. Overlap fails with
+`E_EVIDENCE_CONFLICT` and CLI exit 1. Distinct adapter targets are independent;
+non-overlapping publishers can sequentially replace the complete report.
+
+The writer opens `<target>.<pid>.<random-token>.tmp` exclusively (`wx`), handles
+short writes of the complete UTF-8 buffer, closes it, rechecks guard and stage
+ownership, then performs one same-directory rename. It never truncates a peer
+stage, unlinks the canonical target first, or falls back to copying over it.
+The JSONL schema/order, raw output and complete incomplete-run reports remain
+unchanged. The CLI still has only the fixed adapter paths; test-only publisher
+factories supply isolated filesystem operations and acknowledged barriers.
+
+Handled pre-rename failures keep canonical bytes unchanged and remove owned
+artifacts. Cleanup errors remain failures. After successful rename, a cleanup
+or ownership failure reports `published=true` and exits nonzero; it does not
+roll back the visible complete report. Windows open readers may deny rename
+(`EPERM`/`EACCES`); the sharing-refusal regression verifies failure with the old
+complete report intact. Coordinated reads before/after successful rename see
+the complete old/new JSONL, not an in-place rewrite.
+
+Neither lock is stolen by age or PID heuristics. An unsupervised crash may
+leave a guard/stage (or outer lock); the next publisher fails closed, and an
+outer acquisition eventually times out. **Deliberate recovery:** stop new
+probe/test writers; inspect the exact adapter target and owner token; establish
+that its process and pipes are finished; inspect canonical/stage bytes and
+preserve needed evidence; remove only the verified dead owner's artifacts,
+then retry. A PID or old timestamp alone is not recovery authority. The
+interruption tests perform this cleanup only after observing child exit and
+final pipe closure, and verify directory inventories before deleting scratch.
+
+Guard/lease checks detect tested deletion/replacement at acknowledged barriers.
+They do not defend against arbitrary same-user filesystem interference during
+the final check/rename or check/unlink interval, nor provide an OS sandbox.
+Reader visibility is qualified only by the reported local/hosted runs; it is
+separate from fsync, OS crash/power-loss durability and durable receipt recovery. No
+fsync or production persistence implementation is added; #18/#21 own that work.
+
+Focused reproduction from the repository root:
+
+```
+node --test --test-reporter=tap experiments/vm-io/tests/evidence-writer.test.js experiments/vm-io/tests/evidence-lock.test.js experiments/vm-io/tests/probe-failure.test.js
+```
+
+See the [#50 acceptance mapping](../../docs/evidence/g1-native-io.md#8-issue-50-evidence-writer-qualification)
+for exact source identities, local counts, interruption outcomes and retained
+limits. Hosted checks and the independent verdict are separate PR/issue gates.
 
 Note that from the repository root, `node --test` discovers test files by
 walking the tree and does **not** honor `.gitignore`; untracked scratch

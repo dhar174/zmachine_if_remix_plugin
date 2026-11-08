@@ -1,69 +1,79 @@
 'use strict';
-// Cross-process serialization for the canonical evidence files: node --test
-// executes test files concurrently, and several suites run probe sequences
-// that write results/probe-*.jsonl in place (probe.js has a static evidence
-// path by design).  Writers and readers of those files take one lock per
-// adapter; locks older than ten minutes are treated as stale and stolen.
-//
-// The lock directory must live OUTSIDE results/tmp-negative/: that directory
-// is deleted recursively by negative.test.js clearTampered(), and deleting a
-// held lock file let a second process acquire it -- two concurrent probe
-// runs then tore the canonical evidence JSONL mid-record (observed
-// deterministically on a machine with WSL bocfel; the bocfel negative tests
-// skip on CI, which is why it never surfaced there).  The OS temp dir is
-// never cleaned by suite code; crashed runs are handled by stale-lock
-// stealing below.
+// Outer test-harness lock: owns save/run/read/restore cycles, not just the
+// publisher's final rename. Keep outside tmp-negative; never steal by age.
 
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const LOCK_DIR = path.join(os.tmpdir(), 'zirp-vm-io-evidence-locks');
 const POLL_MS = 100;
 const DEFAULT_TIMEOUT_MS = 300000;
-const STALE_MS = 600000;
 
-function sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
-}
-
-async function withLocks(names, timeoutMs, fn) {
-    const waitLimit = timeoutMs || DEFAULT_TIMEOUT_MS;
-    fs.mkdirSync(LOCK_DIR, { recursive: true });
-    const deadline = Date.now() + waitLimit;
-    const held = [];
-    const release = () => {
-        while (held.length) fs.rmSync(held.pop(), { force: true });
-    };
-    try {
-        for (const name of names) {
-            const lockPath = path.join(LOCK_DIR, 'evidence-' + name + '.lock');
-            for (;;) {
-                try {
-                    fs.closeSync(fs.openSync(lockPath, 'wx'));
-                    held.push(lockPath);
-                    break;
-                } catch (e) {
-                    if (e.code !== 'EEXIST') throw e;
-                    let stale = false;
-                    try {
-                        stale = (Date.now() - fs.statSync(lockPath).mtimeMs) > STALE_MS;
-                    } catch { /* vanished between open and stat; retry */ }
-                    if (stale) {
-                        fs.rmSync(lockPath, { force: true });
+function createLocks(lockDir) {
+    return async function withLocks(names, timeoutMs, fn) {
+        fs.mkdirSync(lockDir, { recursive: true });
+        const deadline = Date.now() + (timeoutMs || DEFAULT_TIMEOUT_MS);
+        const held = [];
+        let released = false;
+        const assertOne = (entry) => {
+            try {
+                const current = fs.lstatSync(entry.file);
+                if (current.dev !== entry.identity.dev || current.ino !== entry.identity.ino ||
+                    current.birthtimeMs !== entry.identity.birthtimeMs || !fs.readFileSync(entry.file).equals(entry.bytes)) {
+                    throw new Error('owner changed');
+                }
+            } catch (e) {
+                throw Object.assign(new Error('lost evidence lock ownership: ' + entry.file + ': ' + e.message),
+                    { code: 'E_EVIDENCE_OWNERSHIP' });
+            }
+        };
+        const lease = { assertOwned: () => {
+            if (released || !held.length) throw Object.assign(new Error('evidence lock lease is inactive'), { code: 'E_EVIDENCE_OWNERSHIP' });
+            held.forEach(assertOne);
+        } };
+        let failure, result;
+        try {
+            for (const name of [...new Set(names)].sort()) {
+                if (!/^[a-z0-9-]+$/.test(name)) throw new Error('invalid internal evidence lock name');
+                const file = path.join(lockDir, 'evidence-' + name + '.lock');
+                for (;;) {
+                    let fd;
+                    try { fd = fs.openSync(file, 'wx'); } catch (e) {
+                        if (e.code !== 'EEXIST') throw e;
+                        if (Date.now() >= deadline) throw new Error('timed out acquiring evidence lock: ' + name);
+                        await new Promise(resolve => setTimeout(resolve, POLL_MS));
                         continue;
                     }
-                    if (Date.now() > deadline) {
-                        throw new Error('timed out acquiring evidence lock: ' + name);
-                    }
-                    await sleep(POLL_MS);
+                    const bytes = Buffer.from(JSON.stringify({ token: crypto.randomBytes(16).toString('hex'), pid: process.pid }) + '\n');
+                    try {
+                        const identity = fs.fstatSync(fd);
+                        const entry = { file, identity, bytes: Buffer.alloc(0) };
+                        held.push(entry);
+                        try { fs.writeFileSync(fd, bytes); }
+                        finally { entry.bytes = fs.readFileSync(file); }
+                    } finally { fs.closeSync(fd); }
+                    break;
                 }
             }
+            lease.assertOwned();
+            result = await fn(lease);
+            lease.assertOwned();
+        } catch (e) { failure = e; }
+        const releaseErrors = [];
+        released = true;
+        while (held.length) {
+            const entry = held.pop();
+            try { assertOne(entry); fs.unlinkSync(entry.file); } catch (e) { releaseErrors.push(e); }
         }
-        return await fn();
-    } finally {
-        release();
-    }
+        if (failure || releaseErrors.length) {
+            failure = failure || releaseErrors[0];
+            failure.releaseErrors = releaseErrors;
+            throw failure;
+        }
+        return result;
+    };
 }
 
-module.exports = { withLocks, LOCK_DIR };
+module.exports = { withLocks: createLocks(LOCK_DIR), createLocks, LOCK_DIR };

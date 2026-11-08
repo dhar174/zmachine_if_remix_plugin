@@ -31,8 +31,9 @@ const LOCK_NAME = 'evidence-lock-regression';
 const TMP_NEGATIVE = path.join(__dirname, '..', 'results', 'tmp-negative');
 
 function childAttempt() {
-    const r = spawnSync(process.execPath, [CHILD, LOCK_NAME], { encoding: 'utf8', timeout: 30000 });
+    const r = spawnSync(process.execPath, [CHILD, LOCK_NAME], { encoding: 'utf8', timeout: 30000, maxBuffer: 16384 });
     assert.strictEqual(r.error, undefined, 'child spawned cleanly: ' + (r.error && r.error.message));
+    assert.strictEqual(r.stderr, '', 'no unexpected child diagnostics');
     return { code: r.status, out: String(r.stdout) };
 }
 

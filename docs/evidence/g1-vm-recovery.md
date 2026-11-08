@@ -783,3 +783,15 @@ D39 remains proposed and owner-unapproved; #12/#40 stay open. No #50/#14 work,
 service restart, untrusted import, deployment or live-model/device trial is
 performed. Missing independent review/CI or an unbounded declared transport
 boundary leaves #49 open.
+
+## Issue #50: separate G1-A evidence-writer correction (2026-11-08)
+
+The [#50 qualification and acceptance mapping](g1-native-io.md#8-issue-50-evidence-writer-qualification)
+records unique staging, mandatory publication guards, ownership-aware outer
+test locks, deterministic interrupted writers and exact receipt restoration.
+It leaves the checkpoint implementation, envelope and source-build identity
+unchanged; the local 141-test checkpoint baseline remains green. The preceding
+#49 statement excluding #50 is historical. Atomic evidence-reader visibility
+does not establish OS/fsync crash durability or A29 receipt recovery (#18/#21).
+D39 remains proposed and owner-unapproved; #12/#40 remain open. No #51/#14
+work or service restart is authorized or performed by this correction.
