@@ -144,8 +144,8 @@ def verify_bundle(root):
                 require(events["counts"][stream] == (folder / (name + "." + stream)).stat().st_size,
                         "truncated retained native stream")
             raw = read_bounded(folder / (name + ".stdout"))
-            check_diagnostics(raw + read_bounded(folder / (name + ".stderr")),
-                              CHAR_ERROR if name == "restored" and kind == "canonical-zero-char" else None)
+            check_diagnostics(raw, CHAR_ERROR if name == "restored" and kind == "canonical-zero-char" else None,
+                              stderr=read_bounded(folder / (name + ".stderr")))
             if name != "candidate":
                 suffix = suffix_from_events(raw, events["events"], halted=kind == "valid-char")
                 require(suffix.hex() == result["observed"][name + "_suffix_hex"]

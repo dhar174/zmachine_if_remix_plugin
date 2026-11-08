@@ -113,7 +113,8 @@ events delimit post-input continuation; valid-char ends at actual EOF. Only that
 specified suffix is compared, without whitespace trimming or diagnostic/RNG
 filtering. Ordered markers are an additional check, not a replacement for bytes.
 The canonical error is allowed exactly once in its negative case; other native
-error/warning diagnostics fail. Full-save hashes identify artifacts; we compare
+error/warning diagnostics and any nonempty native stderr fail (the canonical
+Args error is on stdout). Full-save hashes identify artifacts; we compare
 PC/Args/Rand/decoded memory as a prefix projection, not whole-VM equivalence.
 
 ## CI and evidence

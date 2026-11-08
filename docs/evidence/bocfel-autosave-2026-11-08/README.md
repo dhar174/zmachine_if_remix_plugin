@@ -37,6 +37,13 @@ stdout/stderr, input-offset/termination events, and result sidecars. These are
 portable repository evidence; embedded scratch paths identify historical
 processes and are not prerequisites or links to surviving files. Relevant Args/
 Rand bytes are in each sidecar and [frozen expectations](expectations.json).
+Provenance clarification from independent review: the committed local
+[invocation](invocation.json) predates the final parser/verifier/unit refinements;
+its three earlier source hashes are historical. The downloaded hosted bundle
+from [run 42511199833](https://github.com/dhar174/zmachine_if_remix_plugin/actions/runs/42511199833)
+records hashes matching exact head `c5af9a74a10e1eeab713d07ad933d4bed8166ccc`;
+subsequent reviewed heads receive their own CI bundle. The local raw observations
+and all twelve BFZS summaries were reverified with the final parser/verifier.
 Full autosaves, entropy bytes, build logs and complete manifests belong to the
 downloadable CI bundle; no archive or executable is committed.
 
@@ -47,6 +54,8 @@ fixed expectations. Characterization is explicitly non-qualifying and cannot
 rewrite the golden file. The strict local run passed **12/12**; its full bundle
 passed `--verify-bundle` (inventory/hash, trial uniqueness, native exits/pipe EOF,
 BFZS summary and raw suffix reconstruction). No trimming or filtering is used.
+Qualification rejects any nonempty native stderr, including unframed text;
+the known canonical Args diagnostic is allowed exactly once on stdout.
 Raw replay/startup and quit segments remain available alongside the compared
 post-input suffix, delimited by recorded events.
 

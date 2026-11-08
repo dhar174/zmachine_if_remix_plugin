@@ -88,7 +88,7 @@ def run_trial(kind, repeat, binary, canonical, work, artifacts):
         control_save = prefix(child, control_saves)
         write_bytes(artifacts / "control-prefix.bfzs", control_save[1])
         control_suffix = suffix(child, control_saves, control_save)
-        check_diagnostics(bytes(child.data["stdout"]) + bytes(child.data["stderr"]))
+        check_diagnostics(bytes(child.data["stdout"]), stderr=bytes(child.data["stderr"]))
 
     root, saves, argv, env = launch("candidate")
     with Child(argv, root, env, artifacts / "candidate", deadline) as child:
@@ -98,7 +98,7 @@ def run_trial(kind, repeat, binary, canonical, work, artifacts):
         child.reap(kill=True)
         require(child.process.returncode == -9, "candidate did not terminate by SIGKILL")
         require(original[0].read_bytes() == original[1], "autosave changed after verified kill")
-        check_diagnostics(bytes(child.data["stdout"]) + bytes(child.data["stderr"]))
+        check_diagnostics(bytes(child.data["stdout"]), stderr=bytes(child.data["stderr"]))
 
     # Reuse only the owned candidate autosave directory; preserve its original
     # bytes separately before native restoration can overwrite the active file.
@@ -118,7 +118,8 @@ def run_trial(kind, repeat, binary, canonical, work, artifacts):
         startup = bytes(child.data["stdout"])
         require((CONTINUING in startup) != is_bad_char, "restore announcement/fallback mismatch")
         restored_suffix = suffix(child, saves, restored_save, restored=True)
-        check_diagnostics(bytes(child.data["stdout"]) + bytes(child.data["stderr"]), CHAR_ERROR if is_bad_char else None)
+        check_diagnostics(bytes(child.data["stdout"]), CHAR_ERROR if is_bad_char else None,
+                          stderr=bytes(child.data["stderr"]))
         restored_code = child.process.returncode
     require(story_path.read_bytes() == story, "story bytes changed")
     if kind == "random-mode":

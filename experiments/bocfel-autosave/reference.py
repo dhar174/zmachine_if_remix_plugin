@@ -135,7 +135,10 @@ def suffix_from_events(data, events, halted=False):
     return data[cuts[0]:end]
 
 
-def check_diagnostics(data, allowed=None):
+def check_diagnostics(data, allowed=None, stderr=b""):
+    # This pinned native route has no expected stderr, including in the known
+    # Args failure (which Bocfel prints on stdout). Do not accept unframed noise.
+    require(not stderr, "unexpected native stderr")
     # No cleanup/normalization of raw output. Match the native diagnostic
     # framing; ordinary story words such as 'error' are not diagnostics.
     remaining = data

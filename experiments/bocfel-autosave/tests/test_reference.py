@@ -107,6 +107,9 @@ class FormatTests(unittest.TestCase):
         for data, allowed in [(message, None), (message * 2, message), (b"warning: unexpected", None)]:
             with self.assertRaises(Failure):
                 check_diagnostics(data, allowed)
+        for data, allowed in [(b"normal output", None), (message, message)]:
+            with self.assertRaisesRegex(Failure, "unexpected native stderr"):
+                check_diagnostics(data, allowed, stderr=b"unframed native diagnostic")
 
     def test_environment_does_not_inherit_bocfel_overrides_or_credentials(self):
         with tempfile.TemporaryDirectory(prefix="zirp-bocfel-unit-") as root:
