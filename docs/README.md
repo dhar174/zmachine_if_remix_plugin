@@ -1,6 +1,6 @@
 # Documentation map
 
-**Review status:** v0.2 is a documentation-only proposal. The user has specified the chat-first experience, initial directives, fidelity default, and Play/Editor distinction. The detailed algorithms and contracts below still require review.
+**Review status.** [D01–D37](decisions/decision-register.md) record the approved conceptual direction. The v0.2 design and owning contracts guide implementation planning. The [roadmap](ROADMAP.md#g1-closeout-status-2026-11-09) records the remaining G1 decisions and the G2 entry gate.
 
 ## Reading order
 
@@ -43,7 +43,7 @@ Feasibility-probe evidence (executed experiments, not design documents — each 
 - [evidence/g1-chat-host-acceptance-audit.md](evidence/g1-chat-host-acceptance-audit.md) — G1-C supported-route acceptance audit and limitations.
 - [evidence/g1-chat-host-closeout.md](evidence/g1-chat-host-closeout.md) — G1-C Issue #13 criterion mapping, bounded route limitations and owner acceptance.
 
-Probe implementation lives outside `docs/`: fixtures under `tests/fixtures/zmachine/`, the G1-A I/O harness under `experiments/vm-io/`, and the G1-B checkpoint probe under `experiments/vm-checkpoint/`. Probe code is not a production adapter and must not be promoted without separate review.
+Probe implementation lives outside `docs/`: fixtures under `tests/fixtures/zmachine/`, the G1-A I/O harness under `experiments/vm-io/`, the G1-B checkpoint probe under `experiments/vm-checkpoint/`, and the G1-C host probe under `experiments/chat-host/`. Production adoption requires separate review.
 
 ## Approved decision consolidation (Issue #10)
 
@@ -54,4 +54,4 @@ Probe implementation lives outside `docs/`: fixtures under `tests/fixtures/zmach
 - [G1-B checkpoint/recovery probe brief](superpowers/plans/2026-10-22-g1-b-checkpoint-probe.md)
 - [G1-C actual chatbot host/approval/import brief](superpowers/plans/2026-10-22-g1-c-chat-host-probe.md)
 
-The older v0.1 draft remains historical. The v0.2 schema is a proposal and does **not** cover all newly approved future quest, identity, sharing or time policies; do not silently use absent schema fields as runtime support. D38 is not approved; the G1 runtime, language, hosting, security-approval and device details remain evidence-dependent.
+The older v0.1 draft remains historical. The v0.2 schema is a proposal and does **not** cover all newly approved future quest, identity, sharing or time policies; do not silently use absent schema fields as runtime support. D38 remains deferred and unapproved. D39 is proposed. G1-C acceptance covers the documented synthetic host route. Production language, hosting, authorization and device support require their own decisions and evidence.

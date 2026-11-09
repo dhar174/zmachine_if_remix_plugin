@@ -1,6 +1,6 @@
 # Milestone roadmap and stop gates
 
-**Proposed sequencing, not an approved implementation task plan.** The written design and contract decisions must be reviewed before code or deployment begins. No dates, effort estimates, completed runtime milestones, or CI passes are claimed here.
+**Milestone sequence and evidence gates.** Each implementation or deployment assignment requires separate authorization. Current feasibility evidence and decisions are linked below.
 
 ## G0: Agree on the behavioral contract
 
@@ -10,11 +10,19 @@ Exit evidence: explicit acceptance or requested changes for policy/state separat
 
 ## G1: Prove the two hardest integration boundaries
 
-Run two separately scoped feasibility probes: complete VM checkpoint/restore at line and character input; and an actual intended chatbot host calling a read tool, a scoped write, and a trusted approval/import mechanism.
+Qualify native I/O and checkpoint recovery in separate fixture probes. Verify the host boundary with actual read, scoped write, trusted approval and private fixture import evidence.
 
 Use a small redistributable purpose-built story first. Select and pin the runtime/adapter after evidence, not from source-code feature names. Confirm initialization behavior, controlled randomness, invalid input handling, and whether pre-first-prompt edits can be supported. Test the private-import privacy boundary.
 
-Stop gate: no synthetic world engine built on an interpreter with incomplete recoverability; no production editor API built on an unverified authorization claim. A desktop demo is not mobile compatibility evidence.
+Stop gate: production native execution requires complete, verified recovery for its supported boundaries and effects. Privileged Editor operations require verified authorization. Mobile compatibility requires separate device evidence.
+
+### G1 closeout status (2026-11-09)
+
+- **G1-A [#11](https://github.com/dhar174/zmachine_if_remix_plugin/issues/11):** The [fixture and comparative native I/O evidence](evidence/g1-native-io.md) are available. Bounded acceptance and tracker closeout are pending.
+- **G1-B [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) / [#40](https://github.com/dhar174/zmachine_if_remix_plugin/issues/40):** All twelve follow-up children are closed. The [acceptance mapping](evidence/g1-vm-recovery.md#9-acceptance-mapping) records fixture-scoped results, explicit exclusions and downstream production obligations. D39 remains proposed pending the [owner decision](decisions/decision-register.md#d39-owner-review-checklist).
+- **G1-C [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13):** Closed after the November 6 [bounded owner acceptance](evidence/g1-chat-host-closeout.md) of the synthetic web and Classic desktop Chat route, external fixture upload and separate exact-diff approval. The closeout records the limits on host and device coverage.
+
+G0 [#3](https://github.com/dhar174/zmachine_if_remix_plugin/issues/3) and G1 [#4](https://github.com/dhar174/zmachine_if_remix_plugin/issues/4) remain open. G2 entry requires accepted G0/G1 evidence, explicit owner decisions on the runtime candidate, language and deployment boundaries, and separate authorization to start [#14](https://github.com/dhar174/zmachine_if_remix_plugin/issues/14).
 
 ## G2: Policy and transactional kernel with live AI contract feedback
 

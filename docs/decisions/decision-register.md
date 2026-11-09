@@ -74,7 +74,7 @@
 
 **D38: Versioned shared-package updates and revocation** was presented with A/B/C options but not approved. It remains **open / deferred**, not implicitly Option B. Stop the sequential decision exercise at D37 pending any future explicit request.
 
-**G1 evidence decisions remain open:** interpreter/runtime and adapter (a D39 proposal now exists from #12, below); runtime language; hosted versus private service; real host tool/attachment support; trusted user-bound approval mechanism; portability/device compatibility. [G1 probe briefs](../superpowers/plans/) specify how to evaluate them rather than choosing from speculation.
+**G1 decision status.** D39 remains proposed for the fixture-scoped runtime and adapter candidate. G1-C has a bounded owner decision recorded below. Production language, hosting, authorization and private import, plus broader host and device support, retain their separate evidence and approval gates.
 
 **D39 (PROPOSED, evidence-gated, owner-unapproved).** Retain the pinned ifvms.js
 ZVM as the conditional G1-B checkpoint candidate. The proposal originated in
@@ -210,4 +210,4 @@ builds). D39 remains proposed and owner-unapproved; #12/#40 remain open.
 | R5: AI-first, chat-based interface | D03–D06, D11, D16–D18, D23–D26, D27 |
 | R6: Real committed state, not narrative-only change | D05–D08, D11–D13, D18–D25, D27–D28 |
 
-**Approval boundary:** The 37 choices were approved through linked conversation comments, but implementation, deployment, merges, G1 technology selection and tests still require separate gates. Do not close #10 until the consolidated documentation PR has been reviewed and the unresolved feasibility decisions are routed to G1.
+**Approval boundary.** The linked comments record approval of the 37 concepts. Issue #10 is closed and its decision consolidation is merged in [PR #33](https://github.com/dhar174/zmachine_if_remix_plugin/pull/33). Implementation, deployment and G1 technology selection require their own decisions. The [roadmap](../ROADMAP.md#g1-closeout-status-2026-11-09) tracks G1 closeout and G2 entry.
