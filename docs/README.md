@@ -37,7 +37,7 @@ Agent-assisted engineering work (Zcode specialist subagents) is configured separ
 Feasibility-probe evidence (executed experiments, not design documents — each record states its own evidence layers and limitations):
 
 - [evidence/g1-native-io.md](evidence/g1-native-io.md) — G1-A native fixture and interpreter I/O probe (Issue #11): fixture identity and reproducibility, interpreter comparison, measured results, and the conditional G1-B handoff.
-- [evidence/g1-vm-recovery.md](evidence/g1-vm-recovery.md) — G1-B checkpoint, recovery, and candidate-isolation probe (Issue #12): recovery-state inventory, round-trip matrix per boundary and RNG mode, isolation results, the Bocfel 2.6 autosave-route investigation, and the proposed (evidence-gated) D39 recommendation.
+- [evidence/g1-vm-recovery.md](evidence/g1-vm-recovery.md) — G1-B checkpoint, recovery, and candidate-isolation probe (Issue #12): recovery-state inventory, round-trip matrix per boundary and RNG mode, isolation results, the Bocfel 2.6 autosave-route investigation, and the evidence for the bounded D39 decision.
 - [evidence/bocfel-autosave-2026-11-08/README.md](evidence/bocfel-autosave-2026-11-08/README.md) - Issue #51 pinned-source Bocfel autosave reproduction, separate canonical/conforming character cases and retained raw comparison evidence.
 - [evidence/g1-chat-host.md](evidence/g1-chat-host.md) — G1-C host probe observations and dated evidence.
 - [evidence/g1-chat-host-acceptance-audit.md](evidence/g1-chat-host-acceptance-audit.md) — G1-C supported-route acceptance audit and limitations.

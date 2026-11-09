@@ -199,5 +199,8 @@ same-user changes between the final ownership check and rename/unlink are outsid
 the guarantee. An unsupervised hard crash may leave artifacts and requires
 deliberate recovery; age/PID alone cannot authorize it. OS/fsync durability,
 network-filesystem semantics, hostile actors and product persistence remain
-unqualified. #18/#21 own durable commit/receipt recovery. D39 remains proposed
-and owner-unapproved; #12/#40 stay open. No #51/#14 work or service restart.
+unqualified. #18/#21 own durable commit/receipt recovery. D39 was still proposed
+when this evidence was recorded. The
+[later owner decision](../decisions/decision-register.md#d39-owner-decision)
+accepts the documented seeded Z5 fixture scope. #12 and #40 remain open.
+The #50 scope excluded #51, #14 and service restart.
