@@ -116,7 +116,7 @@ sandbox/quotas/rate limits, #22 private imports, #18/#21 durable commit/receipts
 
 Envelope v2 layout/state semantics are unchanged. Runner/transport/capability
 source identity changes require fresh captures (`E_RUNTIME` for prior builds),
-with no migration. D39 remains proposed and owner-unapproved. See the
+with no migration. See the
 [acceptance mapping](../../docs/evidence/g1-vm-recovery.md#issue-49-probe-transport-limits).
 
 ## Design (envelope v2)
@@ -280,7 +280,7 @@ is outside that replay-qualified path. There is no general entropy detector or
 production publication implementation; durable head/receipt work remains
 #18/#21. Broader startup/replay support needs a separately approved gate that
 controls or records host entropy before startup and through restart/mid-turn
-execution, binds it to recovery, and proves reconstruction. D39 remains proposed.
+execution, binds it to recovery, and proves reconstruction.
 
 **Timed-input policy (Issue #42):** the pinned `read` and `read_char`
 methods copy the optional `time` and `routine` arguments into `read_data`,
@@ -432,5 +432,7 @@ The full state-inventory classification, the Bocfel 2.6 checkpoint-route
 investigation, acceptance mapping (A15/A16/A28/A29/A31/A34), and the
 go/no-go recommendation live in `docs/evidence/g1-vm-recovery.md`.
 
-For the owner decision and outstanding production obligations, see the
-[proposed D39 checklist](../../docs/decisions/decision-register.md#d39-owner-review-checklist).
+The [D39 owner decision](../../docs/decisions/decision-register.md#d39-owner-decision)
+accepts the documented seeded Z5 fixture scope. The
+[review checklist](../../docs/decisions/decision-register.md#d39-owner-review-checklist)
+records the outstanding production obligations.

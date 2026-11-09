@@ -74,18 +74,26 @@
 
 **D38: Versioned shared-package updates and revocation** was presented with A/B/C options but not approved. It remains **open / deferred**, not implicitly Option B. Stop the sequential decision exercise at D37 pending any future explicit request.
 
-**G1 decision status.** D39 remains proposed for the fixture-scoped runtime and adapter candidate. G1-C has a bounded owner decision recorded below. Production language, hosting, authorization and private import, plus broader host and device support, retain their separate evidence and approval gates.
+## G1 decisions
 
-**D39 (PROPOSED, evidence-gated, owner-unapproved).** Retain the pinned ifvms.js
-ZVM as the conditional G1-B checkpoint candidate. The proposal originated in
-PR #37 on 2026-10-23. Its current basis is the independently passing seeded
-fixture suite, including whole-envelope recapture, chained-child continuation,
-and candidate discard and publication controls. See the
-[current evidence baseline](../evidence/g1-vm-recovery.md#current-evidence-baseline-2026-11-08)
-and [acceptance mapping](../evidence/g1-vm-recovery.md#9-acceptance-mapping).
+### D39 owner decision
 
-The proposed minimum adapter boundary is seeded pending line, pending character
-and halted state. Validate the v2 envelope's story/build/host identity, shape,
+**D39 (OWNER-APPROVED, bounded to the documented seeded Z5 fixture scope).**
+On November 9, 2026, the project owner approved D39 in the G1 closeout review.
+
+> I approve D39 for the documented seeded Z5 fixture scope.
+
+Retain the pinned ifvms.js ZVM and the experimental v2 checkpoint adapter as
+the G1-B candidate for the canonical Z5 fixture and documented seeded histories.
+The [evidence baseline](../evidence/g1-vm-recovery.md#current-evidence-baseline-2026-11-08)
+pins the fixture digest, ifvms revision, runtime build and adapter build. The
+[acceptance mapping](../evidence/g1-vm-recovery.md#9-acceptance-mapping) records
+whole-envelope recapture, chained-child continuation, candidate discard and
+simulated parent publication.
+
+The accepted boundary covers seeded pending line, pending character and halted
+states with the documented build and host identities. Validate the v2 envelope's
+story, build and host identity, shape,
 unkeyed checksum and local capabilities before VM construction. On the fresh
 VM, check saved versus live topology after startup and after native restore,
 and enforce Quetzal identity during native restore. Reapply the supported
@@ -108,7 +116,7 @@ passes seeded line and conforming `read_char 1` restoration, each 3/3. The
 canonical zero-operand case fails separately. Random mode has no saved Rand
 or `-Z` file cursor. This comparison supplies its own bounded evidence.
 
-**D39 checkpoint clarification (Issue #42):** Timed input remains unsupported. The experimental checkpoint rejects either nonzero `read_data.time` or `read_data.routine` at capture and restore with `E_TIMED_INPUT`; absent or zero fields are allowed, and malformed fields fail `E_STRUCTURE`. This does not intercept timed opcodes during execution or reconstruct clocks. D39 remains proposed and owner-unapproved.
+**D39 checkpoint clarification (Issue #42):** Timed input remains unsupported. The experimental checkpoint rejects either nonzero `read_data.time` or `read_data.routine` at capture and restore with `E_TIMED_INPUT`; absent or zero fields are allowed, and malformed fields fail `E_STRUCTURE`. This does not intercept timed opcodes during execution or reconstruct clocks.
 
 **D39 checkpoint clarification (Issue #43):** The experimental v2 envelope
 binds semantic metadata and payload in an unkeyed checksum, verifies the local
@@ -116,7 +124,7 @@ story/runtime/adapter build and host identity before VM creation, and checks
 capability claims against the implementation. V1 is rejected; no migration,
 authentication, or cross-build portability is claimed. See the
 [G1-B evidence](../evidence/g1-vm-recovery.md#3-checkpoint-envelope-and-restore-mechanism)
-for the precise coverage and limits. D39 remains proposed and owner-unapproved.
+for the precise coverage and limits.
 
 **D39 RNG qualification (Issue #46):** Restart returns to unseeded RNG;
 capture rejects with `E_RNG`. A nonzero seed at a later boundary does not prove
@@ -130,7 +138,6 @@ policy change, or production coordinator is implemented. Controlled/recorded
 host entropy before startup and across restart/mid-turn execution requires a
 separate evidence/owner gate; durable publication remains #18/#21. See the
 [qualification evidence](../evidence/g1-vm-recovery.md#issue-46-rng-qualification).
-D39 remains proposed and owner-unapproved.
 
 **D39 cache/window qualification (Issue #47):** Startup-derived caches are
 not all rebuilt from checkpoint memory. Immutable code/text and a mutable
@@ -144,7 +151,6 @@ presence mismatches before restored input/readiness (fresh-start checks occur
 after VM construction). No cache repair, general window recreation, geometry
 qualification or schema migration is added. V2 source-build identity changes
 require fresh captures. See the [qualification inventory](../evidence/g1-vm-recovery.md#issue-47-cache-and-window-qualification).
-D39 remains proposed and owner-unapproved; #12/#40 remain open.
 
 **D39 interruption qualification (Issue #48):** Acknowledged barriers in a
 separate test child replace timing-dependent kill claims. Real fixture mutation
@@ -155,8 +161,7 @@ Private child output can already be buffered by the parent without being
 published. A killed finished candidate, an invalid final envelope, and parent
 cancellation after clean child exit publish nothing; a positive fixture-scoped
 control exercises the same test gate. A15/A28 evidence remains candidate-process/
-test-harness only. A29 durable commit/receipt retry remains #18/#21, resource and
-sandbox work is not started here, and D39 remains proposed and owner-unapproved.
+test-harness only. A29 durable commit and receipt retry remain with #18/#21.
 See the [phase evidence](../evidence/g1-vm-recovery.md#issue-48-deterministic-interruption-qualification).
 
 **D39 transport clarification (Issue #49):** The experimental runner now bounds
@@ -170,26 +175,20 @@ Those production obligations remain #30, #22 and #18/#21 respectively. The
 [exact limits, acceptance evidence and retained risks](../evidence/g1-vm-recovery.md#issue-49-probe-transport-limits)
 qualify only the trusted-fixture probe. V2 layout is unchanged, but changed
 runner/transport source identity requires fresh captures (`E_RUNTIME` for prior
-builds). D39 remains proposed and owner-unapproved; #12/#40 remain open.
+builds).
 
 ### D39 owner review checklist
 
-- [ ] Confirm the proposed fixture and build scope: the Z5 fixture digest and
-  pinned ifvms revision, runtime source build and checkpoint adapter build in
-  the [evidence baseline](../evidence/g1-vm-recovery.md#current-evidence-baseline-2026-11-08).
-- [ ] Review the proposed minimum adapter boundary, the
-  [six acceptance dispositions](../evidence/g1-vm-recovery.md#9-acceptance-mapping),
-  and the supported, explicitly rejected, declared unsupported and unqualified
-  cases. In particular, review seeded continuation versus earlier turn replay,
-  and test publication versus durable recovery.
-- [ ] Review the open production obligations: #18/#21 own durable commit,
-  orphan collection and receipt retry; #20/#21 own native compatibility and
-  combined restoration; #22 owns private import; #30 owns production
-  sandboxing, quotas and rate limits. The G1 roadmap still governs any
-  authorization to start #14.
-- [ ] Record the owner's explicit decision to accept this bounded candidate,
-  request a revised proposal, or defer selection. Record any later-phase
-  authorization separately. #12 and #40 remain open pending their own gates.
+The [owner decision](#d39-owner-decision) resolves candidate selection within
+the fixture scope. The evidence links above retain the review inputs and limits.
+
+- #18 and #21 own durable commit, orphan collection and receipt retry.
+- #20 and #21 own production native compatibility and combined restoration.
+- #22 owns private import. #30 owns production sandboxing, quotas and rate limits.
+
+Production adoption, language and deployment require separate decisions and
+evidence. #12 and #40 remain open. The [G1 roadmap](../ROADMAP.md#g1-closeout-status-2026-11-09)
+sets the remaining G2 entry gates, including separate authorization for #14.
 
 ### Other G1 decisions
 

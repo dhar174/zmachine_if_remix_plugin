@@ -1,6 +1,10 @@
 # G1-B evidence: native VM checkpoint, recovery, and candidate isolation probe
 
-**Status (2026-11-08):** The experimental probe for [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) merged in [PR #37](https://github.com/dhar174/zmachine_if_remix_plugin/pull/37) on 2026-10-23 (2026-10-24 UTC). Final head: `4f37f6a327459554f3c2cedfb08496a9f391e66d`. Merge: `73e7a6ebc86263201e7a2cdcc21ddd05304e5506`. [Probe brief](../superpowers/plans/2026-10-22-g1-b-checkpoint-probe.md). D39 is proposed and owner-unapproved. See [the current evidence baseline](#current-evidence-baseline-2026-11-08) and [acceptance mapping](#9-acceptance-mapping).
+**Historical status (2026-11-08):** The experimental probe for [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) merged in [PR #37](https://github.com/dhar174/zmachine_if_remix_plugin/pull/37) on 2026-10-23 (2026-10-24 UTC). Final head: `4f37f6a327459554f3c2cedfb08496a9f391e66d`. Merge: `73e7a6ebc86263201e7a2cdcc21ddd05304e5506`. [Probe brief](../superpowers/plans/2026-10-22-g1-b-checkpoint-probe.md). D39 was proposed and owner-unapproved. See [the current evidence baseline](#current-evidence-baseline-2026-11-08) and [acceptance mapping](#9-acceptance-mapping).
+
+The [November 9 owner decision](../decisions/decision-register.md#d39-owner-decision)
+accepts D39 for the documented seeded Z5 fixture scope. Statements below about
+the proposal record its status at the time of the probe and follow-up reviews.
 
 ## 1. Executive findings
 

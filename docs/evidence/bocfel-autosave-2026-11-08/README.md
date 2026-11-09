@@ -4,8 +4,10 @@ Source baseline `6e36c0b1edaaf1b7deabf02aae1be04d643d91c1` (PR #69).
 The [self-contained harness](../../../experiments/bocfel-autosave/README.md)
 replaces the abbreviated FIFO example as current reproduction guidance. It
 builds unmodified upstream Bocfel 2.6 independently of ifvms, without installing
-or replacing an interpreter. D39 remains **proposed and owner-unapproved**;
-#12/#40 stay open. No #52/#14 work or service restart is authorized by this record.
+or replacing an interpreter. D39 was still proposed when this evidence was
+recorded. The [later owner decision](../../decisions/decision-register.md#d39-owner-decision)
+accepts the documented seeded Z5 fixture scope. #12 and #40 remain open.
+The #51 scope excluded #52, #14 and service restart.
 
 ## Provenance and retained evidence
 
@@ -122,5 +124,5 @@ merge-commit CI/artifacts. #12/#40 acceptance remains separate.
 This record does not qualify complete window/status rendering, timed input,
 sound, graphics, arbitrary stories or every Bocfel build. It supplies no entropy
 reconstruction gate, production adapter, durable commit or receipt recovery;
-those remain separate requirements. The ifvms proposal earns no extra capability
-from Bocfel's limitations, and proposed D39 stays owner-unapproved.
+those remain separate requirements. The ifvms candidate's qualification rests
+on its own checkpoint results.
