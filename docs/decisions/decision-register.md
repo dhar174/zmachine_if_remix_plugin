@@ -76,7 +76,37 @@
 
 **G1 evidence decisions remain open:** interpreter/runtime and adapter (a D39 proposal now exists from #12, below); runtime language; hosted versus private service; real host tool/attachment support; trusted user-bound approval mechanism; portability/device compatibility. [G1 probe briefs](../superpowers/plans/) specify how to evaluate them rather than choosing from speculation.
 
-**D39 (PROPOSED, evidence-gated — not owner-approved): ifvms.js ZVM as the G1-B checkpoint-capable probe candidate, with a proposed minimum adapter boundary.** Recorded 2026-10-23 from Issue #12's probe ([g1-vm-recovery evidence](../evidence/g1-vm-recovery.md)); updated same day after independent review: capture/validate/restore/continue of a live interpreter at line, character and halted boundaries into a fresh process with transcript + machine-state fingerprint equality, and candidate isolation including pre-publication kills; candidate execution failures now exit nonzero; Bocfel 2.6's own autosave route failed the canonical fixture's zero-operand read_char compatibility case; the [#51 pinned-source reproduction](../evidence/bocfel-autosave-2026-11-08/README.md) separately passes seeded line and conforming read_char 1 restoration (3/3 each), while random mode serializes no Rand or -Z file cursor. This narrows the Bocfel comparison; the ifvms proposal rests on its own independently passing checkpoint tests, not that compatibility failure. Proposed minimum adapter contract: capture only at supported boundary kinds **and only in seeded RNG mode (unseeded capture/restore rejected — `E_RNG` — per bridge §8)**; a data-only, identity-bound, digest-verified envelope validated — including nested I/O, window, and read-continuation state — before any interpreter is constructed (plus the VM-level Quetzal IFhd gate); fresh-process restore re-applying interpreter-owned header state, RNG (after `update_header`), pending input, and the published transcript; killable candidate processes with deadlines, output limits, and nonzero exits on every failure mode; a declared-unsupported surface (timed input, sound, graphics, Glk file streams, undo history, interpreter number/version header fields, unseeded RNG). **This record proposes; it does not approve.** Production adoption still requires the #18/#21 durable commit/receipt half, the remaining open G1 decisions above, and explicit owner acceptance of D39.
+**D39 (PROPOSED, evidence-gated, owner-unapproved).** Retain the pinned ifvms.js
+ZVM as the conditional G1-B checkpoint candidate. The proposal originated in
+PR #37 on 2026-10-23. Its current basis is the independently passing seeded
+fixture suite, including whole-envelope recapture, chained-child continuation,
+and candidate discard and publication controls. See the
+[current evidence baseline](../evidence/g1-vm-recovery.md#current-evidence-baseline-2026-11-08)
+and [acceptance mapping](../evidence/g1-vm-recovery.md#9-acceptance-mapping).
+
+The proposed minimum adapter boundary is seeded pending line, pending character
+and halted state. Validate the v2 envelope's story/build/host identity, shape,
+unkeyed checksum and local capabilities before VM construction. On the fresh
+VM, check saved versus live topology after startup and after native restore,
+and enforce Quetzal identity during native restore. Reapply the supported
+header state, RNG, pending request and transcript before readiness. Bound
+transport, track runner failures and child termination, and keep speculative
+output private until the candidate meets the publication requirements. The
+fixture harness demonstrates the eligibility check and a simulated parent
+publication operation.
+
+Reject unseeded capture/restore with `E_RNG`, nonzero timed-input operands with
+`E_TIMED_INPUT`, and unsupported memory-output stacks, redirected input or
+file-backed stream state with `E_STRUCTURE`. Sound, graphics, Glk file streams,
+undo history and interpreter number/version fields remain declared unsupported.
+Cache-dependent continuation and headless window results are qualified only
+for the cases in the evidence. A seeded snapshot's continuation and replay of
+the turn that produced it are separate properties.
+
+The [Bocfel 2.6 reference](../evidence/bocfel-autosave-2026-11-08/README.md)
+passes seeded line and conforming `read_char 1` restoration, each 3/3. The
+canonical zero-operand case fails separately. Random mode has no saved Rand
+or `-Z` file cursor. This comparison supplies its own bounded evidence.
 
 **D39 checkpoint clarification (Issue #42):** Timed input remains unsupported. The experimental checkpoint rejects either nonzero `read_data.time` or `read_data.routine` at capture and restore with `E_TIMED_INPUT`; absent or zero fields are allowed, and malformed fields fail `E_STRUCTURE`. This does not intercept timed opcodes during execution or reconstruct clocks. D39 remains proposed and owner-unapproved.
 
@@ -141,6 +171,27 @@ Those production obligations remain #30, #22 and #18/#21 respectively. The
 qualify only the trusted-fixture probe. V2 layout is unchanged, but changed
 runner/transport source identity requires fresh captures (`E_RUNTIME` for prior
 builds). D39 remains proposed and owner-unapproved; #12/#40 remain open.
+
+### D39 owner review checklist
+
+- [ ] Confirm the proposed fixture and build scope: the Z5 fixture digest and
+  pinned ifvms revision, runtime source build and checkpoint adapter build in
+  the [evidence baseline](../evidence/g1-vm-recovery.md#current-evidence-baseline-2026-11-08).
+- [ ] Review the proposed minimum adapter boundary, the
+  [six acceptance dispositions](../evidence/g1-vm-recovery.md#9-acceptance-mapping),
+  and the supported, explicitly rejected, declared unsupported and unqualified
+  cases. In particular, review seeded continuation versus earlier turn replay,
+  and test publication versus durable recovery.
+- [ ] Review the open production obligations: #18/#21 own durable commit,
+  orphan collection and receipt retry; #20/#21 own native compatibility and
+  combined restoration; #22 owns private import; #30 owns production
+  sandboxing, quotas and rate limits. The G1 roadmap still governs any
+  authorization to start #14.
+- [ ] Record the owner's explicit decision to accept this bounded candidate,
+  request a revised proposal, or defer selection. Record any later-phase
+  authorization separately. #12 and #40 remain open pending their own gates.
+
+### Other G1 decisions
 
 **G1-C recommendation (historical, superseded by the bounded dispositions below):** Issue #13's isolated [chat-host probe](../evidence/g1-chat-host.md) demonstrates local/protocol controls and bounded actual authenticated ChatGPT web/Classic reads, separately personally approved reversible edits, receipt recovery, private external fixture-byte import and process recovery through the owner-authorized private Secure MCP Tunnel and Auth0 setup. Web Work additionally invoked one installed standalone cloud workflow skill with successful tool reads; native desktop Work passed state/receipt reads but did not discover that skill. Recommend retaining Streamable HTTP, a separately authenticated exact-diff approval page and the explicitly disclosed external upload fallback for further authorized trials. Native attachment-to-service import remains BLOCKED: attachment acceptance did not establish a valid file object or received bytes, and the CLI's origin gate remains closed. Full host schemas, native Work writes/approval/import, real second-principal denial, Android, workspace type and enforced independent review remain unqualified as specified in the evidence. This does not select a production language/hosting/budget, amend D38/D39, satisfy full product acceptance, or authorize a later issue.
 

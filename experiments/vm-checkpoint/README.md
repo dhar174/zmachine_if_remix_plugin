@@ -1,11 +1,11 @@
 # experiments/vm-checkpoint — G1-B checkpoint probe (Issue #12)
 
-Experimental probe code for Issue #12: prove that a pinned native interpreter
-(the vendored ifvms.js ZVM at the G1-A-pinned revision) can be **checkpointed
-at real line/character input boundaries, destroyed, restored into a fresh
-process, and continued identically** — and that discarded speculative
-candidates cannot affect the baseline. Probe code, **not** a production
-adapter or a product checkpoint format; nothing here freezes a contract.
+The G1-B probe for Issue #12 demonstrates seeded line, character and halted
+checkpoint recovery on the pinned Z5 fixture using the vendored ifvms.js ZVM
+and headless Glk shim. Fresh-process restores reproduce the tested state and
+continuation. Discarded candidates preserve the live baseline. The tested
+surface and limits are recorded in the
+[current acceptance mapping](../../docs/evidence/g1-vm-recovery.md#9-acceptance-mapping).
 
 Baseline dependencies (never duplicated): `experiments/vm-io/` (adapter,
 glksim, vendored ifvms) and `tests/fixtures/zmachine/fixture.z5`
@@ -23,7 +23,10 @@ node --test          # protocol, format, identity, continuation, timed input, ro
 
 Node >= 18 (tested on v24.13.0, Windows). Zero npm dependencies. Run from
 this directory only (`node --test` does not honor .gitignore when sweeping
-wider trees). Evidence and scratch files land in gitignored `results/`.
+wider trees). Evidence and scratch files land in gitignored `results/`. The
+[retained Windows and Ubuntu run](https://github.com/dhar174/zmachine_if_remix_plugin/actions/runs/42513868643) passed 141/141 at
+`b3569ff671a8ff8de49ab866e4f726345d5ceef2`. The original PR #37 merge ran 33 tests
+per platform. See [the dated run inventory](../../docs/evidence/g1-vm-recovery.md#current-evidence-baseline-2026-11-08).
 
 Issue #48 interruption qualification uses unique OS temporary directories,
 removed only after every child has exited and its pipes have closed. Run its
@@ -428,3 +431,6 @@ restore is safe and empty; tested).
 The full state-inventory classification, the Bocfel 2.6 checkpoint-route
 investigation, acceptance mapping (A15/A16/A28/A29/A31/A34), and the
 go/no-go recommendation live in `docs/evidence/g1-vm-recovery.md`.
+
+For the owner decision and outstanding production obligations, see the
+[proposed D39 checklist](../../docs/decisions/decision-register.md#d39-owner-review-checklist).

@@ -4,6 +4,10 @@
 
 Use purpose-built or appropriately redistributable fixtures. Keep private user stories out of public CI. Separate deterministic engine tests, adapter integration tests, live-model evaluations, and actual host/device trials.
 
+The [G1-B fixture evidence mapping](../evidence/g1-vm-recovery.md#9-acceptance-mapping)
+tracks the tested portions and open obligations for A15, A16, A28, A29, A31
+and A34. The rows below specify product acceptance.
+
 ## Policy and mode
 
 | ID | Given / when | Required observable outcome |
