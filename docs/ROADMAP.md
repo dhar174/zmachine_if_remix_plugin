@@ -19,10 +19,10 @@ Stop gate: production native execution requires complete, verified recovery for 
 ### G1 closeout status (2026-11-09)
 
 - **G1-A [#11](https://github.com/dhar174/zmachine_if_remix_plugin/issues/11):** The [fixture and comparative native I/O evidence](evidence/g1-native-io.md) are available. Bounded acceptance and tracker closeout are pending.
-- **G1-B [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) / [#40](https://github.com/dhar174/zmachine_if_remix_plugin/issues/40):** All twelve follow-up children are closed. The [acceptance mapping](evidence/g1-vm-recovery.md#9-acceptance-mapping) records fixture-scoped results, explicit exclusions and downstream production obligations. D39 remains proposed pending the [owner decision](decisions/decision-register.md#d39-owner-review-checklist).
+- **G1-B [#12](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12) / [#40](https://github.com/dhar174/zmachine_if_remix_plugin/issues/40):** All twelve follow-up children are closed. The [acceptance mapping](evidence/g1-vm-recovery.md#9-acceptance-mapping) records fixture-scoped results, explicit exclusions and downstream production obligations. The owner approved [D39 for the documented seeded Z5 fixture scope](decisions/decision-register.md#d39-owner-decision) on November 9. #12 and #40 remain open.
 - **G1-C [#13](https://github.com/dhar174/zmachine_if_remix_plugin/issues/13):** Closed after the November 6 [bounded owner acceptance](evidence/g1-chat-host-closeout.md) of the synthetic web and Classic desktop Chat route, external fixture upload and separate exact-diff approval. The closeout records the limits on host and device coverage.
 
-G0 [#3](https://github.com/dhar174/zmachine_if_remix_plugin/issues/3) and G1 [#4](https://github.com/dhar174/zmachine_if_remix_plugin/issues/4) remain open. G2 entry requires accepted G0/G1 evidence, explicit owner decisions on the runtime candidate, language and deployment boundaries, and separate authorization to start [#14](https://github.com/dhar174/zmachine_if_remix_plugin/issues/14).
+G0 [#3](https://github.com/dhar174/zmachine_if_remix_plugin/issues/3) and G1 [#4](https://github.com/dhar174/zmachine_if_remix_plugin/issues/4) remain open. G2 entry still requires acceptance of the remaining G0/G1 dispositions, owner decisions on production runtime, language and deployment boundaries, and separate authorization to start [#14](https://github.com/dhar174/zmachine_if_remix_plugin/issues/14).
 
 ## G2: Policy and transactional kernel with live AI contract feedback
 
