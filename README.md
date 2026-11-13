@@ -1,6 +1,6 @@
 # Z-Machine IF Remix Plugin
 
-**Project status.** [Decisions D01–D37](docs/decisions/decision-register.md) record the approved design direction. D38 remains deferred and unapproved. The [roadmap](docs/ROADMAP.md#g1-closeout-status-2026-11-09) tracks the merged feasibility evidence and the decisions required before G2.
+**Project status.** [Decisions D01–D37](docs/decisions/decision-register.md) record the approved design direction. D38 remains deferred and unapproved. The [roadmap](docs/ROADMAP.md#g1-closeout-status-2026-11-09) links the accepted G1 feasibility evidence and the closure gate for the first G2 foundation. The [G1 and G2-A owner decisions](docs/decisions/decision-register.md#g1-and-g2-a-owner-decisions) record the provisional interpreter, toolchain, and private development boundaries.
 
 **An AI-first, chat-driven way to play and deliberately remix classic interactive fiction.**
 

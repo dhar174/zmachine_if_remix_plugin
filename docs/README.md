@@ -1,6 +1,6 @@
 # Documentation map
 
-**Review status.** [D01–D37](decisions/decision-register.md) record the approved conceptual direction. The v0.2 design and owning contracts guide implementation planning. The [roadmap](ROADMAP.md#g1-closeout-status-2026-11-09) records the remaining G1 decisions and the G2 entry gate.
+**Review status.** [D01–D37](decisions/decision-register.md) record the approved conceptual direction. The v0.2 design and owning contracts guide implementation planning. The [roadmap](ROADMAP.md#g1-closeout-status-2026-11-09) records the accepted G1 feasibility scope and the G2-A entry gate.
 
 ## Reading order
 
@@ -54,4 +54,4 @@ Probe implementation lives outside `docs/`: fixtures under `tests/fixtures/zmach
 - [G1-B checkpoint/recovery probe brief](superpowers/plans/2026-10-22-g1-b-checkpoint-probe.md)
 - [G1-C actual chatbot host/approval/import brief](superpowers/plans/2026-10-22-g1-c-chat-host-probe.md)
 
-The older v0.1 draft remains historical. The v0.2 schema is a proposal and does **not** cover all newly approved future quest, identity, sharing or time policies; do not silently use absent schema fields as runtime support. D38 remains deferred and unapproved. The owner approved [D39 for the documented seeded Z5 fixture scope](decisions/decision-register.md#d39-owner-decision). G1-C acceptance covers the documented synthetic host route. Production language, hosting, authorization and device support require their own decisions and evidence.
+The older v0.1 draft remains historical. The v0.2 schema is a proposal and does **not** cover all newly approved future quest, identity, sharing or time policies; do not silently use absent schema fields as runtime support. D38 remains deferred and unapproved. The owner approved [D39 for the documented seeded Z5 fixture scope](decisions/decision-register.md#d39-owner-decision). G1-C acceptance covers the documented synthetic host route. The [G1 and G2-A owner decisions](decisions/decision-register.md#g1-and-g2-a-owner-decisions) select the foundation toolchain and a private/local-first development approach. Production hosting, authorization and device support remain evidence gates.
