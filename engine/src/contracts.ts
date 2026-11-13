@@ -29,6 +29,7 @@ const input = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("line"), text }),
   z.strictObject({ kind: z.literal("character"), value: char }),
 ]);
+const policyReferenceId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/).max(256);
 const mode = z.enum(["PLAY", "EDITOR"]);
 const route = z.enum(["native", "remix", "bridged"]);
 export const TurnEnvelope = z.strictObject({
@@ -46,7 +47,7 @@ export const TurnProposal = z.strictObject({
   version, ...headFields, request_id: RequestId, route, intent: mode,
   normalized_intent: text, entity_ids: z.array(EntityId), operations: z.array(operation).min(1),
   known_effects: z.array(effect), effect_coverage: z.enum(["known", "incomplete"]),
-  rule_ids: z.array(identifier), guard_ids: z.array(identifier), unresolved: z.array(text),
+  rule_ids: z.array(policyReferenceId), guard_ids: z.array(policyReferenceId), unresolved: z.array(text),
   time: z.enum(["native", "overlay", "none"]),
   generation_requests: z.array(z.strictObject({ kind: z.enum(["location", "character", "item", "connection", "rule"]), region_id: identifier, count: z.int().positive() })),
 });
@@ -65,7 +66,7 @@ export const TurnReceipt = z.union([
   }).refine((value) => value.subtype === undefined || value.status === "VALIDATION_FAILED"),
 ]);
 
-const sourceId = z.string().min(1).max(256);
+const sourceId = policyReferenceId;
 const source = z.strictObject({ id: sourceId, origin: z.enum(["initial", "editor"]), text: text.min(1) });
 const span = z.strictObject({ source_id: sourceId, start: z.int().nonnegative(), end: z.int().positive() });
 const scope = z.strictObject({
@@ -73,8 +74,8 @@ const scope = z.strictObject({
   entity_ids: z.array(EntityId), region_ids: z.array(identifier),
   domains: z.array(z.enum(["topology", "identity", "characterization", "dialogue", "inventory", "progression", "presentation"])).min(1),
 });
-const rule = { id: sourceId, source: span, scope, supersedes: z.array(sourceId) };
-const scalar = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const rule = { id: policyReferenceId, source: span, scope, supersedes: z.array(policyReferenceId) };
+const scalar = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
 export const DirectiveBundle = z.strictObject({
   version, policy_id: identifier, revision: Revision, story_sha256: digest,
   sources: z.array(source).min(1),
@@ -90,13 +91,13 @@ export const DirectiveBundle = z.strictObject({
     })),
     invariants: z.array(z.strictObject({
       ...rule, protected: z.boolean(),
-      guard: z.strictObject({ id: sourceId, enforcement: z.enum(["structural", "adapter", "semantic"]),
+      guard: z.strictObject({ id: policyReferenceId, enforcement: z.enum(["structural", "adapter", "semantic"]),
         parameters: z.record(sourceId, z.union([scalar, z.array(scalar)])),
       }),
     })),
   }),
   world_patch: z.array(z.strictObject({ entity_id: EntityId, field: identifier, value: json, source: span })),
-  preferences: z.array(z.strictObject({ id: sourceId, source: span, text })),
+  preferences: z.array(z.strictObject({ id: policyReferenceId, source: span, text })),
   unresolved: z.array(z.strictObject({ source: span, reason: text })),
 }).superRefine((bundle, context) => {
   const lengths = new Map<string, number>();
@@ -113,6 +114,16 @@ export const DirectiveBundle = z.strictObject({
       }
     }
   };
+  const policyIds = new Set<string>();
+  const uniqueIds = (items: readonly { id: string }[], path: string[]) => {
+    for (const [index, item] of items.entries()) {
+      if (policyIds.has(item.id)) context.addIssue({ code: "custom", path: [...path, index, "id"], message: "Duplicate policy entry ID" });
+      policyIds.add(item.id);
+    }
+  };
+  uniqueIds(bundle.policy_amendment.generation_rules, ["policy_amendment", "generation_rules"]);
+  uniqueIds(bundle.policy_amendment.invariants, ["policy_amendment", "invariants"]);
+  uniqueIds(bundle.preferences, ["preferences"]);
   validateSpans(bundle.policy_amendment.generation_rules, ["policy_amendment", "generation_rules"]);
   validateSpans(bundle.policy_amendment.invariants, ["policy_amendment", "invariants"]);
   validateSpans(bundle.world_patch, ["world_patch"]);
@@ -156,14 +167,19 @@ export type TurnOperation = z.infer<typeof operation>;
 export type Effect = z.infer<typeof effect>;
 export type Json = z.infer<typeof json>;
 
-export function canonicalJson(value: Json): string {
+/** Validated JSON records may carry explicitly undefined optional object fields. */
+export type CanonicalValue = string | number | boolean | null | CanonicalValue[] |
+  { readonly [key: string]: CanonicalValue | undefined };
+
+export function canonicalJson(value: CanonicalValue): string {
   if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
   if (value !== null && typeof value === "object") {
-    return "{" + Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    return "{" + Object.entries(value).filter((entry): entry is [string, CanonicalValue] => entry[1] !== undefined)
+      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
       .map(([key, entry]) => JSON.stringify(key) + ":" + canonicalJson(entry)).join(",") + "}";
   }
   return JSON.stringify(value);
 }
-export function canonicalDigest(value: Json): string {
+export function canonicalDigest(value: CanonicalValue): string {
   return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
 }

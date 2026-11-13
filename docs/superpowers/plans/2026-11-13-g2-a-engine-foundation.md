@@ -8,6 +8,19 @@ Issue #14 starts after [G1 closed as completed](https://github.com/dhar174/zmach
 - `engine/src/ports.ts` owns interfaces for native execution, policy, authorization, candidates, head publication and receipt lookup. It imports no interpreter or host SDK.
 - `engine/tests/` owns synthetic records and in-memory doubles. Production policy/compiler, transaction recovery, host approval and native compatibility remain downstream.
 
+The following module paths are reserved for downstream implementations. This slice adds no empty modules.
+
+| Path under engine/src | Responsibility |
+| --- | --- |
+| contracts.ts | Shared v1 schemas and wire types |
+| policy/ | Directive compilation and policy evaluation |
+| session/ | Turn coordination, revisions, candidate publication, receipt lookup |
+| auth/ | Trusted session context, leases, and approval verification |
+| native/ | Runtime adapters and checkpoint boundaries |
+| world/ | Remix state, entities, and effects |
+| context/ | Read-only projections, provenance, and narration context |
+| mcp/ | Tool protocol and host integration |
+
 ## Verification
 
 From `engine/`, use Node 24.13.0 and npm 11.12.1. Run `npm ci`, `npm run build`, `npm run typecheck`, `npm run lint`, `npm run test:schema` and `npm test`. The workflow runs these checks on Windows and Ubuntu, with a separate Node 26 job.

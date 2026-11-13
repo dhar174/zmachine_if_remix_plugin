@@ -19,6 +19,11 @@ export interface TrustedApproval {
 }
 export type NativeOperation = Extract<TurnOperation, { kind: "native.line" | "native.character" }>;
 
+/**
+ * Unsupported operations/boundaries return CAPABILITY_MISSING/none. Malformed
+ * or incompatible checkpoint data returns VALIDATION_FAILED/none.
+ * An interrupted native operation returns ABORTED/none.
+ */
 export interface NativePort<IsolatedVM> {
   /** Bind coverage to the exact story and runtime/adapter build. */
   manifest(checkpoint: CombinedCheckpoint): Promise<Result<CapabilityManifest>>;
@@ -35,13 +40,19 @@ export interface NativePort<IsolatedVM> {
   }>>;
 }
 export interface PolicyPort {
-  /** Evaluate at the supplied revision and report rejection without mutation. */
+  /** Evaluate without mutation. Return POLICY_CONFLICT/none for a denied effect,
+   * NEEDS_CLARIFICATION/none for ambiguity, NEEDS_APPROVAL/none for a missing
+   * required grant, or CAPABILITY_MISSING/none for unsupported coverage. */
   evaluate(policy: DirectiveBundle, proposal: TurnProposal, context: TrustedContext): Promise<Result<readonly Effect[]>>;
 }
 export interface AuthorizationPort {
-  /** Use trusted context rather than claims in the untrusted envelope or proposal. */
+  /** Use trusted context. Invalid identity/scope returns VALIDATION_FAILED/none,
+   * outdated revisions return STALE_REVISION/refresh, and missing Editor
+   * authority returns NEEDS_APPROVAL/none. */
   authorize(context: TrustedContext, envelope: TurnEnvelope, proposal: TurnProposal): Promise<Result<void>>;
-  /** Verify the exact candidate, scope, revision and expiry without consuming the grant. */
+  /** Verify without consuming the grant. Identity/scope mismatch returns
+   * VALIDATION_FAILED/none, outdated revisions return STALE_REVISION/refresh,
+   * and a missing, expired or mismatched grant returns NEEDS_APPROVAL/none. */
   verifyApproval(context: TrustedContext, candidate: CandidateHandle, approval: TrustedApproval): Promise<Result<void>>;
 }
 export interface StagedCandidate {
@@ -49,7 +60,8 @@ export interface StagedCandidate {
   readonly checkpoint: CombinedCheckpoint;
 }
 export interface CandidateStore {
-  /** Stage or discard privately. Scope all lookups by the candidate handle. */
+  /** Stage or discard privately. Invalid, absent or out-of-scope handles
+   * return VALIDATION_FAILED/none for lookup. Discard is idempotent for absent handles. */
   put(candidate: StagedCandidate): Promise<Result<void>>;
   get(handle: CandidateHandle): Promise<Result<StagedCandidate>>;
   discard(handle: CandidateHandle): Promise<Result<void>>;
@@ -62,10 +74,13 @@ export interface Publication {
   readonly request_digest: string;
 }
 export interface HeadPublisher {
-  /** Atomically publish the candidate head, receipt and idempotency result, or publish nothing. */
+  /** Atomically publish the candidate head, receipt and idempotency result.
+   * A changed head returns STALE_REVISION/refresh. Inconsistent candidate or
+   * receipt data returns VALIDATION_FAILED/none. Either failure publishes nothing. */
   compareAndPublish(publication: Publication): Promise<Result<CommittedReceipt>>;
 }
 export interface ReceiptLookup {
-  /** A mismatched digest fails with IDEMPOTENCY_CONFLICT. An absent receipt is unknown. */
+  /** An absent scoped receipt is unknown. A mismatched digest returns
+   * VALIDATION_FAILED/none with the IDEMPOTENCY_CONFLICT subtype. */
   find(identity: RequestIdentity, requestDigest: string): Promise<Result<TurnReceipt | undefined>>;
 }

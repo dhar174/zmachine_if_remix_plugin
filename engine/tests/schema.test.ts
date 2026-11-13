@@ -8,10 +8,15 @@ import {
 } from "../src/contracts.ts";
 import { candidate, checkpoint, envelope, manifest, proposal, receipt } from "./fixture.ts";
 
+const read = (name: string): unknown => JSON.parse(readFileSync(new URL(name, import.meta.url), "utf8"));
+const bundleExample = read("../../docs/examples/initial-directive-bundle.v1.json");
+
+
 void test("versioned turn and state records round-trip and reject unknown fields and versions", () => {
   for (const [schema, input] of [
     [TurnEnvelope, envelope], [TurnProposal, proposal], [TurnReceipt, receipt],
     [CandidateHandle, candidate], [CombinedCheckpoint, checkpoint], [CapabilityManifest, manifest],
+    [DirectiveBundle, DirectiveBundle.parse(bundleExample)],
   ] as const) {
     assert.deepEqual(schema.parse(JSON.parse(JSON.stringify(input))), input);
     assert.equal(schema.safeParse({ ...input, version: "2.0.0" }).success, false);
@@ -57,12 +62,11 @@ void test("canonical serialization preserves Unicode, array order, and numeric-l
 });
 
 void test("v1 directive fixture preserves original source mappings and rejects invalid spans", () => {
-  const read = (name: string): unknown => JSON.parse(readFileSync(new URL(name, import.meta.url), "utf8"));
   const original = z.object({
     sources: z.array(z.json()), preferences: z.array(z.json()),
     defaults: z.json(), generation_rules: z.array(z.json()), invariants: z.array(z.json()),
   }).parse(read("../../docs/examples/initial-policy.json"));
-  const v1 = DirectiveBundle.parse(read("../../docs/examples/initial-directive-bundle.v1.json"));
+  const v1 = DirectiveBundle.parse(bundleExample);
   assert.deepEqual(v1.sources, original.sources);
   assert.deepEqual(v1.preferences, original.preferences);
   assert.deepEqual(v1.policy_amendment, {
@@ -74,4 +78,46 @@ void test("v1 directive fixture preserves original source mappings and rejects i
   assert.equal(DirectiveBundle.safeParse({ ...bundle, unresolved: [clause] }).success, true);
   assert.equal(DirectiveBundle.safeParse({ ...bundle, unresolved: [{ ...clause, source: { ...clause.source, end: 4 } }] }).success, false);
   assert.equal(DirectiveBundle.safeParse({ ...bundle, sources: [...sources, ...sources] }).success, false);
+});
+
+void test("proposal references accept actual policy and guard IDs", () => {
+  const bundle = DirectiveBundle.parse(bundleExample);
+  const rules = bundle.policy_amendment.generation_rules.map((rule) => rule.id);
+  const guards = bundle.policy_amendment.invariants.map((rule) => rule.guard.id);
+  assert.ok(rules.length && guards.length);
+  const parsed = TurnProposal.parse({ ...proposal, rule_ids: rules, guard_ids: guards });
+  assert.deepEqual(parsed.rule_ids, rules);
+  assert.deepEqual(parsed.guard_ids, guards);
+  assert.equal(TurnProposal.safeParse({ ...proposal, rule_ids: ["display label"] }).success, false);
+});
+
+void test("explicitly undefined optional record fields serialize as omitted", () => {
+  const request = TurnEnvelope.parse({ ...envelope, intent: undefined });
+  assert.deepEqual(JSON.parse(canonicalJson(request)), envelope);
+  assert.equal(canonicalDigest(request), canonicalDigest(TurnEnvelope.parse(envelope)));
+  const rejected = {
+    version: receipt.version, owner_id: receipt.owner_id, session_id: receipt.session_id,
+    branch_id: receipt.branch_id, generation_id: receipt.generation_id, request_id: receipt.request_id,
+    warnings: [], status: "VALIDATION_FAILED", message: "Invalid", retry: "none",
+  };
+  const parsed = TurnReceipt.parse({ ...rejected, subtype: undefined });
+  assert.deepEqual(JSON.parse(canonicalJson(parsed)), rejected);
+  assert.equal(canonicalDigest(parsed), canonicalDigest(TurnReceipt.parse(rejected)));
+});
+
+void test("directive rejects duplicate policy entries and non-finite guard parameters", () => {
+  const bundle = DirectiveBundle.parse(bundleExample);
+  const rule = bundle.policy_amendment.generation_rules[0];
+  const invariant = bundle.policy_amendment.invariants[0];
+  const preference = bundle.preferences[0];
+  assert.ok(rule && invariant && preference);
+  for (const policy_amendment of [
+    { ...bundle.policy_amendment, generation_rules: [rule, rule] },
+    { ...bundle.policy_amendment, invariants: [invariant, { ...invariant, id: rule.id }] },
+    ...[NaN, Infinity, -Infinity].map((amount) => ({
+      ...bundle.policy_amendment,
+      invariants: [{ ...invariant, guard: { ...invariant.guard, parameters: { amount } } }],
+    })),
+  ]) assert.equal(DirectiveBundle.safeParse({ ...bundle, policy_amendment }).success, false);
+  assert.equal(DirectiveBundle.safeParse({ ...bundle, preferences: [preference, preference] }).success, false);
 });
