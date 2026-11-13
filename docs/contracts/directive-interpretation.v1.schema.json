@@ -1,0 +1,1005 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "context_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "clauses": {
+      "maxItems": 512,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "source_id": {
+                "type": "string",
+                "maxLength": 256,
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "end": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "source_id",
+              "start",
+              "end"
+            ],
+            "additionalProperties": false
+          },
+          "quote": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32000
+          },
+          "entries": {
+            "minItems": 1,
+            "maxItems": 32,
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 256,
+                      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                    },
+                    "scope": {
+                      "type": "object",
+                      "properties": {
+                        "origins": {
+                          "minItems": 1,
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "remix"
+                            ]
+                          }
+                        },
+                        "entity_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 256,
+                            "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                          }
+                        },
+                        "region_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 256,
+                            "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                          }
+                        },
+                        "domains": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "topology",
+                              "identity",
+                              "characterization",
+                              "dialogue",
+                              "inventory",
+                              "progression",
+                              "presentation"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "origins",
+                        "entity_ids",
+                        "region_ids",
+                        "domains"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "generate.location",
+                        "generate.character",
+                        "generate.item",
+                        "generate.connection",
+                        "generate.rule",
+                        "dialogue.adapt",
+                        "presentation.embellish"
+                      ]
+                    },
+                    "triggers": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "player_attempt",
+                          "autonomous_event"
+                        ]
+                      }
+                    },
+                    "decision": {
+                      "type": "string",
+                      "enum": [
+                        "allow",
+                        "deny"
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "permission"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "scope",
+                    "action",
+                    "triggers",
+                    "decision",
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 256,
+                      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                    },
+                    "scope": {
+                      "type": "object",
+                      "properties": {
+                        "origins": {
+                          "minItems": 1,
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "remix"
+                            ]
+                          }
+                        },
+                        "entity_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 256,
+                            "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                          }
+                        },
+                        "region_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 256,
+                            "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                          }
+                        },
+                        "domains": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "topology",
+                              "identity",
+                              "characterization",
+                              "dialogue",
+                              "inventory",
+                              "progression",
+                              "presentation"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "origins",
+                        "entity_ids",
+                        "region_ids",
+                        "domains"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "protected": {
+                      "type": "boolean"
+                    },
+                    "guard": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 256,
+                          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                        },
+                        "enforcement": {
+                          "type": "string",
+                          "enum": [
+                            "structural",
+                            "adapter",
+                            "semantic"
+                          ]
+                        },
+                        "parameters": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "maxLength": 256,
+                            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                          },
+                          "additionalProperties": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "boolean"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "enforcement",
+                        "parameters"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "invariant"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "scope",
+                    "protected",
+                    "guard",
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "entity_id": {
+                      "type": "string",
+                      "maxLength": 256,
+                      "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                    },
+                    "field": {
+                      "type": "string",
+                      "maxLength": 256,
+                      "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                    },
+                    "value": {
+                      "$ref": "#/$defs/__schema0"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "assignment"
+                    }
+                  },
+                  "required": [
+                    "entity_id",
+                    "field",
+                    "value",
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 32000
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "preference"
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 32000
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "unresolved"
+                    }
+                  },
+                  "required": [
+                    "reason",
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "supersession"
+                    },
+                    "old_rule_id": {
+                      "type": "string",
+                      "maxLength": 256,
+                      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                    },
+                    "replacement": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "maxLength": 256,
+                              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                            },
+                            "scope": {
+                              "type": "object",
+                              "properties": {
+                                "origins": {
+                                  "minItems": 1,
+                                  "maxItems": 2,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "native",
+                                      "remix"
+                                    ]
+                                  }
+                                },
+                                "entity_ids": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 256,
+                                    "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                                  }
+                                },
+                                "region_ids": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 256,
+                                    "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                                  }
+                                },
+                                "domains": {
+                                  "minItems": 1,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "topology",
+                                      "identity",
+                                      "characterization",
+                                      "dialogue",
+                                      "inventory",
+                                      "progression",
+                                      "presentation"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "origins",
+                                "entity_ids",
+                                "region_ids",
+                                "domains"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "action": {
+                              "type": "string",
+                              "enum": [
+                                "generate.location",
+                                "generate.character",
+                                "generate.item",
+                                "generate.connection",
+                                "generate.rule",
+                                "dialogue.adapt",
+                                "presentation.embellish"
+                              ]
+                            },
+                            "triggers": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "player_attempt",
+                                  "autonomous_event"
+                                ]
+                              }
+                            },
+                            "decision": {
+                              "type": "string",
+                              "enum": [
+                                "allow",
+                                "deny"
+                              ]
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "permission"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "scope",
+                            "action",
+                            "triggers",
+                            "decision",
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "maxLength": 256,
+                              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                            },
+                            "scope": {
+                              "type": "object",
+                              "properties": {
+                                "origins": {
+                                  "minItems": 1,
+                                  "maxItems": 2,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "native",
+                                      "remix"
+                                    ]
+                                  }
+                                },
+                                "entity_ids": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 256,
+                                    "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                                  }
+                                },
+                                "region_ids": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "maxLength": 256,
+                                    "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                                  }
+                                },
+                                "domains": {
+                                  "minItems": 1,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "topology",
+                                      "identity",
+                                      "characterization",
+                                      "dialogue",
+                                      "inventory",
+                                      "progression",
+                                      "presentation"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "origins",
+                                "entity_ids",
+                                "region_ids",
+                                "domains"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "protected": {
+                              "type": "boolean"
+                            },
+                            "guard": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "maxLength": 256,
+                                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                                },
+                                "enforcement": {
+                                  "type": "string",
+                                  "enum": [
+                                    "structural",
+                                    "adapter",
+                                    "semantic"
+                                  ]
+                                },
+                                "parameters": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string",
+                                    "maxLength": 256,
+                                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                                  },
+                                  "additionalProperties": {
+                                    "anyOf": [
+                                      {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "boolean"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "type": "array",
+                                        "items": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "enforcement",
+                                "parameters"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "kind": {
+                              "type": "string",
+                              "const": "invariant"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "scope",
+                            "protected",
+                            "guard",
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "retained": {
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "maxLength": 256,
+                                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                              },
+                              "scope": {
+                                "type": "object",
+                                "properties": {
+                                  "origins": {
+                                    "minItems": 1,
+                                    "maxItems": 2,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "native",
+                                        "remix"
+                                      ]
+                                    }
+                                  },
+                                  "entity_ids": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                                    }
+                                  },
+                                  "region_ids": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                                    }
+                                  },
+                                  "domains": {
+                                    "minItems": 1,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "topology",
+                                        "identity",
+                                        "characterization",
+                                        "dialogue",
+                                        "inventory",
+                                        "progression",
+                                        "presentation"
+                                      ]
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "origins",
+                                  "entity_ids",
+                                  "region_ids",
+                                  "domains"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "action": {
+                                "type": "string",
+                                "enum": [
+                                  "generate.location",
+                                  "generate.character",
+                                  "generate.item",
+                                  "generate.connection",
+                                  "generate.rule",
+                                  "dialogue.adapt",
+                                  "presentation.embellish"
+                                ]
+                              },
+                              "triggers": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "player_attempt",
+                                    "autonomous_event"
+                                  ]
+                                }
+                              },
+                              "decision": {
+                                "type": "string",
+                                "enum": [
+                                  "allow",
+                                  "deny"
+                                ]
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "permission"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "scope",
+                              "action",
+                              "triggers",
+                              "decision",
+                              "kind"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "maxLength": 256,
+                                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                              },
+                              "scope": {
+                                "type": "object",
+                                "properties": {
+                                  "origins": {
+                                    "minItems": 1,
+                                    "maxItems": 2,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "native",
+                                        "remix"
+                                      ]
+                                    }
+                                  },
+                                  "entity_ids": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                                    }
+                                  },
+                                  "region_ids": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$"
+                                    }
+                                  },
+                                  "domains": {
+                                    "minItems": 1,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "topology",
+                                        "identity",
+                                        "characterization",
+                                        "dialogue",
+                                        "inventory",
+                                        "progression",
+                                        "presentation"
+                                      ]
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "origins",
+                                  "entity_ids",
+                                  "region_ids",
+                                  "domains"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "protected": {
+                                "type": "boolean"
+                              },
+                              "guard": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "maxLength": 256,
+                                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                                  },
+                                  "enforcement": {
+                                    "type": "string",
+                                    "enum": [
+                                      "structural",
+                                      "adapter",
+                                      "semantic"
+                                    ]
+                                  },
+                                  "parameters": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string",
+                                      "maxLength": 256,
+                                      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+                                    },
+                                    "additionalProperties": {
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "boolean"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "type": "array",
+                                          "items": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "number"
+                                              },
+                                              {
+                                                "type": "boolean"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "enforcement",
+                                  "parameters"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "invariant"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "scope",
+                              "protected",
+                              "guard",
+                              "kind"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "old_rule_id",
+                    "replacement",
+                    "retained"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "requires": {
+            "maxItems": 64,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "quote",
+          "entries"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "version",
+    "context_digest",
+    "clauses"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema0"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema0"
+          }
+        }
+      ]
+    }
+  }
+}

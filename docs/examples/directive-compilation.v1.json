@@ -1,0 +1,74 @@
+{
+  "context": {
+    "version": "1.0.0",
+    "policy_id": "policy:example",
+    "story_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "head": {
+      "owner_id": "owner:example",
+      "session_id": "session:example",
+      "branch_id": "branch:example",
+      "generation_id": "generation:example",
+      "expected_revision": 0,
+      "expected_policy_revision": 0
+    },
+    "sources": [
+      {
+        "id": "initial-1",
+        "message_id": "message:1",
+        "origin": "initial",
+        "provenance": "caller_recorded",
+        "text": "Give me a key. Make everything more realistic."
+      }
+    ],
+    "active_rules": [],
+    "history": [],
+    "guards": []
+  },
+  "interpretation": {
+    "version": "1.0.0",
+    "context_digest": "0c0d17b02ed2bf700b452f73b2448a695bd3800c183ceaaca8fff4596954396c",
+    "clauses": [
+      {
+        "id": "key",
+        "source": {
+          "source_id": "initial-1",
+          "start": 0,
+          "end": 14
+        },
+        "quote": "Give me a key.",
+        "entries": [
+          {
+            "kind": "assignment",
+            "entity_id": "remix:player",
+            "field": "inventory:key",
+            "value": true
+          }
+        ]
+      },
+      {
+        "id": "realism",
+        "source": {
+          "source_id": "initial-1",
+          "start": 15,
+          "end": 46
+        },
+        "quote": "Make everything more realistic.",
+        "entries": [
+          {
+            "kind": "unresolved",
+            "reason": "Specify which behavior should change."
+          }
+        ]
+      }
+    ]
+  },
+  "selection": {
+    "version": "1.0.0",
+    "proposal_digest": "88fdf2fcb81ae1c21ea1b8aa6ecedbf87b163eed467f9fad8fca210f766ce2b5",
+    "clause_ids": [
+      "key"
+    ]
+  },
+  "full_preview": "Inactive full proposal (88fdf2fcb81ae1c21ea1b8aa6ecedbf87b163eed467f9fad8fca210f766ce2b5)\n[supported] key: \"Give me a key.\"\n[unresolved] realism: \"Make everything more realistic.\"\nOne-time assignment: remix:player / inventory:key = true\n[unresolved] realism Specify which behavior should change.",
+  "subset_preview": "Inactive subset proposal (4c2f9a8b2c224e0dea635bdefff288ff693a036258dab5ea4c536093bfa9ab59)\n[supported] key: \"Give me a key.\"\n[unresolved] realism: \"Make everything more realistic.\"\nOne-time assignment: remix:player / inventory:key = true\n[unresolved] realism Specify which behavior should change."
+}
