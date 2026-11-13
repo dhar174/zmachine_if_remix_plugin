@@ -186,9 +186,14 @@ the fixture scope. The evidence links above retain the review inputs and limits.
 - #20 and #21 own production native compatibility and combined restoration.
 - #22 owns private import. #30 owns production sandboxing, quotas and rate limits.
 
+On November 10, 2026, the owner accepted the bounded G1-A and G1-B evidence.
+Issues #11, #40 and #12 closed as completed in that order.
+[G1-A closeout](https://github.com/dhar174/zmachine_if_remix_plugin/issues/11#issuecomment-6773294196) · [follow-up closeout](https://github.com/dhar174/zmachine_if_remix_plugin/issues/40#issuecomment-6773296141) · [G1-B closeout](https://github.com/dhar174/zmachine_if_remix_plugin/issues/12#issuecomment-6773298207).
+
 Production adoption, language and deployment require separate decisions and
-evidence. #12 and #40 remain open. The [G1 roadmap](../ROADMAP.md#g1-closeout-status-2026-11-09)
-sets the remaining G2 entry gates, including separate authorization for #14.
+evidence. The [G1 roadmap](../ROADMAP.md#g1-closeout-status-2026-11-09) records
+open issues #3 and #4 and the remaining G2 entry gates, including separate
+authorization for #14.
 
 ### Other G1 decisions
 
