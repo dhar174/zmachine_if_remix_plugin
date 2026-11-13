@@ -1,0 +1,49 @@
+name: engine-foundation
+
+on:
+  push:
+    branches: [main, 'codex/issue-14-engine-foundation']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  node24:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: engine/.node-version
+      - run: npm install --global npm@11.12.1
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:schema
+      - run: npm test
+
+  node26-compatibility:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:schema
+      - run: npm test

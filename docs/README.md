@@ -14,7 +14,7 @@
 
 [remix-directive.schema.json](contracts/remix-directive.schema.json) specifies a **normalized policy document**, not a complete engine or a guarantee of semantic correctness. [initial-policy.json](examples/initial-policy.json) is a synthetic example. Initial state edits use a separate proposed world patch, as explained in the policy document.
 
-The schema is a design artifact. Valid JSON proves neither user authorization, correct interpretation of English, nor that a story adapter can perform a requested change. No executable runtime uses this contract yet.
+The v0.2 schema remains a draft for the normalized policy portion. The G2-A [v1 directive bundle example](examples/initial-directive-bundle.v1.json) nests defaults, rules and invariants under the policy amendment and carries preferences, the one-time patch, and unresolved clauses separately. The [engine validators](../engine/src/contracts.ts) check the v1 structure and Unicode code-point spans. Source text and rule mappings from the draft example are preserved. Authorization, interpretation, and adapter capability require their own checks.
 
 ## Normative ownership
 
