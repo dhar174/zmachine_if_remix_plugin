@@ -136,7 +136,7 @@ export class TurnService {
       if (requestKey(proposal) !== id || canonicalDigest(expected(proposal)) !== canonicalDigest(wanted) ||
           Buffer.byteLength(canonicalJson([proposal, compiler.data])) > limits.checkpoint_bytes) return reject(invalid());
       const nativeInput = proposal.operations.find(({ kind }) => kind === "native.line" || kind === "native.character");
-      if ((nativeInput?.kind === "native.line" && envelope.input.kind !== "line") ||
+      if ((nativeInput?.kind === "native.line" && (envelope.input.kind !== "line" || envelope.input.text !== nativeInput.text)) ||
           (nativeInput?.kind === "native.character" &&
             (envelope.input.kind !== "character" || envelope.input.value !== nativeInput.value))) {
         return reject(failure("VALIDATION_FAILED", "The proposal does not match the request input boundary."));
@@ -177,8 +177,8 @@ export class TurnService {
         if (inspect) {
           const readable = new Set(resolved.plan.operations.flatMap(({ effects }) => effects.filter(({ change }) => change === "read")
             .map(({ entity_id, field }) => canonicalJson([entity_id, field]))));
-          const facts = image.snapshot.entities.flatMap(({ id: entity, surfaces }) => surfaces.flatMap(({ field, domain, fact }) =>
-            domain === "presentation" && fact.state === "present" && readable.has(canonicalJson([entity, field])) ?
+          const facts = image.snapshot.entities.flatMap(({ id: entity, surfaces }) => surfaces.flatMap(({ field, domain, coverage, fact }) =>
+            domain === "presentation" && coverage === "complete" && fact.state === "present" && readable.has(canonicalJson([entity, field])) ?
               [canonicalJson({ entity, field, value: fact.value })] : []));
           this.authority.finish(wanted, envelope.request_id);
           return ok({ kind: "inspection", facts, time_cost: 0 });

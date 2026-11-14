@@ -11,7 +11,7 @@ import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { TurnService } from "../src/turn/service.ts";
 import { TurnImage } from "../src/turn/contracts.ts";
-import { canonicalJson } from "../src/contracts.ts";
+import { canonicalDigest, canonicalJson } from "../src/contracts.ts";
 import type { Permit } from "../src/auth/authority.ts";
 import type { FaultPoint } from "../src/turn/contracts.ts";
 import type { Result } from "../src/ports.ts";
@@ -221,6 +221,7 @@ void test("A30 a verified #15 subset, policy, overlay patch, grant and receipt p
     assert.deepEqual(saved.head.amendment, request.proposal.amendment.compiled);
     assert.equal(saved.head.snapshot.policy.policy_amendment.generation_rules[0]?.id, "rule:no-generation");
     assert.deepEqual(saved.head.snapshot.policy.world_patch, []);
+    assert.deepEqual(saved.head.snapshot.policy.unresolved, request.state.snapshot.policy.unresolved);
     assert.equal(saved.head.snapshot.entities[0]?.surfaces[0]?.fact.state, "present");
     assert.match(canonicalJson(saved.head.snapshot.entities), /Updated/);
     assert.equal(saved.candidates[0]?.spent, 1);
@@ -347,4 +348,34 @@ void test("lease consumption and final authority recheck share the publication b
     assert.equal(database(path).receipts.length, 1);
     assert.equal(receipt.receipt.time_cost, 0);
   } finally { release(); service.close(); }
+});
+
+void test("native line text must match the exact envelope before execution", (t) => {
+  const path = temp(t);
+  const fixture = makeFixture();
+  const service = new TurnService(path, fixture);
+  const request = play();
+  try {
+    take(service.initialize(request.state));
+    rejects(service.prepareTurn(request.access, request.envelope, { ...request.proposal,
+      operations: [{ kind: "native.line", text: "open " }] }), "VALIDATION_FAILED");
+    assert.equal(fixture.executions, 0);
+    assert.deepEqual(database(path).head, request.state);
+  } finally { service.close(); }
+});
+
+void test("inspection withholds a presentation fact from an incompletely covered surface", (t) => {
+  const service = new TurnService(temp(t), makeFixture());
+  const request = play();
+  const surface = request.state.snapshot.entities[0]?.surfaces[0];
+  assert.ok(surface);
+  surface.coverage = "incomplete";
+  request.state.checkpoint.remix_state_ref = "blob:" + canonicalDigest(request.state.snapshot.entities);
+  try {
+    take(service.initialize(request.state));
+    const inspected = take(service.prepareTurn(request.access, { ...request.envelope, intent: "inspect" }, {
+      ...request.proposal, operations: [{ kind: "inspect.entity", entity_id: endpoint.entity_id }], declared_effects: [],
+    }));
+    assert.deepEqual(inspected, { kind: "inspection", facts: [], time_cost: 0 });
+  } finally { service.close(); }
 });

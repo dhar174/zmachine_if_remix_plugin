@@ -72,6 +72,12 @@ export function edit(requestId = "request:edit") {
 
 export function amendment() {
   const request = edit("request:amendment");
+  const priorPolicy = request.state.snapshot.policy;
+  const sourceId = priorPolicy.sources[0]?.id;
+  if (!sourceId) throw new Error("Fixture needs a prior source.");
+  priorPolicy.unresolved.push({ source: { source_id: sourceId, start: 0, end: 1 }, reason: "Retain prior clarification." });
+  request.state.checkpoint.policy_ref = "blob:" + canonicalDigest({ policy: priorPolicy,
+    applicability: request.state.snapshot.applicability, history: request.state.snapshot.history });
   const text = "Change the label. Disable creation. Make everything realistic.";
   const source = { id: "edit", message_id: "message:1", origin: "editor", provenance: "caller_recorded", text };
   const context = { version: "1.0.0", head, story_sha256: state.snapshot.story_sha256, policy_id: state.snapshot.policy.policy_id,

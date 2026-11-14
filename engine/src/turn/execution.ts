@@ -30,7 +30,7 @@ function nextPolicy(before: TurnImage, plan: EffectPlan) {
     sources.set(source.id, source);
   }
   const next = DirectiveBundle.parse({ ...policy, revision: policy.revision + 1, sources: [...sources.values()],
-    world_patch: [], preferences, unresolved: [], policy_amendment: { ...policy.policy_amendment,
+    world_patch: [], preferences, policy_amendment: { ...policy.policy_amendment,
       generation_rules: rules.flatMap(({ kind, ...rule }) => kind === "permission" ? [rule] : []),
       invariants: rules.flatMap(({ kind, ...rule }) => kind === "invariant" ? [rule] : []),
     } });
