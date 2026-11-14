@@ -193,7 +193,7 @@ function checkPolicy(snapshot: ResolverSnapshot, operation: ResolverOperation, f
   }
 }
 
-export function resolvePolicy(rawSnapshot: unknown, rawProposal: unknown): Resolution {
+function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean): Resolution {
   const ruleIds = new Set<string>();
   const capabilityIds = new Set<string>();
   const evidenceIds = new Set<string>();
@@ -222,7 +222,7 @@ export function resolvePolicy(rawSnapshot: unknown, rawProposal: unknown): Resol
     assertSnapshot(snapshot, rules);
     const amendment = prepareAmendment(snapshot, proposal, rules);
     const digest = canonicalDigest(proposal);
-    if (snapshot.mode === "EDITOR" && (proposal.amendment || amendment.operations.some((op) => op.kind !== "inspect.entity"))) {
+    if (!preview && snapshot.mode === "EDITOR" && (proposal.amendment || amendment.operations.some((op) => op.kind !== "inspect.entity"))) {
       if (snapshot.editor_authority?.proposal_digest !== digest) {
         throw new ResolutionProblem("NEEDS_APPROVAL", "exact_authority", "The exact proposal needs verified Editor authority.");
       }
@@ -280,6 +280,20 @@ export function resolvePolicy(rawSnapshot: unknown, rawProposal: unknown): Resol
     return { ok: false, error: { status: error.status, reason: error.reason, message: error.message,
       retry: error.status === "STALE_REVISION" ? "refresh" : "none" }, trace: trace() };
   }
+}
+
+export function resolvePolicy(snapshot: unknown, proposal: unknown): Resolution {
+  return evaluate(snapshot, proposal, false);
+}
+
+/** Server-side preview only. Its result carries neither a plan nor authority. */
+export function previewPolicy(snapshot: unknown, proposal: unknown):
+  { ok: true; preview: Omit<EffectPlan, "version"> } | Extract<Resolution, { ok: false }> {
+  const result = evaluate(snapshot, proposal, true);
+  if (!result.ok) return result;
+  const { version: schemaVersion, ...preview } = result.plan;
+  void schemaVersion;
+  return { ok: true, preview };
 }
 
 export const policyResolver: PolicyResolverPort = { resolve: resolvePolicy };
