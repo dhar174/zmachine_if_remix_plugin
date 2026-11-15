@@ -57,7 +57,7 @@
             "maxItems": 32,
             "type": "array",
             "items": {
-              "anyOf": [
+              "oneOf": [
                 {
                   "type": "object",
                   "properties": {
@@ -260,37 +260,21 @@
                           "additionalProperties": {
                             "anyOf": [
                               {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
+                                "type": [
+                                  "string",
+                                  "number",
+                                  "boolean",
+                                  "null"
                                 ]
                               },
                               {
                                 "type": "array",
                                 "items": {
-                                  "anyOf": [
-                                    {
-                                      "type": "string"
-                                    },
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "boolean"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "type": [
+                                    "string",
+                                    "number",
+                                    "boolean",
+                                    "null"
                                   ]
                                 }
                               }
@@ -398,7 +382,7 @@
                       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]*$"
                     },
                     "replacement": {
-                      "anyOf": [
+                      "oneOf": [
                         {
                           "type": "object",
                           "properties": {
@@ -601,37 +585,21 @@
                                   "additionalProperties": {
                                     "anyOf": [
                                       {
-                                        "anyOf": [
-                                          {
-                                            "type": "string"
-                                          },
-                                          {
-                                            "type": "number"
-                                          },
-                                          {
-                                            "type": "boolean"
-                                          },
-                                          {
-                                            "type": "null"
-                                          }
+                                        "type": [
+                                          "string",
+                                          "number",
+                                          "boolean",
+                                          "null"
                                         ]
                                       },
                                       {
                                         "type": "array",
                                         "items": {
-                                          "anyOf": [
-                                            {
-                                              "type": "string"
-                                            },
-                                            {
-                                              "type": "number"
-                                            },
-                                            {
-                                              "type": "boolean"
-                                            },
-                                            {
-                                              "type": "null"
-                                            }
+                                          "type": [
+                                            "string",
+                                            "number",
+                                            "boolean",
+                                            "null"
                                           ]
                                         }
                                       }
@@ -666,7 +634,7 @@
                       "maxItems": 32,
                       "type": "array",
                       "items": {
-                        "anyOf": [
+                        "oneOf": [
                           {
                             "type": "object",
                             "properties": {
@@ -869,37 +837,21 @@
                                     "additionalProperties": {
                                       "anyOf": [
                                         {
-                                          "anyOf": [
-                                            {
-                                              "type": "string"
-                                            },
-                                            {
-                                              "type": "number"
-                                            },
-                                            {
-                                              "type": "boolean"
-                                            },
-                                            {
-                                              "type": "null"
-                                            }
+                                          "type": [
+                                            "string",
+                                            "number",
+                                            "boolean",
+                                            "null"
                                           ]
                                         },
                                         {
                                           "type": "array",
                                           "items": {
-                                            "anyOf": [
-                                              {
-                                                "type": "string"
-                                              },
-                                              {
-                                                "type": "number"
-                                              },
-                                              {
-                                                "type": "boolean"
-                                              },
-                                              {
-                                                "type": "null"
-                                              }
+                                            "type": [
+                                              "string",
+                                              "number",
+                                              "boolean",
+                                              "null"
                                             ]
                                           }
                                         }

@@ -2,6 +2,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import { HeadExpectation, OwnerId } from "../contracts.ts";
 import type { Authority } from "./authority.ts";
+import { capture, opaque, requestId, sessionRef, subset, target } from "../fixture/session-contracts.ts";
+import type { TurnService } from "../turn/service.ts";
 
 export interface BrowserSession {
   readonly owner: z.infer<typeof OwnerId>;
@@ -37,7 +39,14 @@ async function body(request: IncomingMessage): Promise<unknown> {
 }
 
 /** Framework-neutral local control endpoints. No tool route is mounted here. */
-export function browserControl(authority: Pick<Authority, "display" | "confirm" | "control" | "issueLease" | "revokeCandidate" | "revokeLease">, origin: string, verifyBrowser: BrowserVerifier | null) {
+type FixtureControl = Pick<TurnService, "issueFixtureLaunch" | "readFixture" | "recordFixtureSource" |
+  "readFixtureSubset" | "selectFixtureSubset">;
+const fixtureMode = target.extend({ command: z.enum(["/play", "/edit"]) });
+const subsetForm = subset.omit({ clause_ids: true }).extend({ clause_ids: z.string().max(8192) });
+const formRevision = (value: unknown) => typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value) ? Number(value) : value;
+
+export function browserControl(authority: Pick<Authority, "display" | "confirm" | "control" | "issueLease" | "revokeCandidate" | "revokeLease">,
+  origin: string, verifyBrowser: BrowserVerifier | null, fixture?: FixtureControl) {
   if (new URL(origin).origin !== origin) throw new Error("Use an exact control origin.");
   return async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     const reply = (status: number, value: unknown) => {
@@ -56,12 +65,56 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
       if (!session) return reply(401, { error: "BROWSER_AUTH_REQUIRED" });
       const result = <T>(value: import("../ports.ts").Result<T>) =>
         reply(value.ok ? 200 : value.error.status === "VALIDATION_FAILED" ? 404 : 409, value);
+      const hidden = (name: string, value: string) => `<input type="hidden" name="${name}" value="${escaped(value)}">`;
+      const csrfField = hidden("csrf", session.csrf);
+      const page = (title: string, content: string) => {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><title>${title}</title><h1>${title}</h1>${content}</html>`);
+      };
+      if (fixture && request.method === "GET" && url.pathname === "/session") {
+        page("Open the synthetic fixture", "<p>The service stores synthetic fixture state and browser-recorded directives locally. " +
+          "Authorized directive text and visible facts are sent to ChatGPT. Use synthetic text only. " +
+          "ChatGPT retains chat data according to your account settings. The local trial store is retained for verification until removed.</p>" +
+          `<form method="post" action="/fixture-launch">${csrfField}<button>Consent and create launch handle</button></form>`);
+        return;
+      }
+      if (fixture && request.method === "GET" && url.pathname === "/fixture-control") {
+        const scope = sessionRef.safeParse({ session_id: url.searchParams.get("session_id"), branch_id: url.searchParams.get("branch_id") });
+        const logical = requestId.safeParse(url.searchParams.get("request_id"));
+        if (!scope.success || !logical.success) return reply(404, { error: "UNAVAILABLE" });
+        const view = fixture.readFixture({ owner_id: session.owner, ...scope.data });
+        if (!view.ok) return result(view);
+        const { head, state } = view.value;
+        const fields = Object.entries({ ...head, request_id: logical.data }).map(([key, value]) => hidden(key, String(value))).join("");
+        const choices = state === "draft" ? '<option value="initial">Initial directive</option>' :
+          '<option value="assignment">One-time assignment</option><option value="amendment">Policy amendment</option>';
+        const mode = state === "draft" ? "" : `<form method="post" action="/fixture-mode">${csrfField}${fields}
+          <button name="command" value="/play">Use Play mode</button><button name="command" value="/edit">Use Editor mode</button></form>`;
+        page("Record a fixture directive", `<form method="post" action="/fixture-source">${csrfField}${fields}
+          <label>Purpose <select name="purpose">${choices}</select></label>
+          <label>Exact directive <textarea name="text" required maxlength="4096"></textarea></label>
+          <button>Record directive</button></form>${mode}`);
+        return;
+      }
+      if (fixture && request.method === "GET" && url.pathname === "/fixture-subset") {
+        const ref = opaque("source").safeParse(url.searchParams.get("id"));
+        if (!ref.success) return reply(404, { error: "UNAVAILABLE" });
+        const preview = fixture.readFixtureSubset(session.owner, ref.data);
+        if (!preview.ok) return result(preview);
+        const clauses = preview.value.clauses.map(({ id, quote, status, requires }) =>
+          `<li><code>${escaped(id)}</code> (${escaped(status)}): ${escaped(quote)}${requires.length ? " (requires " +
+            escaped(requires.join(", ")) + ")" : ""}</li>`).join("");
+        page("Select the supported initial clauses", `<ul>${clauses}</ul><form method="post" action="/fixture-subset">
+          ${csrfField}${hidden("source_ref", ref.data)}${hidden("proposal_digest", preview.value.digest)}
+          <label>Clause IDs, separated by commas <input name="clause_ids" required maxlength="8192"></label>
+          <button>Preview selected changes</button></form>`);
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/candidate") {
         const id = candidateId.safeParse(url.searchParams.get("id"));
         if (!id.success) return reply(404, { error: "UNAVAILABLE" });
         const display = authority.display(session.owner, id.data);
         if (!display.ok) return result(display);
-        const hidden = (name: string, value: string) => `<input type="hidden" name="${name}" value="${escaped(value)}">`;
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(`<!doctype html><title>Review Editor change</title><h1>Review Editor change</h1><pre>${escaped(display.value.diff)}</pre><form method="post" action="/approve">${hidden("candidate", id.data)}${hidden("digest", display.value.digest)}${hidden("csrf", session.csrf)}<button>Approve this exact change</button></form>`);
         return;
@@ -74,6 +127,45 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
       const { csrf, ...data } = input.data;
       if (!session.csrf || (csrf ?? request.headers["x-csrf-token"]) !== session.csrf) {
         return reply(403, { error: "CONTROL_CSRF" });
+      }
+      if (fixture && url.pathname === "/fixture-launch") {
+        if (!z.strictObject({}).safeParse(data).success) return reply(400, { error: "INVALID_CONTROL" });
+        const launch = fixture.issueFixtureLaunch(session.owner);
+        if (!launch.ok) return result(launch);
+        page("Fixture launch authorized", `<p>Copy this launch handle into ChatGPT.</p><pre>${escaped(launch.value)}</pre>`);
+        return;
+      }
+      if (fixture && (url.pathname === "/fixture-source" || url.pathname === "/fixture-mode")) {
+        const values = { ...data, expected_revision: formRevision(data.expected_revision),
+          expected_policy_revision: formRevision(data.expected_policy_revision) };
+        if (url.pathname === "/fixture-source") {
+          const parsed = capture.safeParse(values);
+          if (!parsed.success) return reply(400, { error: "INVALID_CONTROL" });
+          const record = fixture.recordFixtureSource(session.owner, parsed.data);
+          if (!record.ok) return result(record);
+          page("Directive recorded", `<p>Copy this source reference into ChatGPT.</p><pre>${escaped(record.value)}</pre>`);
+          return;
+        }
+        const parsed = fixtureMode.safeParse(values);
+        if (!parsed.success) return reply(400, { error: "INVALID_CONTROL" });
+        const { command, request_id, ...head } = parsed.data;
+        const view = fixture.readFixture({ owner_id: session.owner, session_id: head.session_id, branch_id: head.branch_id });
+        if (!view.ok) return result(view);
+        if (view.value.state === "draft") return reply(409, { error: "NEEDS_APPROVAL" });
+        return result(authority.control(session.owner, { ...head, owner_id: session.owner }, request_id, command));
+      }
+      if (fixture && url.pathname === "/fixture-subset") {
+        const form = subsetForm.safeParse(data);
+        const parsed = subset.safeParse(form.success ? {
+          ...form.data, clause_ids: form.data.clause_ids.split(",").map((id) => id.trim()),
+        } : data);
+        if (!parsed.success) return reply(400, { error: "INVALID_CONTROL" });
+        const prepared = fixture.selectFixtureSubset(session.owner, parsed.data);
+        if (!prepared.ok) return result(prepared);
+        if (prepared.value.kind !== "prepared") return reply(409, { error: "INVALID_CONTROL" });
+        response.writeHead(303, { location: "/candidate?id=" + encodeURIComponent(prepared.value.handle.candidate_id) });
+        response.end();
+        return;
       }
       if (url.pathname === "/approve") {
         const parsed = approve.safeParse(data);

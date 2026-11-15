@@ -1,6 +1,6 @@
 # Chatbot plugin, tools, and trust boundary
 
-**Proposed contract v0.2.** Tool and skill names below are design names, not currently installed capabilities. No manifest or service is implemented by this change.
+**Product contract v0.2.** The [Issue #19 fixture contract](../contracts/fixture-mcp.md) defines the implemented synthetic subset. Installation and host behavior require their own [evidence](../evidence/g2-live-kernel.md).
 
 ## 1. Packaging and model placement
 

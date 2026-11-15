@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { z } from "zod";
 import { DirectiveBundle, HeadExpectation, canonicalDigest } from "../src/contracts.ts";
-import { ResolverSnapshot } from "../src/policy/resolver-contracts.ts";
 import type { Result } from "../src/ports.ts";
-import { TurnImage, failure, ok } from "../src/turn/contracts.ts";
-import type { Execution, TurnExecutor } from "../src/turn/contracts.ts";
+import { TurnImage } from "../src/turn/contracts.ts";
 import { compileDirective, selectDirectiveSubset } from "../src/policy/directive-compiler.ts";
 import { base, checkpoint, envelope } from "./fixture.ts";
 
@@ -16,7 +13,6 @@ export function take<T>(result: Result<T> | { ok: false; diagnostics: unknown })
 export const endpoint = { entity_id: "remix:room", field: "presentation:label" };
 const nativeField = { entity_id: "native:room", field: "progression:counter" };
 const nativeWrite = { ...nativeField, change: "write" as const };
-const nativeState = z.strictObject({ counter: z.int().nonnegative(), rng: z.int().nonnegative(), output: z.array(z.string()) });
 const imageNative = { counter: 0, rng: 7, output: [] };
 const head = HeadExpectation.parse({
   owner_id: base.owner_id, session_id: base.session_id, branch_id: base.branch_id, generation_id: base.generation_id,
@@ -105,88 +101,4 @@ export function amendment(current?: TurnImage) {
   return { ...request, proposal: { ...request.proposal, operations: [], amendment: { compiled, interpretation, selection } }, context };
 }
 
-export function makeFixture(mutate: (execution: Execution) => void = () => {}, gate: () => Promise<void> = () => Promise.resolve()) {
-  let executions = 0;
-  const executor: TurnExecutor = {
-    project(image, proposal) {
-      const operation = proposal.operations[0];
-      if (operation?.kind !== "native.line" && operation?.kind !== "native.character") return ok(null);
-      const { story_sha256, runtime_build, adapter_build, checkpoint_format } = image.checkpoint;
-      const identity = { story_sha256, runtime_build, adapter_build, checkpoint_format };
-      const pending = image.checkpoint.native_state.pending_input;
-      const capability = { id: "capability:fixture", operation: operation.kind, boundary: pending, preconditions: [],
-        effects: [nativeWrite], coverage: "supported" as const, evidence: ["synthetic fixture"], recovery: "checkpoint" as const };
-      const projected = ResolverSnapshot.shape.native.parse({ identity, pending, manifest: { version: "1.0.0", ...identity,
-        capabilities: [capability] }, bindings: [{ capability_id: capability.id, operation_digest: canonicalDigest(operation),
-        preconditions: [], suppressed_surfaces: [] }] });
-      return ok(projected);
-    },
-    async execute(image, plan, budget, signal) {
-      executions++;
-      await gate();
-      if (signal.aborted || plan.operations.length > budget.operations) return failure("ABORTED", "Fixture stopped.");
-      const native = nativeState.parse(image.native);
-      const entities = image.snapshot.entities;
-      let pending = image.checkpoint.native_state.pending_input;
-      const events = [];
-      const output = [];
-      let outcome: Execution["outcome"] = "success";
-      for (const { operation } of plan.operations) {
-        if (operation.kind === "remix.assign") {
-          const field = entities.find(({ id }) => id === operation.entity_id)?.surfaces.find(({ field }) => field === operation.field);
-          if (!field) return failure("VALIDATION_FAILED", "Unknown fixture field.");
-          field.fact = { state: "present", value: operation.value, evidence_id: field.fact.evidence_id };
-          events.push({ kind: "assignment", field: field.field });
-        }
-        if (operation.kind === "inventory.transfer") {
-          const holder = entities.find(({ id }) => id === operation.item)?.surfaces.find(({ field }) => field === "inventory:holder");
-          const from = entities.find(({ id }) => id === operation.from)?.surfaces.find(({ field }) => field === "inventory:contents");
-          const to = entities.find(({ id }) => id === operation.to)?.surfaces.find(({ field }) => field === "inventory:contents");
-          if (holder?.fact.state !== "present" || from?.fact.state !== "present" || to?.fact.state !== "present" ||
-              !Array.isArray(from.fact.value) || !Array.isArray(to.fact.value)) return failure("VALIDATION_FAILED", "Missing fixture inventory.");
-          holder.fact.value = operation.to;
-          from.fact.value = from.fact.value.filter((item) => item !== operation.item);
-          to.fact.value = [...to.fact.value, operation.item];
-          events.push({ kind: "inventory_transfer", item: operation.item });
-        }
-        if (operation.kind === "native.line" || operation.kind === "native.character") {
-          native.counter++;
-          native.rng = (native.rng * 17 + 11) % 251;
-          pending = { kind: operation.kind === "native.line" ? "character" : "line" };
-          outcome = operation.kind === "native.line" && operation.text === "look" ? "success" : "failure";
-          output.push(outcome === "success" ? "You look around.\r\n" : "The door stays shut.\r\n");
-          native.output.push(...output);
-          const field = entities.find(({ id }) => id === nativeField.entity_id)?.surfaces[0];
-          if (!field) return failure("VALIDATION_FAILED", "Missing native surface.");
-          field.fact = { state: "present", value: native.counter, evidence_id: field.fact.evidence_id };
-          events.push({ kind: "native_attempt", counter: native.counter, draw: native.rng });
-        }
-      }
-      const result: Execution = { native, entities, pending, events, output, facts: output.length ? [outcome === "success" ? "The room was observed." : "The door remains shut."] : [],
-        effects: plan.operations.flatMap(({ effects }) => effects), time_cost: plan.time === "native" ? 1 : 0,
-        outcome };
-      mutate(result);
-      return ok(result);
-    },
-    verifyNative(before, after, plan) {
-      const old = nativeState.parse(before.native);
-      const next = nativeState.parse(after.native);
-      const exposed = after.entities.find(({ id }) => id === nativeField.entity_id)?.surfaces[0]?.fact;
-      const operation = plan.operations[0]?.operation;
-      const expected = operation?.kind === "native.line" ? "character" : "line";
-      const successful = operation?.kind === "native.line" && operation.text === "look";
-      return next.counter === old.counter + 1 && next.rng === (old.rng * 17 + 11) % 251 &&
-        after.pending.kind === expected && exposed?.state === "present" && exposed.value === next.counter &&
-        after.time_cost === 1 && after.outcome === (successful ? "success" : "failure") && after.output.length === 1 &&
-        after.output[0] === (successful ? "You look around.\r\n" : "The door stays shut.\r\n") &&
-        canonicalDigest(next.output) === canonicalDigest([...old.output, ...after.output])
-        ? ok(undefined) : failure("VALIDATION_FAILED", "Fixture native postconditions do not hold.");
-    },
-    verifyRestore(image) {
-      const parsed = nativeState.safeParse(structuredClone(image.native));
-      return parsed.success && image.checkpoint.checkpoint_format === "format:synthetic" ? ok(undefined) :
-        failure("VALIDATION_FAILED", "Unsupported fixture checkpoint.");
-    },
-  };
-  return { ...executor, get executions() { return executions; } };
-}
+export { createFixtureExecutor as makeFixture } from "../src/fixture/synthetic-world.ts";

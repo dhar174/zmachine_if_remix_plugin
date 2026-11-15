@@ -198,6 +198,12 @@ function conflicts(input: Input, old: PolicyRule, clause: Clause): boolean {
     if (entry.kind === "assignment") {
       const origin = entry.entity_id.startsWith("native:") ? "native" : "remix";
       const guard = input.guards.find((definition) => definition.id === old.guard.id);
+      // The registered structural resolver guards the exact field in this parameter.
+      const exactField = old.guard.parameters.field;
+      if (old.guard.id === "field.unchanged" && old.guard.enforcement === "structural" &&
+          guard?.enforcement === "structural" && typeof exactField === "string" &&
+          Object.keys(old.guard.parameters).length === 1 && guard.protected_fields.includes(exactField) &&
+          entry.field !== exactField) return false;
       return (!guard || guard.protected_fields.includes(entry.field)) && old.scope.origins.includes(origin) &&
         (!old.scope.entity_ids.length || old.scope.entity_ids.includes(entry.entity_id));
     }
