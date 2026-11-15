@@ -8,9 +8,10 @@ import { DurableReceipt, Stage, TurnImage } from "./contracts.ts";
 import type { Access } from "./contracts.ts";
 
 export const branchKey = (scope: Access) => canonicalJson([scope.owner_id, scope.session_id, scope.branch_id]);
+const dispositions = ["active", "cancelled", "expired"] as const;
 const requestRow = z.object({
   envelope: z.string(), proposal: z.string().nullable(), stage: z.string().nullable(),
-  claim: z.string().nullable(), receipt: z.string().nullable(), cancelled: z.number(),
+  claim: z.string().nullable(), receipt: z.string().nullable(), cancelled: z.union([z.literal(0), z.literal(1), z.literal(2)]),
 });
 const parseJson = (text: string): unknown => JSON.parse(text) as unknown;
 
@@ -96,6 +97,10 @@ export class SQLiteTurns {
     return image;
   }
 
+  hasCheckpoint(id: string): boolean {
+    return this.db.prepare("SELECT 1 FROM checkpoints WHERE id=?").get(id) !== undefined;
+  }
+
   initialize(image: TurnImage): void {
     this.insertCheckpoint(image, null);
     this.db.prepare("UPDATE checkpoints SET published=1 WHERE id=?").run(image.checkpoint.checkpoint_id);
@@ -108,7 +113,7 @@ export class SQLiteTurns {
     const data = requestRow.parse(row);
     const stage = data.stage === null ? null : Stage.parse(parseJson(data.stage));
     const receipt = data.receipt === null ? null : DurableReceipt.parse(parseJson(data.receipt));
-    return { ...data, stage, receipt };
+    return { ...data, stage, receipt, disposition: dispositions[data.cancelled] };
   }
 
   bind(id: string, envelope: string, stage: Stage): void {
@@ -120,8 +125,9 @@ export class SQLiteTurns {
     this.db.prepare("UPDATE requests SET claim=? WHERE id=? AND receipt IS NULL").run(claim, id);
   }
 
-  cancel(id: string): void {
-    this.db.prepare("UPDATE requests SET cancelled=1,stage=NULL,claim=NULL WHERE id=? AND receipt IS NULL").run(id);
+  cancel(id: string, reason: "cancelled" | "expired" = "cancelled"): void {
+    this.db.prepare("UPDATE requests SET cancelled=?,stage=NULL,claim=NULL WHERE id=? AND receipt IS NULL")
+      .run(dispositions.indexOf(reason), id);
   }
 
   insertCheckpoint(image: TurnImage, claim: string | null): void {
@@ -151,13 +157,14 @@ export class SQLiteTurns {
   collect(now: number): number {
     const discarded = this.db.prepare("DELETE FROM checkpoints WHERE published=0 AND (claim IS NULL OR claim NOT IN (SELECT claim FROM requests WHERE claim IS NOT NULL))")
       .run();
-    this.db.prepare("UPDATE requests SET stage=NULL WHERE claim IS NULL AND json_extract(stage,'$.handle.expires_at')<=?")
+    this.db.prepare("UPDATE requests SET cancelled=CASE WHEN json_extract(stage,'$.editor')=1 THEN 2 ELSE cancelled END, stage=NULL WHERE claim IS NULL AND json_extract(stage,'$.handle.expires_at')<=?")
       .run(new Date(now).toISOString());
     this.db.prepare("DELETE FROM authority WHERE area IN ('leases','candidates') AND json_extract(value,'$.expires')<=?").run(now);
+    this.db.exec("DELETE FROM authority WHERE area='requestCandidates' AND NOT EXISTS (SELECT 1 FROM authority AS candidate WHERE candidate.area='candidates' AND candidate.key=json_extract(authority.value,'$'))");
     return Number(discarded.changes);
   }
 }
 
 /** Synchronous atomic storage boundary for one active coordinator per database. */
 export type TurnStore = Pick<SQLiteTurns, "transaction" | "close" | "authority" | "head" | "initialize" |
-  "request" | "bind" | "claim" | "cancel" | "insertCheckpoint" | "publish" | "collect">;
+  "hasCheckpoint" | "request" | "bind" | "claim" | "cancel" | "insertCheckpoint" | "publish" | "collect">;

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
@@ -10,8 +11,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { TurnService } from "../src/turn/service.ts";
-import { TurnImage } from "../src/turn/contracts.ts";
-import { canonicalDigest, canonicalJson } from "../src/contracts.ts";
+import { TurnImage, limits } from "../src/turn/contracts.ts";
+import { browserControl } from "../src/auth/browser-control.ts";
+import { BranchId, canonicalDigest, canonicalJson } from "../src/contracts.ts";
 import type { Permit } from "../src/auth/authority.ts";
 import type { FaultPoint } from "../src/turn/contracts.ts";
 import type { Result } from "../src/ports.ts";
@@ -221,7 +223,16 @@ void test("A30 a verified #15 subset, policy, overlay patch, grant and receipt p
     assert.deepEqual(saved.head.amendment, request.proposal.amendment.compiled);
     assert.equal(saved.head.snapshot.policy.policy_amendment.generation_rules[0]?.id, "rule:no-generation");
     assert.deepEqual(saved.head.snapshot.policy.world_patch, []);
-    assert.deepEqual(saved.head.snapshot.policy.unresolved, request.state.snapshot.policy.unresolved);
+    assert.deepEqual(saved.head.snapshot.policy.unresolved, [
+      ...request.state.snapshot.policy.unresolved, ...request.proposal.amendment.compiled.bundle.unresolved,
+    ]);
+    assert.ok(request.proposal.amendment.compiled.bundle.unresolved.length > 0);
+    const later = amendment(saved.head);
+    const next = permission(service, later);
+    take(await service.commitTurn(later.access, later.envelope, next.result.handle.candidate_id, next.permit));
+    assert.deepEqual(database(path).head.snapshot.policy.unresolved, [
+      ...saved.head.snapshot.policy.unresolved, ...later.proposal.amendment.compiled.bundle.unresolved,
+    ]);
     assert.equal(saved.head.snapshot.entities[0]?.surfaces[0]?.fact.state, "present");
     assert.match(canonicalJson(saved.head.snapshot.entities), /Updated/);
     assert.equal(saved.candidates[0]?.spent, 1);
@@ -378,4 +389,255 @@ void test("inspection withholds a presentation fact from an incompletely covered
     }));
     assert.deepEqual(inspected, { kind: "inspection", facts: [], time_cost: 0 });
   } finally { service.close(); }
+});
+
+void test("one-turn Editor retries survive a transient rollback and reject conflicting duplicates", async (t) => {
+  const path = temp(t);
+  const fixture = makeFixture();
+  let fail = true;
+  const service = new TurnService(path, fixture, () => 1000, (point) => {
+    if (fail && point === "before_commit") throw new Error("Transient fixture failure");
+  });
+  try {
+    const input = edit();
+    const head = input.state.snapshot.head;
+    take(service.initialize(input.state));
+    take(service.browser.control(input.access.owner_id, head, input.envelope.request_id, "/edit Change the room label."));
+    const stage = prepared(service, input);
+    const grant = take(service.browser.confirm(input.access.owner_id, stage.handle.candidate_id, stage.diff_digest));
+    const permit: Permit = { candidate_id: stage.handle.candidate_id, source: "approval", diff_digest: stage.diff_digest, reference: grant.grant_id };
+    for (const proposal of [{ bogus: true }, { ...input.proposal, operations: [{ kind: "native.line", text: "other" }] }]) {
+      const result = service.prepareTurn(input.access, input.envelope, proposal);
+      assert.ok(!result.ok);
+      assert.equal(result.error.subtype, "IDEMPOTENCY_CONFLICT");
+    }
+    const aborted = await service.commitTurn(input.access, input.envelope, stage.handle.candidate_id, permit);
+    assert.ok(!aborted.ok);
+    assert.equal(aborted.error.retry, "same_request");
+    assert.deepEqual(database(path).head, input.state);
+    fail = false;
+    const committed = take(await service.commitTurn(input.access, input.envelope, stage.handle.candidate_id, permit));
+    assert.equal(committed.receipt.time_cost, 0);
+    const next = database(path).head;
+    const cancel = edit("request:cancel-edit");
+    Object.assign(cancel.envelope, next.snapshot.head);
+    Object.assign(cancel.proposal, next.snapshot.head);
+    rejects(service.prepareTurn(cancel.access, cancel.envelope, cancel.proposal), "NEEDS_APPROVAL");
+    take(service.browser.control(cancel.access.owner_id, next.snapshot.head, cancel.envelope.request_id, "/edit Change the room label again."));
+    const pending = prepared(service, cancel);
+    take(service.cancelTurn(cancel.access, cancel.envelope, pending.handle.candidate_id));
+    const cancelled = await service.commitTurn(cancel.access, cancel.envelope, pending.handle.candidate_id);
+    assert.ok(!cancelled.ok);
+    assert.equal(cancelled.error.retry, "none");
+    assert.deepEqual(database(path).head, next);
+    assert.equal(fixture.executions, 2);
+  } finally { service.close(); }
+});
+
+void test("expired Editor requests stay retired when collection drops their payloads", async (t) => {
+  const path = temp(t);
+  let now = 1000;
+  const service = new TurnService(path, makeFixture(), () => now);
+  try {
+    const input = edit();
+    take(service.initialize(input.state));
+    const { result, permit } = permission(service, input);
+    now += 300_000;
+    take(service.collectAbandoned());
+    rejects(service.prepareTurn(input.access, input.envelope, input.proposal), "NEEDS_APPROVAL");
+    rejects(await service.commitTurn(input.access, input.envelope, result.handle.candidate_id, permit), "NEEDS_APPROVAL");
+    const db = new DatabaseSync(path, { readOnly: true });
+    try {
+      assert.equal(db.prepare("SELECT count(*) AS count FROM authority WHERE area IN ('candidates','requestCandidates')").get()?.count, 0);
+      assert.equal(db.prepare("SELECT stage FROM requests").get()?.stage, null);
+    } finally { db.close(); }
+    prepared(service, edit("request:new-edit"));
+  } finally { service.close(); }
+});
+
+void test("replacement coordinator fences the old service from publishing staged work", async (t) => {
+  const path = temp(t);
+  let enter = () => {};
+  let release = () => {};
+  const entered = new Promise<void>((resolve) => { enter = resolve; });
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const first = new TurnService(path, makeFixture(undefined, async () => { enter(); await gate; }));
+  const input = play();
+  try {
+    take(first.initialize(input.state));
+    const id = prepared(first, input).handle.candidate_id;
+    const oldCommit = first.commitTurn(input.access, input.envelope, id);
+    await entered;
+    const second = new TurnService(path, makeFixture());
+    try {
+      release();
+      rejects(await oldCommit, "ABORTED");
+      assert.deepEqual(database(path).head, input.state);
+      take(await second.commitTurn(input.access, input.envelope, id));
+      assert.equal(database(path).receipts.length, 1);
+    } finally { second.close(); }
+  } finally { release(); first.close(); }
+});
+
+void test("branch initialization rejects checkpoint ID collisions without creating a partial branch", (t) => {
+  const service = new TurnService(temp(t), makeFixture());
+  try {
+    const first = play().state;
+    take(service.initialize(first));
+    const second = structuredClone(first);
+    const branch = BranchId.parse("branch:second");
+    second.checkpoint.branch_id = branch;
+    second.snapshot.head.branch_id = branch;
+    rejects(service.initialize(second), "VALIDATION_FAILED");
+    second.checkpoint.checkpoint_id = TurnImage.shape.checkpoint.shape.checkpoint_id.parse("checkpoint:second");
+    take(service.initialize(second));
+  } finally { service.close(); }
+});
+
+void test("browserControl over the turn service persists exact-diff approval", async (t) => {
+  const path = temp(t);
+  const service = new TurnService(path, makeFixture());
+  const input = edit();
+  let origin = "";
+  const server = createServer((req, res) => {
+    void handler(req, res);
+  });
+  const handler = (req: Parameters<ReturnType<typeof browserControl>>[0], res: Parameters<ReturnType<typeof browserControl>>[1]) =>
+    browserControl(service.browser, origin, (request) => request.headers.cookie === "browser=fixture"
+      ? { owner: input.access.owner_id, csrf: "separate-csrf" } : undefined)(req, res);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  origin = "http://127.0.0.1:" + address.port;
+  try {
+    const headers = { origin, cookie: "browser=fixture", "content-type": "application/json", "x-csrf-token": "separate-csrf" };
+    take(service.initialize(input.state));
+    const mode = await fetch(origin + "/mode", { method: "POST", headers, body: JSON.stringify({
+      head: input.state.snapshot.head, request_id: "request:mode", command: "/edit",
+    }) });
+    assert.equal(mode.status, 200);
+    await mode.text();
+    const stage = prepared(service, input);
+    const id = stage.handle.candidate_id;
+    const browser = await fetch(origin + "/candidate?id=" + id, { headers });
+    assert.equal(browser.status, 200);
+    assert.match(await browser.text(), new RegExp(stage.diff_digest));
+    const approved = await fetch(origin + "/approve", { method: "POST", headers, body: JSON.stringify({ candidate: id, digest: stage.diff_digest }) });
+    assert.equal(approved.status, 200);
+    await approved.text();
+    const grant = take(service.lookupApproval(input.access, input.state.snapshot.head, id));
+    take(await service.commitTurn(input.access, input.envelope, id, {
+      candidate_id: id, source: "approval", diff_digest: stage.diff_digest, reference: grant.grant_id,
+    }));
+    assert.equal(database(path).candidates[0]?.spent, 1);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    service.close();
+  }
+});
+
+void test("overlay inventory transfer advances only overlay time, followed by a native success", async (t) => {
+  const path = temp(t);
+  const input = play("request:overlay");
+  const room = input.state.snapshot.entities[0];
+  const surface = room?.surfaces[0];
+  assert.ok(room && surface);
+  const inventory = (id: string, field: string, value: string | string[]) => ({
+    ...room, id, surfaces: [{ ...surface, field, domain: "inventory" as const, direct_assignment: false,
+      fact: { state: "present" as const, value, evidence_id: "evidence:inventory" } }],
+  });
+  const item = "remix:key";
+  const from = "remix:player";
+  const to = "remix:floor";
+  input.state.snapshot.entities.push(inventory(item, "inventory:holder", from),
+    inventory(from, "inventory:contents", [item]), inventory(to, "inventory:contents", []));
+  input.state.checkpoint.remix_state_ref = "blob:" + canonicalDigest(input.state.snapshot.entities);
+  const proposal = { ...input.proposal, operations: [{ kind: "inventory.transfer", item, from, to }],
+    declared_effects: [{ entity_id: item, field: "inventory:holder", change: "write" },
+      ...[from, to].map((entity_id) => ({ entity_id, field: "inventory:contents", change: "write" }))] };
+  let omit = true;
+  const service = new TurnService(path, makeFixture((execution) => {
+    if (omit) execution.effects = execution.effects.slice(0, 2);
+  }));
+  try {
+    take(service.initialize(input.state));
+    const stage = take(service.prepareTurn(input.access, input.envelope, proposal));
+    assert.equal(stage.kind, "prepared");
+    rejects(await service.commitTurn(input.access, input.envelope, stage.handle.candidate_id), "VALIDATION_FAILED");
+    assert.deepEqual(database(path).head, input.state);
+    omit = false;
+    const committed = take(await service.commitTurn(input.access, input.envelope, stage.handle.candidate_id));
+    const next = database(path).head;
+    assert.equal(committed.receipt.time_cost, 1);
+    assert.deepEqual(next.checkpoint.clocks, { native: 0, overlay: 1, policy: "native_running" });
+    const fact = (id: string) => next.snapshot.entities.find((entity) => entity.id === id)?.surfaces[0]?.fact;
+    for (const [id, value] of [[item, to], [from, []], [to, [item]]] as const) {
+      assert.deepEqual(fact(id), { state: "present", value, evidence_id: "evidence:inventory" });
+    }
+    const native = play("request:success", next, "look");
+    const observed = take(await service.commitTurn(native.access, native.envelope, prepared(service, native).handle.candidate_id));
+    assert.equal(observed.receipt.in_fiction_result, "success");
+    assert.deepEqual(observed.receipt.native_output, ["You look around.\r\n"]);
+    assert.deepEqual(database(path).head.checkpoint.clocks, { native: 1, overlay: 1, policy: "native_running" });
+  } finally { service.close(); }
+});
+
+void test("paused native clock disallows a turn before executor dispatch", (t) => {
+  const path = temp(t);
+  const fixture = makeFixture();
+  const service = new TurnService(path, fixture);
+  try {
+    const input = play();
+    input.state.checkpoint.clocks.policy = "native_paused";
+    input.state.snapshot.clock.native_running = false;
+    take(service.initialize(input.state));
+    rejects(service.prepareTurn(input.access, input.envelope, input.proposal), "CAPABILITY_MISSING");
+    assert.equal(fixture.executions, 0);
+    assert.deepEqual(database(path).head, input.state);
+  } finally { service.close(); }
+});
+
+void test("storage version, output size and checkpoint size are enforced", async (t) => {
+  const path = temp(t);
+  const alternate = temp(t);
+  const versioned = new DatabaseSync(alternate);
+  try { versioned.exec("PRAGMA user_version=999"); } finally { versioned.close(); }
+  assert.throws(() => new TurnService(alternate, makeFixture()), /Unsupported turn database version/);
+  const service = new TurnService(path, makeFixture((execution) => { execution.output = ["x".repeat(limits.output_bytes + 1)]; }));
+  try {
+    const input = play();
+    const tooLarge = structuredClone(input.state);
+    tooLarge.native = { bytes: "x".repeat(limits.checkpoint_bytes + 1) };
+    rejects(service.initialize(tooLarge), "ABORTED");
+    take(service.initialize(input.state));
+    const stage = prepared(service, input);
+    const result = await service.commitTurn(input.access, input.envelope, stage.handle.candidate_id);
+    assert.ok(!result.ok);
+    assert.equal(result.error.status, "ABORTED");
+    assert.match(result.error.message, /output budget/);
+    assert.deepEqual(database(path).head, input.state);
+  } finally { service.close(); }
+});
+
+void test("cooperative deadline aborts without publishing and allows an identical fresh attempt", async (t) => {
+  const path = temp(t);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const service = new TurnService(path, makeFixture(undefined, () => gate));
+  try {
+    const input = play();
+    take(service.initialize(input.state));
+    const stage = prepared(service, input);
+    const commit = service.commitTurn(input.access, input.envelope, stage.handle.candidate_id);
+    await Promise.resolve();
+    t.mock.timers.tick(5000);
+    const aborted = await commit;
+    assert.ok(!aborted.ok);
+    assert.equal(aborted.error.retry, "same_request");
+    assert.deepEqual(database(path).head, input.state);
+    release();
+    assert.equal(take(await service.commitTurn(input.access, input.envelope, stage.handle.candidate_id)).receipt.time_cost, 1);
+  } finally { release(); service.close(); }
 });

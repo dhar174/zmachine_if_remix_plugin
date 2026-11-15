@@ -43,7 +43,9 @@ class RejectPublication extends Error {
 }
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
 const timedOut = () => failure("ABORTED", "The candidate was cancelled or exceeded its deadline.", "same_request");
-const unavailable = () => failure("ABORTED", "Turn storage or execution is unavailable. Retry the same request to check its receipt.", "same_request");
+const expiredEditor = () => failure("NEEDS_APPROVAL", "The Editor candidate expired. Prepare a fresh request.");
+const cancelled = () => failure("ABORTED", "The candidate was cancelled. Prepare a fresh request.");
+const unavailable =() => failure("ABORTED", "Turn storage or execution is unavailable. Retry the same request to check its receipt.", "same_request");
 
 /** Application boundary. Access and compiler context come from the authenticated coordinator. */
 export class TurnService {
@@ -87,6 +89,9 @@ export class TurnService {
       const image = parsed.data;
       const valid = validateImage(image, this.executor);
       if (!valid.ok) return valid;
+      if (this.store.hasCheckpoint(image.checkpoint.checkpoint_id)) {
+        return failure("VALIDATION_FAILED", "The checkpoint ID is already in use.");
+      }
       const set = this.authority.setHead(image.snapshot.head, "initialize");
       if (!set.ok) return set;
       this.store.initialize(image);
@@ -121,12 +126,17 @@ export class TurnService {
       const prior = this.store.request(id);
       if (prior && prior.envelope !== envelopeHash) return conflict();
       if (prior?.receipt) return ok({ kind: "committed", record: prior.receipt });
+      const parsed = ResolverProposal.safeParse(rawProposal);
+      const compiler = CompilationInput.nullable().safeParse(trustedCompiler);
+      if (prior?.proposal && (!parsed.success || !compiler.success ||
+          prior.proposal !== canonicalDigest(parsed.data) ||
+          (prior.stage && canonicalDigest(prior.stage.compiler) !== canonicalDigest(compiler.data)))) return conflict();
       const image = this.store.head(access);
       const wanted = expected(envelope);
       if (!image) return invalid();
       if (canonicalDigest(image.snapshot.head) !== canonicalDigest(wanted)) return stale();
-      const parsed = ResolverProposal.safeParse(rawProposal);
-      const compiler = CompilationInput.nullable().safeParse(trustedCompiler);
+      if (prior?.disposition === "expired") return expiredEditor();
+      if (prior?.disposition === "cancelled") return cancelled();
       const reject = (result: Extract<Result<never>, { ok: false }>) => {
         this.authority.finish(wanted, envelope.request_id);
         return result;
@@ -142,22 +152,21 @@ export class TurnService {
         return reject(failure("VALIDATION_FAILED", "The proposal does not match the request input boundary."));
       }
       const proposalHash = canonicalDigest(proposal);
-      if (prior?.proposal && prior.proposal !== proposalHash) return conflict();
-      if (prior?.cancelled) return timedOut();
+
       const inspect = !proposal.amendment && proposal.operations.every(({ kind }) => kind === "inspect.entity");
       if ((envelope.intent === "inspect") !== inspect && (envelope.intent === "inspect" || inspect && envelope.intent) ||
           (envelope.intent === "editor" && proposal.mode !== "EDITOR") || (envelope.intent === "play" && proposal.mode !== "PLAY")) {
         return reject(failure("NEEDS_CLARIFICATION", "Separate Play, Editor, and read-only requests."));
       }
       if (prior?.stage && Date.parse(prior.stage.handle.expires_at) > this.clock()) {
-        if (canonicalDigest(prior.stage.compiler) !== canonicalDigest(compiler.data)) return conflict();
+
         return ok(candidateView(prior.stage));
       }
       if (prior?.claim) return failure("ABORTED", "The expired candidate still has an active execution.", "same_request");
       if (prior?.stage?.editor) {
         this.authority.finish(wanted, envelope.request_id);
-        this.store.cancel(id);
-        return failure("NEEDS_APPROVAL", "The Editor candidate expired. Prepare a fresh request.");
+        this.store.cancel(id, "expired");
+        return expiredEditor();
       }
       const snapshot = this.snapshot(image, proposal, compiler.data);
       if (!snapshot.ok) return reject(snapshot);
@@ -235,7 +244,8 @@ export class TurnService {
       const wanted = expected(envelope);
       if (!image) return invalid();
       if (canonicalDigest(image.snapshot.head) !== canonicalDigest(wanted)) return stale();
-      if (request?.cancelled) return timedOut();
+      if (request?.disposition === "expired") return expiredEditor();
+      if (request?.disposition === "cancelled") return cancelled();
       const stage = request?.stage;
       if (!stage || stage.handle.candidate_id !== candidateId || request?.claim ||
           request?.proposal !== stage.handle.proposal_digest || stage.handle.request_id !== envelope.request_id) return invalid();
@@ -252,7 +262,18 @@ export class TurnService {
     const boundPermit = permit ? structuredClone(permit) : undefined;
     const scope = { ...access };
     const promise = Promise.resolve().then(() => this.execute(scope, envelope, work, boundPermit, abort))
-      .finally(() => this.inFlight.delete(id));
+      .then((result) => {
+        this.atomic(() => {
+          if (this.store.request(id)?.claim === work.claim) {
+            this.store.claim(id, null);
+            if (!result.ok && result.error.retry !== "same_request") {
+              this.authority.finish(expected(envelope), envelope.request_id);
+            }
+          }
+          return ok(undefined);
+        });
+        return result;
+      }).finally(() => this.inFlight.delete(id));
     this.inFlight.set(id, { digest: hash, candidate: candidateId, promise, abort });
     return promise;
   }
@@ -325,13 +346,7 @@ export class TurnService {
       return unavailable();
     } finally {
       clearTimeout(timeout);
-      this.atomic(() => {
-        if (this.store.request(id)?.claim === claim) {
-          this.store.claim(id, null);
-          this.authority.finish(expected(envelope), envelope.request_id);
-        }
-        return ok(undefined);
-      });
+
     }
   }
 

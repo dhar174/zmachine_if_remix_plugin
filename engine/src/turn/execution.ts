@@ -9,9 +9,17 @@ import { TurnImage, failure, limits, ok } from "./contracts.ts";
 import type { Execution, TurnExecutor } from "./contracts.ts";
 
 export function supported(operations: EffectPlan["operations"]): boolean {
-  return operations.length <= limits.operations && operations.every(({ operation }) =>
-    operation.kind === "native.line" || operation.kind === "native.character" ||
-    operation.kind === "remix.assign" || operation.kind === "inspect.entity");
+  return operations.length <= limits.operations && operations.every(({ operation, effects }) => {
+    if (operation.kind === "inventory.transfer") {
+      const { item, from, to } = operation;
+      return [item, from, to].every((id) => id.startsWith("remix:")) && effects.length === 3 &&
+        effects.every(({ entity_id, field, change }) => change === "write" &&
+          (entity_id === item ? field === "inventory:holder" :
+            (entity_id === from || entity_id === to) && field === "inventory:contents"));
+    }
+    return operation.kind === "native.line" || operation.kind === "native.character" ||
+      operation.kind === "remix.assign" || operation.kind === "inspect.entity";
+  });
 }
 
 const invalidEffect = () => failure("VALIDATION_FAILED", "Observed effects or postconditions differ from the verified turn.");
@@ -30,7 +38,7 @@ function nextPolicy(before: TurnImage, plan: EffectPlan) {
     sources.set(source.id, source);
   }
   const next = DirectiveBundle.parse({ ...policy, revision: policy.revision + 1, sources: [...sources.values()],
-    world_patch: [], preferences, policy_amendment: { ...policy.policy_amendment,
+    world_patch: [], preferences, unresolved: [...policy.unresolved, ...compiled.bundle.unresolved], policy_amendment: { ...policy.policy_amendment,
       generation_rules: rules.flatMap(({ kind, ...rule }) => kind === "permission" ? [rule] : []),
       invariants: rules.flatMap(({ kind, ...rule }) => kind === "invariant" ? [rule] : []),
     } });
@@ -59,9 +67,21 @@ export function buildImage(before: TurnImage, execution: Execution, plan: Effect
   const indexed = new Map(execution.entities.map((entity) => [entity.id, entity]));
   if (indexed.size !== execution.entities.length || indexed.size !== before.snapshot.entities.length) return invalidEffect();
   const assignments = new Map<string, Json>();
+  const state = new Map(before.snapshot.entities.map((entity) => [entity.id, entity]));
   for (const { operation } of plan.operations) {
     if (operation.kind === "remix.assign") assignments.set(canonicalJson([operation.entity_id, operation.field]), operation.value);
+    if (operation.kind === "inventory.transfer") {
+      const { item, from, to } = operation;
+      assignments.set(canonicalJson([item, "inventory:holder"]), to);
+      for (const carrier of [from, to]) {
+        const fact = state.get(carrier)?.surfaces.find(({ field }) => field === "inventory:contents")?.fact;
+        if (fact?.state !== "present" || !Array.isArray(fact.value)) return invalidEffect();
+        const contents = carrier === from ? fact.value.filter((value) => value !== item) : [...fact.value, item];
+        assignments.set(canonicalJson([carrier, "inventory:contents"]), contents);
+      }
+    }
   }
+  let verifiedWrites = 0;
   for (const entity of before.snapshot.entities) {
     const proposed = indexed.get(entity.id);
     if (!proposed || proposed.surfaces.length !== entity.surfaces.length ||
@@ -74,13 +94,16 @@ export function buildImage(before: TurnImage, execution: Execution, plan: Effect
       const assignment = assignments.get(key);
       const write = effectKey({ entity_id: entity.id, field: surface.field, change: "write" });
       if (assignment !== undefined) {
-        if (canonicalDigest(after) !== canonicalDigest(presentValue(surface, assignment)) || !observed.includes(write)) return invalidEffect();
+        if (surface.owner !== "remix" || canonicalDigest(after) !== canonicalDigest(presentValue(surface, assignment)) ||
+            !observed.includes(write)) return invalidEffect();
+        verifiedWrites++;
       } else if (canonicalDigest(after) !== canonicalDigest(surface)) {
         if (!runNative || surface.owner !== "native" || !observed.includes(write) ||
             canonicalDigest({ ...after, fact: surface.fact }) !== canonicalDigest(surface)) return invalidEffect();
       }
     }
   }
+  if (verifiedWrites !== assignments.size) return invalidEffect();
   let rules: ReturnType<typeof nextPolicy>;
   try { rules = nextPolicy(before, plan); } catch { return invalidEffect(); }
   const revision = Revision.parse(before.checkpoint.revision + 1);
