@@ -28,10 +28,10 @@ type Permit = { candidate_id: string; source: "approval" | "lease"; reference: s
 type Identity = Entry["owner_id"];
 const ttl = 300_000;
 const success = <T>(value: T): Result<T> => ({ ok: true, value });
-const fail = <T>(status: Failure["status"], message: string): Result<T> =>
+const fail = (status: Failure["status"], message: string): { ok: false; error: Failure } =>
   ({ ok: false, error: { status, message, retry: status === "STALE_REVISION" ? "refresh" : "none" } });
-const deny = <T>(): Result<T> => fail("VALIDATION_FAILED", "Invalid or unavailable authorization target.");
-const approvalNeeded = <T>(message = "The exact change needs authenticated approval."): Result<T> => fail("NEEDS_APPROVAL", message);
+const deny = () => fail("VALIDATION_FAILED", "Invalid or unavailable authorization target.");
+const approvalNeeded = (message = "The exact change needs authenticated approval.") => fail("NEEDS_APPROVAL", message);
 const same = (a: Parameters<typeof canonicalJson>[0], b: Parameters<typeof canonicalJson>[0]) => canonicalJson(a) === canonicalJson(b);
 function identity(head: Entry) {
   const { owner_id, session_id, branch_id, generation_id } = head;
@@ -68,17 +68,37 @@ function digestDiff(diff: Candidate["diff"]): string {
   return createHash("sha256").update(diffJson(diff)).digest("hex");
 }
 
-/** In-memory reference for #17. Callers authenticate principals before entering this boundary. */
-export class Authority implements AuthorizationPort {
-  private readonly states = new Map<string, StoreState>();
-  private readonly overrides = new Map<string, Override>();
-  private readonly leases = new Map<string, Lease>();
-  private readonly candidates = new Map<string, Candidate>();
-  private readonly requestCandidates = new Map<string, Candidate>();
-  private readonly generations = new Map<string, Set<Head["generation_id"]>>();
-  private readonly clock: () => number;
+export type AuthorityRecords = {
+  states: StoreState;
+  overrides: Override;
+  leases: Lease;
+  candidates: Candidate;
+  requestCandidates: string;
+  generations: Head["generation_id"][];
+};
 
-  constructor(clock: () => number = Date.now) { this.clock = clock; }
+type Table<T> = Pick<Map<string, T>, "get" | "has"> & { set(key: string, value: T): void };
+export type AuthorityTables = <K extends keyof AuthorityRecords>(name: K) => Table<AuthorityRecords[K]>;
+
+/** Callers authenticate principals. Durable tables must participate in the caller's transaction. */
+export class Authority implements AuthorizationPort {
+  private readonly states;
+  private readonly overrides;
+  private readonly leases;
+  private readonly candidates;
+  private readonly requestCandidates;
+  private readonly generations;
+
+  private readonly clock: () => number;
+  constructor(clock: () => number = Date.now, table: AuthorityTables = () => new Map()) {
+    this.clock = clock;
+    this.states = table("states");
+    this.overrides = table("overrides");
+    this.leases = table("leases");
+    this.candidates = table("candidates");
+    this.requestCandidates = table("requestCandidates");
+    this.generations = table("generations");
+  }
 
   private branch(head: Entry) { return canonicalJson([head.owner_id, head.session_id, head.branch_id]); }
   private request(head: Head, id: string) { return canonicalJson([this.branch(head), head.generation_id, id]); }
@@ -96,10 +116,10 @@ export class Authority implements AuthorizationPort {
       if (changedGeneration !== (reason === "restore") ||
           head.expected_revision <= old.head.expected_revision ||
           (reason !== "restore" && head.expected_policy_revision < old.head.expected_policy_revision) ||
-          (changedGeneration && this.generations.get(key)?.has(head.generation_id))) return deny();
+          (changedGeneration && this.generations.get(key)?.includes(head.generation_id))) return deny();
     }
-    const seen = this.generations.get(key) ?? new Set<Head["generation_id"]>();
-    seen.add(head.generation_id);
+    const seen = this.generations.get(key) ?? [];
+    if (!seen.includes(head.generation_id)) seen.push(head.generation_id);
     this.generations.set(key, seen);
     this.states.set(key, { head, mode: reason === "restore" ? "PLAY" : old?.mode ?? "PLAY",
       epoch: (old?.epoch ?? 0) + (reason === "restore" || reason === "protected_scope" ? 1 : 0) });
@@ -121,6 +141,7 @@ export class Authority implements AuthorizationPort {
     if (command === "/play" || command === "/edit") {
       state.mode = command === "/play" ? "PLAY" : "EDITOR";
       if (command === "/play") state.epoch++;
+      this.states.set(this.branch(head), state);
       return success({ mode: state.mode, instruction: null });
     }
     const match = /^\/edit ([^\r\n]+)$/.exec(command);
@@ -136,7 +157,7 @@ export class Authority implements AuthorizationPort {
 
   finish(head: Head, requestId: string): void {
     const override = this.overrides.get(this.request(head, requestId));
-    if (override) override.expires = 0;
+    if (override) this.overrides.set(this.request(head, requestId), { ...override, expires: 0 });
   }
 
   private activeOverride(state: StoreState, requestId: string) {
@@ -162,7 +183,7 @@ export class Authority implements AuthorizationPort {
   revokeLease(owner: Identity, id: string): Result<void> {
     const lease = this.leases.get(id);
     if (!lease || lease.head.owner_id !== owner) return deny();
-    lease.remaining = 0;
+    this.leases.set(id, { ...lease, remaining: 0 });
     return success(undefined);
   }
 
@@ -203,7 +224,8 @@ export class Authority implements AuthorizationPort {
     if (!state) return deny();
     const override = this.activeOverride(state, request.request_id);
     const key = this.request(state.head, request.request_id);
-    const previous = this.requestCandidates.get(key);
+    const previousId = this.requestCandidates.get(key);
+    const previous = previousId ? this.candidates.get(previousId) : undefined;
     if (previous?.spent) return approvalNeeded("This logical request has already ended.");
     if (trusted.value.mode !== request.mode || request.mode !== "EDITOR") {
       this.finish(state.head, request.request_id);
@@ -234,9 +256,9 @@ export class Authority implements AuthorizationPort {
     const diffDigest = digestDiff(diff);
     const candidate = { handle: handle.data, head: trusted.value.head, epoch: state.epoch, expires,
       diff, diffDigest, leaseTarget: lowRisk(snapshot.data, result.preview), oneTurn: !!override, grant: null, spent: false };
-    if (previous) previous.expires = 0;
+    if (previous) this.candidates.set(previous.handle.candidate_id, { ...previous, expires: 0 });
     this.candidates.set(candidate.handle.candidate_id, candidate);
-    this.requestCandidates.set(key, candidate);
+    this.requestCandidates.set(key, candidate.handle.candidate_id);
     return success({ handle: structuredClone(handle.data), diff_digest: diffDigest });
   }
 
@@ -261,6 +283,7 @@ export class Authority implements AuthorizationPort {
     const candidate = result.value;
     if (candidate.diffDigest !== digest || candidate.grant !== null) return approvalNeeded();
     candidate.grant = `grant:${randomUUID()}`;
+    this.candidates.set(id, candidate);
     return success({ candidate: structuredClone(candidate.handle), owner_id: owner, grant_id: candidate.grant });
   }
   /** An authenticated tool may retrieve an existing reference within its authorized head. */
@@ -277,7 +300,7 @@ export class Authority implements AuthorizationPort {
   revokeCandidate(owner: Identity, id: string): Result<void> {
     const candidate = this.candidates.get(id);
     if (!candidate || candidate.head.owner_id !== owner) return deny();
-    candidate.spent = true;
+    this.candidates.set(candidate.handle.candidate_id, { ...candidate, spent: true });
     this.finish(candidate.head, candidate.handle.request_id);
     return success(undefined);
   }
@@ -331,9 +354,9 @@ export class Authority implements AuthorizationPort {
     if (permit.source === "lease") {
       const lease = this.leases.get(permit.reference);
       if (!lease) return approvalNeeded();
-      lease.remaining--;
+      this.leases.set(permit.reference, { ...lease, remaining: lease.remaining - 1 });
     }
-    candidate.spent = true;
+    this.candidates.set(candidate.handle.candidate_id, { ...candidate, spent: true });
     this.finish(candidate.head, requestId);
     return success(undefined);
   }

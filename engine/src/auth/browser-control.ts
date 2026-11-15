@@ -37,7 +37,7 @@ async function body(request: IncomingMessage): Promise<unknown> {
 }
 
 /** Framework-neutral local control endpoints. No tool route is mounted here. */
-export function browserControl(authority: Authority, origin: string, verifyBrowser: BrowserVerifier | null) {
+export function browserControl(authority: Pick<Authority, "display" | "confirm" | "control" | "issueLease" | "revokeCandidate" | "revokeLease">, origin: string, verifyBrowser: BrowserVerifier | null) {
   if (new URL(origin).origin !== origin) throw new Error("Use an exact control origin.");
   return async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     const reply = (status: number, value: unknown) => {
