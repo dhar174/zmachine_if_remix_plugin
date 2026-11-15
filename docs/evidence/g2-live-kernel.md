@@ -10,6 +10,8 @@ Separate verifier tests use generated signing keys and a simulated identity-prov
 
 Controlled exceptions before and after publication exercise inactive draft recovery and lost-response replay. The later receipt replay uses the original request, candidate, and digest after the head advances and a replacement coordinator opens the database. The existing transaction suite separately exercises acknowledged process kills. The v1 migration test checks an existing head and receipt. The package test resolves the four on-disk skill references and checks tool names against the actual catalog.
 
+Independent review round `zirp-20261115-19-r1` read the complete candidate diff and attested commit `c6437f4f2f300bac572d26a6f666e4375eae4f91`. Its two conditions concerned HTTP method and body-limit tests and a direct compiler regression check for `field.unchanged`. The follow-up adds those checks, covering sized and streamed requests and assignments on both sides of the protected-field boundary. The historical documentation validation receipt remains tied to its original revision.
+
 | Case | Evidence available before a live trial |
 | --- | --- |
 | A09 | Deterministic draft inactivity, unresolved selection rejection, and atomic first-head publication of the owner-selected supported subset. |

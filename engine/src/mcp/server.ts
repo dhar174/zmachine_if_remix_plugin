@@ -23,7 +23,7 @@ function json(response: ServerResponse, status: number, payload: unknown) {
 async function readRequest(request: IncomingMessage) {
   const parts: Buffer[] = [];
   let length = 0;
-  for await (const value of request as AsyncIterable<Buffer>) {
+  for await (const value of request.iterator({ destroyOnReturn: false }) as AsyncIterable<Buffer>) {
     length += value.length;
     if (length > bodyLimit) return undefined;
     parts.push(value);
@@ -144,11 +144,11 @@ export function fixtureServer(service: TurnService, origin: string, auth: Fixtur
           response.setHeader("allow", "POST");
           return json(response, 405, { error: "METHOD_NOT_ALLOWED" });
         }
-        if (url.search || Number(request.headers["content-length"]) > bodyLimit) {
+        const body = url.search || Number(request.headers["content-length"]) > bodyLimit ? undefined : await readRequest(request);
+        if (!body) {
+          response.setHeader("connection", "close");
           return json(response, 413, { error: "REQUEST_LIMIT" });
         }
-        const body = await readRequest(request);
-        if (!body) return json(response, 413, { error: "REQUEST_LIMIT" });
         const headers = new Headers();
         for (const key of ["accept", "content-type", "mcp-protocol-version"]) {
           const value = request.headers[key];

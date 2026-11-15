@@ -152,6 +152,37 @@ async function initialDraft(fixture: Awaited<ReturnType<typeof harness>>, draft:
   return { ...stored, prepare, inactive };
 }
 
+void test("Streamable HTTP rejects unsupported methods and oversized requests", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "zirp-transport-"));
+  const fixture = await harness(directory);
+  const url = fixture.base + "/mcp";
+  const headers = { authorization: "Bearer owner", "content-type": "application/json" };
+  try {
+    for (const method of ["GET", "DELETE"]) {
+      const response = await fetch(url, { method, headers });
+      assert.equal(response.status, 405);
+      assert.equal(response.headers.get("allow"), "POST");
+    }
+    const body = Buffer.alloc(128 * 1024 + 1, 32);
+    const oversized = await fetch(url, { method: "POST", headers, body });
+    assert.equal(oversized.status, 413);
+    const streamed = await new Promise<number | undefined>((resolve, reject) => {
+      const streaming = request(url, { method: "POST", headers: { ...headers, "transfer-encoding": "chunked" } }, (response) => {
+        response.resume();
+        response.on("error", reject);
+        response.on("end", () => resolve(response.statusCode));
+      });
+      streaming.on("error", reject);
+      streaming.write(body);
+      streaming.end();
+    });
+    assert.equal(streamed, 413);
+  } finally {
+    await fixture.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 void test("all eight MCP tools use scoped loopback access, exact browser approval and durable replay", async () => {
   const directory = mkdtempSync(join(tmpdir(), "zirp-mcp-"));
   let fault: FaultPoint | undefined;
@@ -298,6 +329,19 @@ void test("all eight MCP tools use scoped loopback access, exact browser approva
     const unsupportedExit = "A new exit opens to the north.";
     assert.equal(playedReceipt.narration_facts.includes(unsupportedExit), false);
     assert.equal(played.facts.some(({ value }) => value.includes(unsupportedExit)), false);
+    assert.deepEqual(inspection.parse(await call("inspect_session", history)), before);
+    const policyOnly = await initialDraft(fixture, sibling);
+    const subset = await post("/fixture-subset", { source_ref: policyOnly.action.source_ref,
+      proposal_digest: policyOnly.inactive.proposal_digest, clause_ids: ["protect"] });
+    assert.equal(subset.status, 303);
+    const policyStage = prepared.parse(await call("prepare_turn", policyOnly.prepare));
+    await fixture.approve(policyStage);
+    assert.equal(receipt.parse(await call("commit_turn", { version, target: policyOnly.target, action: policyOnly.action,
+      ...policyStage })).receipt.time_cost, 0);
+    const policyOnlyHead = context.parse(await call("get_turn_context", { version,
+      session_id: sibling.head.session_id, branch_id: sibling.head.branch_id })).context;
+    assert.ok(policyOnlyHead.rules.some(({ id }) => id === "rule:inscription"));
+    assert.ok(policyOnlyHead.facts.some(({ value }) => value === "Fixture Room"));
     assert.deepEqual(inspection.parse(await call("inspect_session", history)), before);
     await fixture.close();
     fixture = await harness(directory, false);

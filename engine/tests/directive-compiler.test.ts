@@ -59,6 +59,28 @@ function scenario(text: string, entries: typeof clause.entries | ModelInterpreta
   return { context, interpretation, result: compileDirective(context, interpretation) };
 }
 
+void test("a registered field.unchanged rule conflicts only with assignments to its exact field", () => {
+  const protectedField = "character:personality";
+  const otherField = "character:title";
+  const options = {
+    guards: [{ id: "field.unchanged", enforcement: "structural", parameters: { field: "string" },
+      protected_fields: [protectedField, otherField] }],
+    active_rules: [{ ...original, guard: { id: "field.unchanged", enforcement: "structural",
+      parameters: { field: protectedField } } }],
+  } satisfies Partial<CompilationInput>;
+  const assign = (field: string) => scenario("Change the selected guard field.", [{
+    kind: "assignment", entity_id: "remix:guard", field, value: "Sentinel",
+  }], options).result;
+  const blocked = assign(protectedField);
+  assert.ok(blocked.ok);
+  assert.equal(blocked.value.diagnostics[0]?.code, "policy_conflict");
+  assert.deepEqual(blocked.value.bundle.world_patch, []);
+  const allowed = assign(otherField);
+  assert.ok(allowed.ok);
+  assert.deepEqual(allowed.value.diagnostics, []);
+  assert.equal(allowed.value.bundle.world_patch[0]?.field, otherField);
+});
+
 void test("distinguishes explicit lasting invariants and prospective generation restrictions", () => {
   const { source: previousSource, supersedes: previousLineage, ...rule } = original;
   assert.ok(previousSource && previousLineage);

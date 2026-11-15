@@ -345,9 +345,6 @@ export class TurnService {
       const selected = { version: "1.0.0" as const, proposal_digest: selection.proposal_digest, clause_ids: selection.clause_ids };
       const result = selectDirectiveSubset(context, interpretation, selected);
       if (!result.ok) return failure("NEEDS_CLARIFICATION", "Select a coherent supported subset from the displayed proposal.");
-      if (!result.value.bundle.world_patch.length) {
-        return failure("NEEDS_CLARIFICATION", "The initial fixture subset needs a supported assignment.");
-      }
       const targetHead = this.publicFixtureHead(record.head);
       const envelope = this.fixtureEnvelope(record.head, { ...targetHead, request_id: record.request_id },
         { kind: "directive", source_ref: selection.source_ref });
