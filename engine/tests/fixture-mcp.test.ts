@@ -246,6 +246,10 @@ void test("all eight MCP tools use scoped loopback access, exact browser approva
       ["open_story_session", "prepare_turn", "commit_turn"]);
     assert.deepEqual(listed.map((item) => item.securitySchemes[0]?.scopes[0]),
       [scopes.launch, scopes.read, scopes.read, scopes.stage, scopes.commit, scopes.read, scopes.read, scopes.read]);
+    const consentPage = await get("/session");
+    assert.equal(consentPage.status, 200);
+    assert.equal(consentPage.headers.get("referrer-policy"), "same-origin");
+    assert.equal((await post("/fixture-launch", {}, "owner", "null")).status, 403);
     assert.equal((await post("/fixture-launch", {}, "owner", "https://foreign.test")).status, 403);
     assert.equal((await post("/fixture-launch", { csrf: "incorrect" })).status, 403);
     const launch = await fixture.launch();
@@ -287,7 +291,9 @@ void test("all eight MCP tools use scoped loopback access, exact browser approva
     const stage = prepared.parse(await call("prepare_turn", initial.prepare));
     const candidatePath = "/candidate?id=" + stage.candidate_id;
     assert.equal(selected.headers.get("location"), "/candidate?id=" + encodeURIComponent(stage.candidate_id));
-    const preview = await (await get(candidatePath)).text();
+    const approvalPage = await get(candidatePath);
+    assert.equal(approvalPage.headers.get("referrer-policy"), "same-origin");
+    const preview = await approvalPage.text();
     assert.match(preview, /Lantern Room/u);
     assert.match(preview, /field\.unchanged/u);
     assert.equal((await get(candidatePath, "other")).status, 404);

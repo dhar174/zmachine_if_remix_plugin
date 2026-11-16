@@ -68,7 +68,8 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
       const hidden = (name: string, value: string) => `<input type="hidden" name="${name}" value="${escaped(value)}">`;
       const csrfField = hidden("csrf", session.csrf);
       const page = (title: string, content: string) => {
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        // Same-origin form submissions need their Origin header for the POST check below.
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8", "referrer-policy": "same-origin" });
         response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><title>${title}</title><h1>${title}</h1>${content}</html>`);
       };
       if (fixture && request.method === "GET" && url.pathname === "/session") {
@@ -115,8 +116,7 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         if (!id.success) return reply(404, { error: "UNAVAILABLE" });
         const display = authority.display(session.owner, id.data);
         if (!display.ok) return result(display);
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end(`<!doctype html><title>Review Editor change</title><h1>Review Editor change</h1><pre>${escaped(display.value.diff)}</pre><form method="post" action="/approve">${hidden("candidate", id.data)}${hidden("digest", display.value.digest)}${hidden("csrf", session.csrf)}<button>Approve this exact change</button></form>`);
+        page("Review Editor change", `<pre>${escaped(display.value.diff)}</pre><form method="post" action="/approve">${hidden("candidate", id.data)}${hidden("digest", display.value.digest)}${csrfField}<button>Approve this exact change</button></form>`);
         return;
       }
       if (request.method !== "POST") return reply(404, { error: "UNAVAILABLE" });
