@@ -183,6 +183,45 @@ void test("Streamable HTTP rejects unsupported methods and oversized requests", 
   }
 });
 
+void test("modern Streamable HTTP preserves routing headers for discovery and named tool calls", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "zirp-mcp-modern-"));
+  const fixture = await harness(directory);
+  const protocolVersion = "2026-07-28";
+  function modern(method: string, params: Record<string, unknown> = {}, name?: string) {
+    return fetch(fixture.base + "/mcp", { method: "POST", headers: {
+      authorization: "Bearer owner", accept: "application/json, text/event-stream", "content-type": "application/json",
+      "mcp-protocol-version": protocolVersion, "mcp-method": method, ...(name ? { "mcp-name": name } : {}),
+    }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: {
+      "io.modelcontextprotocol/protocolVersion": protocolVersion,
+      "io.modelcontextprotocol/clientInfo": { name: "loopback", version },
+      "io.modelcontextprotocol/clientCapabilities": {},
+    } } }) });
+  }
+  async function result(response: Response) {
+    const body = await response.text();
+    assert.equal(response.status, 200, body);
+    return z.object({ result: z.unknown() }).parse(JSON.parse(body)).result;
+  }
+  try {
+    const discover = z.object({ supportedVersions: z.array(z.string()) }).parse(await result(await modern("server/discover")));
+    assert.ok(discover.supportedVersions.includes(protocolVersion));
+    const list = z.object({ tools: z.array(z.object({ name: z.string() })) }).parse(await result(await modern("tools/list")));
+    assert.equal(list.tools.length, 8);
+    const { head } = await fixture.open(await fixture.launch());
+    const params = { name: "inspect_session", arguments: { version,
+      session_id: head.session_id, branch_id: head.branch_id, query: { kind: "facts" } } };
+    const wrongName = await modern("tools/call", params, "prepare_turn");
+    assert.equal(wrongName.status, 400);
+    await wrongName.text();
+    const reply = z.object({ structuredContent: z.object({ version: z.literal(version), result: context }) });
+    const readback = reply.parse(await result(await modern("tools/call", params, "inspect_session")));
+    assert.equal(readback.structuredContent.result.context.state, "draft");
+  } finally {
+    await fixture.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 void test("all eight MCP tools use scoped loopback access, exact browser approval and durable replay", async () => {
   const directory = mkdtempSync(join(tmpdir(), "zirp-mcp-"));
   let fault: FaultPoint | undefined;

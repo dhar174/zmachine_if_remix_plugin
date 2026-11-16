@@ -150,7 +150,7 @@ export function fixtureServer(service: TurnService, origin: string, auth: Fixtur
           return json(response, 413, { error: "REQUEST_LIMIT" });
         }
         const headers = new Headers();
-        for (const key of ["accept", "content-type", "mcp-protocol-version"]) {
+        for (const key of ["accept", "content-type", "mcp-protocol-version", "mcp-method", "mcp-name"]) {
           const value = request.headers[key];
           if (typeof value === "string") headers.set(key, value);
         }
