@@ -23,7 +23,9 @@ Independent review round `zirp-20261115-19-r1` read the complete candidate diff 
 
 ## ChatGPT web trial
 
-**Blocked at private route startup.** The recorded private-route ports had no listener during the local readiness check. Starting the local fixture service and private Secure MCP Tunnel for this revision requires the separate authorization in the approved plan. The trial requires the existing scoped Auth0 configuration, the owner's browser sign-in and confirmations, and a single private ChatGPT web installation with both the packaged skills and write-capable MCP.
+**Blocked on runtime credentials.** On November 15, 2026, the owner authorized starting the fixture service and the existing private Secure MCP Tunnel for the bounded trial. The local check found the existing one-owner Auth0 configuration and tunnel profile. Tunnel client 0.0.18 `doctor` loaded the profile and exited 2 because its restricted runtime key reference `CONTROL_PLANE_API_KEY` was unset. The Auth0 browser-client secret reference `PROBE_AUTH0_BROWSER_SECRET` was also unset. The four recorded private-route ports had no listener when checked. The trial requires both existing credential types, the owner's browser sign-in and confirmations, and a private ChatGPT installation with both the packaged skills and write-capable MCP. See the [implementation and live trial runbook](../contracts/issue-19-runbook.md).
+
+The startup check targeted reviewed commit `e06e502e58bf8befa60e2240db47364d2ddb0a3e`. Its [engine CI run](https://github.com/dhar174/zmachine_if_remix_plugin/actions/runs/43798010055) passed on Windows and Ubuntu with Node 24 and 26.
 
 No ChatGPT tool calls, owner approvals, model output, or installed-skill discovery were observed for #19. The model, client mode, installation, and combined workflows remain unverified. The historical #13 observations are recorded in the [bounded closeout](g1-chat-host-closeout.md).
 
