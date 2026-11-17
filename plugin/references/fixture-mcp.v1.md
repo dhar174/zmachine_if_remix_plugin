@@ -28,7 +28,8 @@ A prepared candidate predicts effects. Use committed receipts and authorized rea
 | Result | What to do |
 | --- | --- |
 | `NEEDS_CLARIFICATION` | Ask for the missing intent or scope. Keep unresolved clauses inactive. |
-| `NEEDS_APPROVAL` | Direct the owner to the authenticated browser control for the exact candidate. Keep the draft or current head in effect until commit. |
+| `NEEDS_APPROVAL` for a pending approval | Direct the owner to authenticated browser control to grant the requested Editor authority or approve the exact pending candidate, as instructed by the tool. Keep the draft or current head in effect until commit. |
+| `NEEDS_APPROVAL` for an expired Editor request | Use a fresh `request_id`. Have the owner record the exact source again in authenticated browser control, then prepare the new candidate and obtain exact approval before commit. Keep the draft or current head in effect throughout. |
 | `POLICY_CONFLICT` | Explain the active protection. Ask for a fresh directive if the owner explicitly wants to propose a policy amendment. |
 | `CAPABILITY_MISSING` | State the unavailable capability and any handoff supplied by the tool. |
 | `STALE_REVISION` | Check the original receipt if the commit outcome is uncertain. For an uncommitted turn, read the current head and prepare a fresh request with renewed approval as required. |

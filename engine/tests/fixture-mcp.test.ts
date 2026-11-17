@@ -187,10 +187,10 @@ void test("modern Streamable HTTP preserves routing headers for discovery and na
   const directory = mkdtempSync(join(tmpdir(), "zirp-mcp-modern-"));
   const fixture = await harness(directory);
   const protocolVersion = "2026-07-28";
-  function modern(method: string, params: Record<string, unknown> = {}, name?: string) {
+  function modern(method: string, params: Record<string, unknown> = {}, name?: string, headerMethod = method) {
     return fetch(fixture.base + "/mcp", { method: "POST", headers: {
       authorization: "Bearer owner", accept: "application/json, text/event-stream", "content-type": "application/json",
-      "mcp-protocol-version": protocolVersion, "mcp-method": method, ...(name ? { "mcp-name": name } : {}),
+      "mcp-protocol-version": protocolVersion, "mcp-method": headerMethod, ...(name ? { "mcp-name": name } : {}),
     }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: {
       "io.modelcontextprotocol/protocolVersion": protocolVersion,
       "io.modelcontextprotocol/clientInfo": { name: "loopback", version },
@@ -202,6 +202,13 @@ void test("modern Streamable HTTP preserves routing headers for discovery and na
     assert.equal(response.status, 200, body);
     return z.object({ result: z.unknown() }).parse(JSON.parse(body)).result;
   }
+  async function routingMismatch(response: Response) {
+    const body = await response.text();
+    assert.equal(response.status, 400, body);
+    return z.object({ jsonrpc: z.literal("2.0"), error: z.object({ code: z.literal(-32020),
+      data: z.object({ mismatch: z.object({ header: z.string(), body: z.string() }) }),
+    }) }).parse(JSON.parse(body)).error.data.mismatch;
+  }
   try {
     const discover = z.object({ supportedVersions: z.array(z.string()) }).parse(await result(await modern("server/discover")));
     assert.ok(discover.supportedVersions.includes(protocolVersion));
@@ -210,9 +217,12 @@ void test("modern Streamable HTTP preserves routing headers for discovery and na
     const { head } = await fixture.open(await fixture.launch());
     const params = { name: "inspect_session", arguments: { version,
       session_id: head.session_id, branch_id: head.branch_id, query: { kind: "facts" } } };
-    const wrongName = await modern("tools/call", params, "prepare_turn");
-    assert.equal(wrongName.status, 400);
-    await wrongName.text();
+    const wrongName = await routingMismatch(await modern("tools/call", params, "prepare_turn"));
+    assert.equal(wrongName.header, "prepare_turn");
+    assert.match(wrongName.body, /params\.name="inspect_session".*Mcp-Name/);
+    const wrongMethod = await routingMismatch(await modern("tools/call", params, "inspect_session", "tools/list"));
+    assert.equal(wrongMethod.header, "tools/list");
+    assert.match(wrongMethod.body, /body names method tools\/call.*Mcp-Method/);
     const reply = z.object({ structuredContent: z.object({ version: z.literal(version), result: context }) });
     const readback = reply.parse(await result(await modern("tools/call", params, "inspect_session")));
     assert.equal(readback.structuredContent.result.context.state, "draft");
