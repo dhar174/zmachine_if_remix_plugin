@@ -12,4 +12,4 @@ This repository uses a coordinator-plus-specialist model for agent-assisted engi
 - These engineering agents are development assistants only — separate from in-game characters, the product's AI components, and the runtime turn/transaction coordinator described in the design docs.
 - This is a documentation-only repository: no engine implementation, feasibility-probe execution, interpreter download, model spend, or runtime/test claims outside the `docs/ROADMAP.md` evidence gates. Never place user story binaries, save states, transcripts, or credentials in this public repository.
 
-Zcode specialist definitions live in `.zcode/agents/` (source templates; install per `docs/agents/README.md`). Antigravity does not load them — if specialist invocation is unavailable, perform the checks in the primary agent and state that independent subagent review did not occur.
+Antigravity specialist candidates live in `.agents/agents/`. Apply the admission gate in `docs/agents/team-coordination.md` §9.1 before delegation. If no candidate qualifies, perform the available checks in the primary agent and report independent specialist coverage as unverified.

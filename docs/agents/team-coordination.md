@@ -20,7 +20,7 @@ When the design documents say "coordinator," they mean that runtime component. W
 
 **Specialists.** Read-only investigators and reviewers with exactly `Read`, `Grep`, and `Glob`. They cannot edit files, run commands, fetch from the network, or dispatch other agents (Zcode subagents cannot spawn subagents). A specialist returns findings; the coordinator integrates them. A shell-enabled role is not read-only merely because its prompt says so — the tool list is the enforcement, and the specialist tool list contains no shell.
 
-For Codex, those names describe the permitted read/search operations, not promised native tool names. The same restrictions apply; §9.1 requires verification of the complete effective tool surface before substantive dispatch. Unsupported enforcement blocks use of the role rather than relaxing this policy. A source-packet fallback supplies missing read access only after the tool restriction is established.
+For Codex and Antigravity, those names describe the permitted read/search operations. §9.1 requires verification of the complete effective tool surface before substantive dispatch. Unsupported enforcement blocks use of the role. A source-packet fallback supplies missing read access only after the tool restriction is established.
 
 **Review independence.** The reviewer role (`zmachine-acceptance-reviewer`, or a stand-in reviewer when the named agent is unavailable) must be independent of the author of the material under review. Reviewers report defects and missing evidence; they never repair what they review. The coordinator fixes findings and, for substantive fixes, obtains a fresh review of the changed material.
 
@@ -118,13 +118,17 @@ These bind the coordinator and every specialist. Root `AGENTS.md` remains the au
 
 **Zcode.** Subagent definitions are discovered from `~/.zcode/agents/<name>.md` (user scope) only; this Zcode version has no project-level subagent discovery, and subagents cannot spawn subagents. The repository's `.zcode/agents/` directory holds **versioned source templates** — it is not an installed or discovered location. Installing means copying templates to `~/.zcode/agents/`; see `docs/agents/README.md` for install/update/removal and backup guidance. Officially, definition changes take effect only in a **fresh session**; one 2026-10-22 desktop session observed new definitions becoming available mid-session after installation, so verify actual reload behavior in your client rather than assuming either behavior. Report "written", "installed", "discovered", and "invocation-verified" as four separate states — static parsing proves none of the later three.
 
-**Instruction entry points.** Zcode injects root `AGENTS.md` (workspace scope) into sessions that request it; a user-scope `~/.zcode/AGENTS.md` would load first. Zcode does not read `GEMINI.md`; that file exists for Gemini CLI / Antigravity compatibility and points here. Antigravity loads root `AGENTS.md`/`GEMINI.md` and the immediate `.md` children of `.agents/rules/` (valid `trigger` frontmatter required); `.agents/rules/team-coordination.md` is the always-on entry point. Antigravity does not load Zcode subagent definitions — if specialist invocation is unavailable, the primary agent performs the checks itself and states that independent subagent review did not occur. Codex uses root `AGENTS.md` and the project definitions described in §9.1.
+**Instruction entry points.** Zcode injects root `AGENTS.md` (workspace scope) into sessions that request it. A user-scope `~/.zcode/AGENTS.md` would load first. `GEMINI.md` points Gemini CLI and Antigravity here. Antigravity loads root `AGENTS.md`/`GEMINI.md` and `.agents/rules/team-coordination.md`, the always-on workspace rule. Codex uses root `AGENTS.md` and the project definitions described in §9.1.
+
+**Antigravity.** The [eight workspace candidates](../../.agents/agents/README.md) live under `.agents/agents/`. Their frontmatter disables workspace MCP inheritance. Discovery and configuration inspection do not establish an effective read-only tool surface. Apply §9.1 on the intended client before delegating substantive work. If no specialist qualifies, the primary agent performs the available checks and reports independent specialist coverage as unverified.
 
 **Records.** Durable product decisions live in `docs/decisions/` (ADRs, plus the decision register on branches that include PR #33). Task notes and specialist reports are transient working material — keep them out of normative documents. This repository has no Memory Bank; do not install a memory service.
 
 **Branch state caveat (2026-10-22).** Branch `glm/begin_implementation` at `92cddc5` does not yet include `main` at `eaab2ee` (merged PR #33: decision register, contract reconciliation, acceptance supplement S01–S24, G1 probe briefs). Paths marked **[main-only]** in §4 exist on `main` but not in this branch; the canonical remote source for the D01–D37 approvals in the meantime is Issue #10.
 
-### 9.1 Codex project adapter and admission gate
+<a id="91-codex-project-adapter-and-admission-gate"></a>
+
+### 9.1 Project adapters and specialist admission
 
 The eight `.codex/agents/*.toml` files adapt the same roster, scope, exclusions, independence, and §6 return contract. They do not replace the `.zcode` sources or authorize parallel writers. [The adapter guide](codex-agents.md) describes the field mapping and current official documentation.
 
