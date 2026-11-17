@@ -31,14 +31,23 @@ function nextPolicy(before: TurnImage, plan: EffectPlan) {
   const { policy, applicability, history } = before.snapshot;
   if (!plan.amendment) return { policy, applicability, history };
   const { active_rules: rules, compiled, preferences } = plan.amendment;
+  const { bundle } = compiled;
+  const { generation_rules, invariants } = bundle.policy_amendment;
+  // Initial subset approval still binds the compiled assignment and its source.
+  // Publishing that assignment alone leaves the draft's policy snapshot intact.
+  if (compiled.kind === "subset" && bundle.sources.every(({ origin }) => origin === "initial") &&
+      bundle.world_patch.length > 0 && generation_rules.length === 0 && invariants.length === 0 &&
+      bundle.preferences.length === 0 && bundle.unresolved.length === 0) {
+    return { policy, applicability, history };
+  }
   const sources = new Map(policy.sources.map((source) => [source.id, source]));
-  for (const source of compiled.bundle.sources) {
+  for (const source of bundle.sources) {
     const prior = sources.get(source.id);
     if (prior && canonicalDigest(prior) !== canonicalDigest(source)) throw new Error("Amendment source ID already used.");
     sources.set(source.id, source);
   }
   const next = DirectiveBundle.parse({ ...policy, revision: policy.revision + 1, sources: [...sources.values()],
-    world_patch: [], preferences, unresolved: [...policy.unresolved, ...compiled.bundle.unresolved], policy_amendment: { ...policy.policy_amendment,
+    world_patch: [], preferences, unresolved: [...policy.unresolved, ...bundle.unresolved], policy_amendment: { ...policy.policy_amendment,
       generation_rules: rules.flatMap(({ kind, ...rule }) => kind === "permission" ? [rule] : []),
       invariants: rules.flatMap(({ kind, ...rule }) => kind === "invariant" ? [rule] : []),
     } });

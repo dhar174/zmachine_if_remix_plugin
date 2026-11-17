@@ -144,7 +144,11 @@ export function fixtureServer(service: TurnService, origin: string, auth: Fixtur
           response.setHeader("allow", "POST");
           return json(response, 405, { error: "METHOD_NOT_ALLOWED" });
         }
-        const body = url.search || Number(request.headers["content-length"]) > bodyLimit ? undefined : await readRequest(request);
+        if (url.search) {
+          response.setHeader("connection", "close");
+          return json(response, 400, { error: "QUERY_NOT_SUPPORTED" });
+        }
+        const body = Number(request.headers["content-length"]) > bodyLimit ? undefined : await readRequest(request);
         if (!body) {
           response.setHeader("connection", "close");
           return json(response, 413, { error: "REQUEST_LIMIT" });

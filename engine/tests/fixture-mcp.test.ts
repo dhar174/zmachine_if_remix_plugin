@@ -163,6 +163,12 @@ void test("Streamable HTTP rejects unsupported methods and oversized requests", 
       assert.equal(response.status, 405);
       assert.equal(response.headers.get("allow"), "POST");
     }
+    const withQuery = await fetch(url + "?probe=1", { method: "POST", headers: {
+      ...headers, accept: "application/json, text/event-stream",
+    }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }) });
+    const queryResponse = await withQuery.text();
+    assert.equal(withQuery.status, 400, queryResponse);
+    assert.deepEqual(JSON.parse(queryResponse), { error: "QUERY_NOT_SUPPORTED" });
     const body = Buffer.alloc(128 * 1024 + 1, 32);
     const oversized = await fetch(url, { method: "POST", headers, body });
     assert.equal(oversized.status, 413);
@@ -226,6 +232,43 @@ void test("modern Streamable HTTP preserves routing headers for discovery and na
     const reply = z.object({ structuredContent: z.object({ version: z.literal(version), result: context }) });
     const readback = reply.parse(await result(await modern("tools/call", params, "inspect_session")));
     assert.equal(readback.structuredContent.result.context.state, "draft");
+  } finally {
+    await fixture.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+void test("an assignment-only initial directive publishes the fixture without advancing policy", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "zirp-initial-assignment-"));
+  const fixture = await harness(directory);
+  try {
+    const draft = await fixture.open(await fixture.launch());
+    const label = "Lantern Room";
+    const text = "Set the room label to Lantern Room.";
+    const stored = await fixture.record(draft.head, "request:initial-assignment", "initial", text);
+    const interpretation = { version, context_digest: stored.compiler.context_digest,
+      clauses: [clause(text, stored.compiler.source_id, "label", text, [assignment("presentation:label", label)])] };
+    const prepare = { version, target: stored.target, action: { ...stored.action, interpretation } };
+    const inactive = z.object({ status: z.literal("INACTIVE"), proposal_digest: z.string() })
+      .parse(await fixture.call("prepare_turn", prepare));
+    const selected = await fixture.post("/fixture-subset", { source_ref: stored.action.source_ref,
+      proposal_digest: inactive.proposal_digest, clause_ids: ["label"] });
+    assert.equal(selected.status, 303, await selected.text());
+    const stage = prepared.parse(await fixture.call("prepare_turn", prepare));
+    const commit = { version, target: stored.target, action: stored.action, ...stage };
+    assert.equal(outcome.parse(await fixture.call("commit_turn", commit)).status, "NEEDS_APPROVAL");
+    await fixture.approve(stage);
+    const published = receipt.parse(await fixture.call("commit_turn", commit)).receipt;
+    assert.equal(published.revision, 1);
+    assert.equal(published.policy_revision, 0);
+    assert.equal(published.time_cost, 0);
+    assert.deepEqual(receipt.parse(await fixture.call("commit_turn", commit)).receipt, published);
+    const { session_id, branch_id } = draft.head;
+    const active = context.parse(await fixture.call("get_turn_context", { version, session_id, branch_id })).context;
+    assert.equal(active.state, "active");
+    assert.equal(active.head.expected_policy_revision, 0);
+    assert.ok(active.facts.some(({ field, value }) => field === "presentation:label" && value === label));
+    assert.deepEqual(active.rules, []);
   } finally {
     await fixture.close();
     rmSync(directory, { recursive: true, force: true });
@@ -319,7 +362,9 @@ void test("all eight MCP tools use scoped loopback access, exact browser approva
     fault = "after_commit";
     assert.equal(outcome.parse(await call("commit_turn", firstCommit)).status, "ABORTED");
     fault = undefined;
-    assert.equal(receipt.parse(await call("commit_turn", firstCommit)).receipt.time_cost, 0);
+    const firstReceipt = receipt.parse(await call("commit_turn", firstCommit)).receipt;
+    assert.equal(firstReceipt.time_cost, 0);
+    assert.equal(firstReceipt.policy_revision, 1);
     const active = context.parse(await call("get_turn_context", ref)).context;
     assert.equal(active.state, "active");
     assert.equal(active.mode, "PLAY");
