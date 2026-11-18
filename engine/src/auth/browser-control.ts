@@ -39,7 +39,7 @@ async function body(request: IncomingMessage): Promise<unknown> {
 }
 
 /** Framework-neutral local control endpoints. No tool route is mounted here. */
-type FixtureControl = Pick<TurnService, "issueFixtureLaunch" | "readFixture" | "recordFixtureSource" |
+type FixtureControl = Pick<TurnService, "fixtureProfile" | "issueFixtureLaunch" | "readFixture" | "recordFixtureSource" |
   "readFixtureSubset" | "selectFixtureSubset">;
 const fixtureMode = target.extend({ command: z.enum(["/play", "/edit"]) });
 const subsetForm = subset.omit({ clause_ids: true }).extend({ clause_ids: z.string().max(8192) });
@@ -73,9 +73,15 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><title>${title}</title><h1>${title}</h1>${content}</html>`);
       };
       if (fixture && request.method === "GET" && url.pathname === "/session") {
-        page("Open the synthetic fixture", "<p>The service stores synthetic fixture state and browser-recorded directives locally. " +
-          "Authorized directive text and visible facts are sent to ChatGPT. Use synthetic text only. " +
-          "ChatGPT retains chat data according to your account settings. The local trial store is retained for verification until removed.</p>" +
+        const native = fixture.fixtureProfile === "native-z5";
+        const disclosure = native
+          ? "The bundled Z5 story runs its opening and the authored SEED 42 command before the recoverable draft. " +
+            "Setup advances native time and is included in the opening record. Fixture state and directives are stored locally. " +
+            "The MCP client receives authorized fixture output and directive text. Use synthetic text only."
+          : "The service stores synthetic fixture state and browser-recorded directives locally. " +
+            "Authorized directive text and visible facts are sent to ChatGPT. Use synthetic text only. " +
+            "ChatGPT retains chat data according to your account settings. The local trial store is retained for verification until removed.";
+        page(native ? "Open the bundled Z5 fixture" : "Open the synthetic fixture", "<p>" + disclosure + "</p>" +
           `<form method="post" action="/fixture-launch">${csrfField}<button>Consent and create launch handle</button></form>`);
         return;
       }

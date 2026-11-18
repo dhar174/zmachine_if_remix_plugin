@@ -2,6 +2,7 @@ import { z } from "zod";
 import { DirectiveBundle, HeadExpectation, canonicalDigest } from "../contracts.ts";
 import { ResolverSnapshot } from "../policy/resolver-contracts.ts";
 import type { Access, Execution, TurnExecutor } from "../turn/contracts.ts";
+import type { EffectPlan } from "../policy/resolver-contracts.ts";
 import { TurnImage, failure, ok } from "../turn/contracts.ts";
 import { randomUUID } from "node:crypto";
 
@@ -67,6 +68,30 @@ export function fixtureImage(owner_id: Access["owner_id"]): TurnImage {
   });
 }
 
+export function executeFixtureOverlay(entities: TurnImage["snapshot"]["entities"], plan: EffectPlan) {
+  const events = [];
+  for (const { operation } of plan.operations) {
+    if (operation.kind === "remix.assign") {
+      const field = entities.find(({ id }) => id === operation.entity_id)?.surfaces.find(({ field }) => field === operation.field);
+      if (!field) return failure("VALIDATION_FAILED", "Unknown fixture field.");
+      field.fact = { state: "present", value: operation.value, evidence_id: field.fact.evidence_id };
+      events.push({ kind: "assignment", field: field.field });
+    }
+    if (operation.kind === "inventory.transfer") {
+      const holder = entities.find(({ id }) => id === operation.item)?.surfaces.find(({ field }) => field === "inventory:holder");
+      const from = entities.find(({ id }) => id === operation.from)?.surfaces.find(({ field }) => field === "inventory:contents");
+      const to = entities.find(({ id }) => id === operation.to)?.surfaces.find(({ field }) => field === "inventory:contents");
+      if (holder?.fact.state !== "present" || from?.fact.state !== "present" || to?.fact.state !== "present" ||
+          !Array.isArray(from.fact.value) || !Array.isArray(to.fact.value)) return failure("VALIDATION_FAILED", "Missing fixture inventory.");
+      holder.fact.value = operation.to;
+      from.fact.value = from.fact.value.filter((item) => item !== operation.item);
+      to.fact.value = [...to.fact.value, operation.item];
+      events.push({ kind: "inventory_transfer", item: operation.item });
+    }
+  }
+  return ok(events);
+}
+
 export function createFixtureExecutor(mutate: (execution: Execution) => void = () => {}, gate: () => Promise<void> = () => Promise.resolve()) {
   let executions = 0;
   const executor: TurnExecutor = {
@@ -90,27 +115,12 @@ export function createFixtureExecutor(mutate: (execution: Execution) => void = (
       const native = nativeState.parse(image.native);
       const entities = image.snapshot.entities;
       let pending = image.checkpoint.native_state.pending_input;
-      const events = [];
+      const overlay = executeFixtureOverlay(entities, plan);
+      if (!overlay.ok) return overlay;
+      const events: Execution["events"][number][] = overlay.value;
       const output = [];
       let outcome: Execution["outcome"] = "success";
       for (const { operation } of plan.operations) {
-        if (operation.kind === "remix.assign") {
-          const field = entities.find(({ id }) => id === operation.entity_id)?.surfaces.find(({ field }) => field === operation.field);
-          if (!field) return failure("VALIDATION_FAILED", "Unknown fixture field.");
-          field.fact = { state: "present", value: operation.value, evidence_id: field.fact.evidence_id };
-          events.push({ kind: "assignment", field: field.field });
-        }
-        if (operation.kind === "inventory.transfer") {
-          const holder = entities.find(({ id }) => id === operation.item)?.surfaces.find(({ field }) => field === "inventory:holder");
-          const from = entities.find(({ id }) => id === operation.from)?.surfaces.find(({ field }) => field === "inventory:contents");
-          const to = entities.find(({ id }) => id === operation.to)?.surfaces.find(({ field }) => field === "inventory:contents");
-          if (holder?.fact.state !== "present" || from?.fact.state !== "present" || to?.fact.state !== "present" ||
-              !Array.isArray(from.fact.value) || !Array.isArray(to.fact.value)) return failure("VALIDATION_FAILED", "Missing fixture inventory.");
-          holder.fact.value = operation.to;
-          from.fact.value = from.fact.value.filter((item) => item !== operation.item);
-          to.fact.value = [...to.fact.value, operation.item];
-          events.push({ kind: "inventory_transfer", item: operation.item });
-        }
         if (operation.kind === "native.line" || operation.kind === "native.character") {
           native.counter++;
           native.rng = (native.rng * 17 + 11) % 251;

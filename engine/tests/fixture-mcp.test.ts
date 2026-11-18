@@ -13,6 +13,9 @@ import { compilerView, fixtureContext, receiptView } from "../src/fixture/sessio
 import { createFixtureExecutor } from "../src/fixture/synthetic-world.ts";
 import { fixtureServer } from "../src/mcp/server.ts";
 import { scopes } from "../src/mcp/tools.ts";
+import { capture, checkpointView, nativePayload, nativeStory, openStory, send, storyBytes } from "../src/native/checkpoint.ts";
+import { createNativeFixtureExecutor } from "../src/native/executor.ts";
+import { TurnImage } from "../src/turn/contracts.ts";
 import type { FaultPoint } from "../src/turn/contracts.ts";
 import { TurnService } from "../src/turn/service.ts";
 import { makeFixture, play, take } from "./turn-fixture.ts";
@@ -41,8 +44,10 @@ const protection = (id: string, field: string) => ({
   guard: { id: "field.unchanged", enforcement: "structural", parameters: { field } },
 });
 
-async function harness(directory: string, browserEnabled = true, fault?: (point: FaultPoint) => void) {
-  const service = new TurnService(join(directory, "fixture.sqlite"), createFixtureExecutor(), Date.now, fault);
+async function harness(directory: string, browserEnabled = true, fault?: (point: FaultPoint) => void,
+  profile: "synthetic" | "native-z5" = "synthetic") {
+  const executor = profile === "native-z5" ? createNativeFixtureExecutor() : createFixtureExecutor();
+  const service = new TurnService(join(directory, "fixture.sqlite"), executor, Date.now, fault, profile);
   const auth = {
     authenticate: (req: IncomingMessage) => {
       const token = req.headers.authorization;
@@ -269,6 +274,175 @@ void test("an assignment-only initial directive publishes the fixture without ad
     assert.equal(active.head.expected_policy_revision, 0);
     assert.ok(active.facts.some(({ field, value }) => field === "presentation:label" && value === label));
     assert.deepEqual(active.rules, []);
+  } finally {
+    await fixture.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+void test("native Z5 through MCP matches uninterrupted authored play, discards candidates and inspects without input", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "zirp-native-"));
+  const database = join(directory, "fixture.sqlite");
+  let discard = false;
+  let fixture = await harness(directory, true, (point) => {
+    if (discard && point === "after_checkpoint") throw new Error("Discard the speculative native checkpoint.");
+  }, "native-z5");
+  try {
+    assert.match(await (await fixture.get("/session")).text(), /SEED 42.*advances native time/u);
+    const launch = await fixture.launch();
+    const [draft, duplicate] = await Promise.all([fixture.open(launch), fixture.open(launch)]);
+    assert.deepEqual(draft, duplicate);
+    assert.equal(draft.story_sha256, nativeStory);
+    assert.equal(draft.state, "draft");
+    assert.equal(draft.native?.projection, null);
+    const reference = openStory(storyBytes());
+    const opening = reference.start();
+    assert.throws(() => capture(reference), { code: "E_RNG" });
+    const setup = send(reference, { kind: "line", text: "seed 42" });
+    assert.deepEqual(draft.native?.opening, {
+      command: "SEED 42", output: [opening.delta, setup.delta], time_cost: 1, startup_counter: 7,
+    });
+    const initialCheckpoint = capture(reference);
+    const { session_id, branch_id } = draft.head;
+    const ref = { version, session_id, branch_id };
+    const read = async () => context.parse(await fixture.call("get_turn_context", ref)).context;
+    const published = () => {
+      const db = new DatabaseSync(database, { readOnly: true });
+      try {
+        const row = z.object({ body: z.string() }).parse(db.prepare(
+          "SELECT body FROM checkpoints JOIN heads ON checkpoints.id = heads.checkpoint",
+        ).get());
+        return TurnImage.parse(JSON.parse(row.body));
+      } finally { db.close(); }
+    };
+
+    const rewrite = "Prevent the opening side effect.";
+    const attempted = await fixture.record(draft.head, "request:opening", "initial", rewrite);
+    const interpretation = { version, context_digest: attempted.compiler.context_digest, clauses: [
+      clause(rewrite, attempted.compiler.source_id, "opening", rewrite,
+        [{ kind: "assignment", entity_id: "native:fixture", field: "progression:startup", value: 0 }]),
+    ] };
+    assert.equal(outcome.parse(await fixture.call("prepare_turn", {
+      version, target: attempted.target, action: { ...attempted.action, interpretation },
+    })).status, "CAPABILITY_MISSING");
+    assert.deepEqual(await read(), draft);
+
+    const initial = await initialDraft(fixture, draft);
+    const selected = await fixture.post("/fixture-subset", { source_ref: initial.action.source_ref,
+      proposal_digest: initial.inactive.proposal_digest, clause_ids: ["label", "protect"] });
+    assert.equal(selected.status, 303, await selected.text());
+    const stage = prepared.parse(await fixture.call("prepare_turn", initial.prepare));
+    await fixture.approve(stage);
+    const publishedInitial = receipt.parse(await fixture.call("commit_turn", {
+      version, target: initial.target, action: initial.action, ...stage,
+    })).receipt;
+    assert.equal(publishedInitial.time_cost, 0);
+    assert.deepEqual(nativePayload.parse(published().native).checkpoint, initialCheckpoint);
+    assert.equal((await read()).native?.projection?.room.name, "Probe Chamber");
+
+    let request = 0;
+    type Input = { kind: "line"; text: string } | { kind: "character"; value: string };
+    const line = (text: string): Input => ({ kind: "line", text });
+    const argumentsFor = async (input: Input) => ({
+      version, target: { ...(await read()).head, request_id: "request:z5-" + ++request },
+      action: { kind: "play", input },
+    });
+    const attempt = async (input: Input, expected: "success" | "failure", ticks: number, referenceInput = input) => {
+      const before = published();
+      const args = await argumentsFor(input);
+      const preparation = await fixture.call("prepare_turn", args);
+      assert.equal(outcome.parse(preparation).status, "PREPARED", JSON.stringify({ input, preparation }));
+      const stage = prepared.parse(preparation);
+      assert.deepEqual(published(), before);
+      const step = send(reference, referenceInput);
+      assert.deepEqual(step.errors, []);
+      const result = await fixture.call("commit_turn", { ...args, ...stage });
+      assert.equal(outcome.parse(result).status, "COMMITTED", JSON.stringify({ input, result }));
+      const committed = receipt.parse(result).receipt;
+      assert.deepEqual(committed.native_output, [step.delta]);
+      assert.equal(committed.in_fiction_result, expected);
+      assert.equal(committed.time_cost, ticks);
+      const image = published();
+      assert.deepEqual(nativePayload.parse(image.native).checkpoint, capture(reference));
+      assert.equal(image.checkpoint.clocks.native, before.checkpoint.clocks.native + ticks);
+      assert.equal(image.checkpoint.clocks.overlay, 0);
+      assert.deepEqual(receipt.parse(await fixture.call("commit_turn", { ...args, ...stage })).receipt, committed);
+      assert.deepEqual(published(), image);
+      return committed;
+    };
+
+    const baseline = published();
+    for (const name of ["get_turn_context", "inspect_session", "inspect_session"]) {
+      const body = name === "get_turn_context" ? ref : { ...ref, query: { kind: "facts" } };
+      const projection = context.parse(await fixture.call(name, body)).context.native?.projection;
+      assert.deepEqual(projection?.inventory, []);
+      assert.ok(!projection?.visible.some(({ name }) => name === "windowsill"));
+      assert.deepEqual(published(), baseline);
+    }
+
+    const remaining = ["take stone panel", "north"];
+    const attemptedLines = [];
+    for (const command of remaining) {
+      attemptedLines.push(command);
+      const result = await attempt(line(command), "failure", 1);
+      if (result.in_fiction_result === "failure") break;
+    }
+    assert.deepEqual(attemptedLines, ["take stone panel"]);
+    assert.equal((await read()).native?.projection?.room.name, "Probe Chamber");
+    const key = await attempt(line("take brass key"), "success", 1);
+    assert.match(key.native_output.join(""), /\[F06:event=chime\]/u);
+    assert.equal(key.event_ids.length, 1);
+    assert.equal((await read()).native?.projection?.inventory[0]?.name, "brass key");
+    await attempt(line("drop brass key"), "success", 1);
+    assert.deepEqual((await read()).native?.projection?.inventory, []);
+    await attempt(line("inventory"), "success", 1);
+    await attempt(line("take brass key"), "success", 1);
+    await attempt(line("look"), "success", 1);
+    await attempt(line("inventory"), "success", 1);
+    await attempt(line("north"), "success", 1);
+    const gallery = published();
+    assert.equal(outcome.parse(await fixture.call("prepare_turn", await argumentsFor(line("examine brass token")))).status,
+      "NEEDS_CLARIFICATION");
+    for (const command of ["save", "restore", "undo", "restart", "north then south"]) {
+      assert.equal(outcome.parse(await fixture.call("prepare_turn", await argumentsFor(line(command)))).status,
+        "CAPABILITY_MISSING");
+    }
+    assert.deepEqual(published(), gallery);
+    const tokens = (await read()).native?.projection?.visible.filter(({ name }) => name === "brass token");
+    assert.deepEqual(tokens?.map(({ id, qualifier }) => [id, qualifier]), [
+      ["native:object-32", "red token"], ["native:object-33", "blue token"],
+    ]);
+    await attempt(line("examine native:object-32"), "success", 1, line("examine red token"));
+    await attempt(line("examine native:object-33"), "success", 1, line("examine blue token"));
+
+    const stable = published();
+    const speculative = await argumentsFor(line("roll"));
+    const stagedRoll = prepared.parse(await fixture.call("prepare_turn", speculative));
+    discard = true;
+    assert.equal(outcome.parse(await fixture.call("commit_turn", { ...speculative, ...stagedRoll })).status, "ABORTED");
+    discard = false;
+    assert.deepEqual(published(), stable);
+    assert.equal(checkpointView(nativePayload.parse(stable.native).checkpoint).seed,
+      checkpointView(capture(reference)).seed);
+    await attempt(line("roll"), "success", 1);
+    await attempt(line("menu"), "success", 0);
+    const menu = published();
+    assert.equal((await read()).pending_input, "character");
+    assert.equal(outcome.parse(await fixture.call("prepare_turn", await argumentsFor(line("b")))).status, "CAPABILITY_MISSING");
+    assert.deepEqual(published(), menu);
+    await fixture.close();
+    fixture = await harness(directory, true, undefined, "native-z5");
+    assert.equal((await read()).pending_input, "character");
+    await attempt({ kind: "character", value: "b" }, "success", 1);
+    assert.equal((await read()).pending_input, "line");
+    await attempt(line("north"), "failure", 1);
+    await attempt(line("unlock vault door with brass key"), "success", 1);
+    await attempt(line("unlock vault door with brass key"), "failure", 1);
+    await attempt(line("open vault door"), "success", 1);
+    await attempt(line("north"), "success", 1);
+    assert.equal((await read()).native?.projection?.room.name, "Records Vault");
+    await attempt(line("south"), "success", 1);
+    assert.equal((await read()).native?.projection?.room.name, "Records Vault");
   } finally {
     await fixture.close();
     rmSync(directory, { recursive: true, force: true });
