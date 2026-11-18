@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { HeadExpectation, RequestIdentity, TurnEnvelope } from "../contracts.ts";
 import { CompilationInput, CompilationProposal, ModelInterpretation } from "../policy/directive-contracts.ts";
+import { startupRecord } from "../native/checkpoint.ts";
 
 const version = z.literal("1.0.0");
 export const opaque = (prefix: string) => z.string().regex(new RegExp("^" + prefix + ":[0-9a-f-]{36}$", "u"));
@@ -16,6 +17,7 @@ export const sourceRecord = z.strictObject({
 });
 export const launchRecord = z.strictObject({
   owner: HeadExpectation.shape.owner_id, expires: z.number(), session: sessionRef.nullable(),
+  profile: z.literal("native-z5").optional(),
 });
 export const compilationRecord = z.strictObject({ interpretation: ModelInterpretation, proposal: CompilationProposal });
 const play = z.strictObject({ kind: z.literal("play"), input: TurnEnvelope.shape.input });
@@ -36,12 +38,19 @@ export const visibleFacts = z.array(z.strictObject({
 export const publicRules = z.array(z.strictObject({
   id: z.string(), kind: z.enum(["invariant", "permission"]), source_id: z.string(), supersedes: z.array(z.string()),
 })).max(128);
+const nativeEntity = z.strictObject({ id: z.string(), name: z.string(), qualifier: z.string().nullable() });
+const nativeContext = z.strictObject({
+  version, opening: startupRecord,
+  projection: z.strictObject({
+    room: nativeEntity, inventory: z.array(nativeEntity), visible: z.array(nativeEntity), status_line: z.string(),
+  }).nullable(),
+});
 export const fixtureContext = z.strictObject({
   head: publicHead, state: z.enum(["draft", "active"]), mode: z.enum(["PLAY", "EDITOR"]),
   story_sha256: digest, pending_input: z.enum(["line", "character", "halted"]).nullable(),
   operations: z.array(z.enum(["initial_directive", "play", "editor_assignment", "policy_amendment", "inspect"])),
   clocks: z.strictObject({ native: z.int().nonnegative(), overlay: z.int().nonnegative() }).nullable(),
-  facts: visibleFacts, rules: publicRules,
+  facts: visibleFacts, rules: publicRules, native: nativeContext.optional(),
 });
 export const compilerView = z.strictObject({
   source_ref: opaque("source"), source_id: z.string(), text: z.string(),

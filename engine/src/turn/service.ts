@@ -3,6 +3,9 @@ import { z } from "zod";
 import { capture, compilationRecord, compilerView, fixtureContext, launchRecord, preparedAction, publicHead,
   receiptView, requestAction, sessionRef, sourceRecord, subset, target } from "../fixture/session-contracts.ts";
 import { fixtureGuards, fixtureImage, fixtureNativeWrite, fixtureRoom, fixtureStory } from "../fixture/synthetic-world.ts";
+import { checkpointView, nativePayload, nativeStory } from "../native/checkpoint.ts";
+import { nativeContext, openNativeFixture } from "../native/executor.ts";
+import { nativeEffects } from "../native/fixture-rules.ts";
 import { compileDirective, selectDirectiveSubset } from "../policy/directive-compiler.ts";
 import type { CompilationProposal, ModelInterpretation, SupportedSubsetSelection } from "../policy/directive-contracts.ts";
 import { Authority } from "../auth/authority.ts";
@@ -60,12 +63,15 @@ export class TurnService {
   private readonly inFlight = new Map<string, { digest: string; candidate: string; diff: string; promise: Promise<Commit>; abort: AbortController }>();
   private inTransaction = false;
   readonly browser: BrowserOperations;
+  readonly fixtureProfile: "synthetic" | "native-z5";
 
   private readonly executor: TurnExecutor;
   private readonly clock: () => number;
   private readonly fault: (point: FaultPoint) => void;
   constructor(storage: string | TurnStore, executor: TurnExecutor,
-    clock: () => number = Date.now, fault: (point: FaultPoint) => void = () => {}) {
+    clock: () => number = Date.now, fault: (point: FaultPoint) => void = () => {},
+    fixtureProfile: "synthetic" | "native-z5" = "synthetic") {
+    this.fixtureProfile = fixtureProfile;
     this.executor = executor;
     this.clock = clock;
     this.fault = fault;
@@ -115,19 +121,30 @@ export class TurnService {
   issueFixtureLaunch(owner: Access["owner_id"]): Result<string> {
     return this.atomic(() => {
       const handle = "launch:" + randomUUID();
-      this.store.saveFixtureRecord("launch", handle, { owner, session: null, expires: this.clock() + 300_000 });
+      this.store.saveFixtureRecord("launch", handle, { owner, session: null, expires: this.clock() + 300_000,
+        ...(this.fixtureProfile === "native-z5" ? { profile: this.fixtureProfile } : {}),
+      });
       return ok(handle);
     });
   }
 
-  openFixture(owner: Access["owner_id"], handle: string): Result<z.infer<typeof fixtureContext>> {
-    return this.atomic(() => {
+  async openFixture(owner: Access["owner_id"], handle: string): Promise<Result<z.infer<typeof fixtureContext>>> {
+    const lookup = () => {
       const entry = launchRecord.safeParse(this.store.fixtureRecord("launch", handle));
-      if (!entry.success || entry.data.owner !== owner) return invalid();
-      const launch = entry.data;
-      if (launch.session) return this.readFixture({ owner_id: owner, ...launch.session });
-      if (launch.expires <= this.clock()) return invalid();
-      const image = fixtureImage(owner);
+      return entry.success && entry.data.owner === owner && (entry.data.profile ?? "synthetic") === this.fixtureProfile &&
+        (entry.data.session || entry.data.expires > this.clock())
+        ? ok(entry.data) : invalid();
+    };
+    const launch = this.atomic(lookup);
+    if (!launch.ok) return launch;
+    if (launch.value.session) return this.readFixture({ owner_id: owner, ...launch.value.session });
+    const created = this.fixtureProfile === "native-z5" ? await openNativeFixture(owner) : ok(fixtureImage(owner));
+    if (!created.ok) return created;
+    return this.atomic(() => {
+      const current = lookup();
+      if (!current.ok) return current;
+      if (current.value.session) return this.readFixture({ owner_id: owner, ...current.value.session });
+      const image = created.value;
       const validated = validateImage(image, this.executor);
       if (!validated.ok) return validated;
       const set = this.authority.setHead(image.snapshot.head, "initialize");
@@ -135,7 +152,7 @@ export class TurnService {
       this.store.initializeDraft(image);
       this.store.saveFixtureRecord("session", branchKey(image.snapshot.head), true);
       const session = sessionRef.parse({ session_id: image.snapshot.head.session_id, branch_id: image.snapshot.head.branch_id });
-      this.store.saveFixtureRecord("launch", handle, { ...launch, session });
+      this.store.saveFixtureRecord("launch", handle, { ...current.value, session });
       return this.readFixture({ owner_id: owner, ...session });
     });
   }
@@ -143,7 +160,9 @@ export class TurnService {
   private fixtureBase(access: Access) {
     const active = this.store.head(access);
     const image = active ?? this.store.draft(access);
-    return image?.checkpoint.story_sha256 === fixtureStory ? { image, draft: !active } : undefined;
+    const story = image?.checkpoint.story_sha256;
+    return image && (story === fixtureStory || (story === nativeStory && this.fixtureProfile === "native-z5"))
+      ? { image, draft: !active } : undefined;
   }
 
   private publicFixtureHead({ session_id, branch_id, generation_id, expected_revision, expected_policy_revision }: Head) {
@@ -161,6 +180,7 @@ export class TurnService {
       const base = this.fixtureBase(access);
       if (!base) return invalid();
       const { image, draft } = base;
+      const story = image.checkpoint.story_sha256;
       const mode = this.authority.context(access.owner_id, image.snapshot.head, requestId);
       if (!mode.ok) return mode;
       const head = this.publicFixtureHead(image.snapshot.head);
@@ -169,11 +189,12 @@ export class TurnService {
           coverage === "complete" && domain === "presentation" && fact.state === "present" && typeof fact.value === "string"
             ? [{ entity_id, field, value: fact.value, evidence_id: fact.evidence_id }] : []));
       return ok(fixtureContext.parse({
-        head, state: draft ? "draft" : "active", mode: mode.value.mode, story_sha256: fixtureStory,
+        head, state: draft ? "draft" : "active", mode: mode.value.mode, story_sha256: story,
         pending_input: draft ? null : image.checkpoint.native_state.pending_input.kind,
         operations: draft ? ["initial_directive"] : ["play", "editor_assignment", "policy_amendment", "inspect"],
         clocks: draft ? null : { native: image.checkpoint.clocks.native, overlay: image.checkpoint.clocks.overlay },
         facts: draft ? [] : facts,
+        ...(story === nativeStory ? { native: nativeContext(image, draft) } : {}),
         rules: this.fixtureRules(image).slice(0, 128).map(({ id, kind, source, supersedes }) =>
           ({ id, kind, source_id: source.source_id, supersedes })),
       }));
@@ -213,7 +234,7 @@ export class TurnService {
     if (!mode.ok) return mode;
     if (mode.value.mode !== "EDITOR") return failure("NEEDS_APPROVAL", "The recorded directive needs current Editor control.");
     const context = CompilationInput.parse({
-      version: "1.0.0", head: record.head, policy_id: image.snapshot.policy.policy_id, story_sha256: fixtureStory,
+      version: "1.0.0", head: record.head, policy_id: image.snapshot.policy.policy_id, story_sha256: image.checkpoint.story_sha256,
       sources: [record.source], guards: fixtureGuards, active_rules: this.fixtureRules(image), history: image.snapshot.history,
     });
     const fields = image.snapshot.entities.flatMap(({ id: entity_id, surfaces }) =>
@@ -277,12 +298,16 @@ export class TurnService {
         if (prior?.receipt) return ok({ kind: "committed", record: prior.receipt });
         if (base.draft) return failure("NEEDS_APPROVAL", "Approve the initial directive before Play.");
         const input = action.input;
+        if (canonicalDigest(base.image.snapshot.head) !== canonicalDigest(expected(envelope))) return stale();
         const pending = base.image.checkpoint.native_state.pending_input.kind;
         if (input.kind !== pending) return failure("CAPABILITY_MISSING", "Fixture input does not match the pending boundary.");
         const operation = input.kind === "line" ? { kind: "native.line", text: input.text } :
           { kind: "native.character", value: input.value };
+        const declared = base.image.checkpoint.story_sha256 === nativeStory
+          ? nativeEffects(checkpointView(nativePayload.parse(base.image.native).checkpoint), input) : ok([fixtureNativeWrite]);
+        if (!declared.ok) return declared;
         return this.prepareTurn(access, envelope, { ...expected(envelope), version: "1.0.0", request_id: envelope.request_id,
-          mode: "PLAY", operations: [operation], declared_effects: [fixtureNativeWrite], amendment: null });
+          mode: "PLAY", operations: [operation], declared_effects: declared.value, amendment: null });
       }
       const existing = compilationRecord.safeParse(this.store.fixtureRecord("compilation", action.source_ref));
       if (existing.success && (branchKey(existing.data.proposal.head) !== branchKey(access) ||
@@ -295,6 +320,13 @@ export class TurnService {
       if (!trusted.ok) return trusted;
       const { record, context } = trusted.value;
       if (id !== requestKey({ ...record.head, request_id: record.request_id }) || canonicalDigest(record.head) !== canonicalDigest(expected(envelope))) return invalid();
+      if (base.image.checkpoint.story_sha256 === nativeStory && action.interpretation.clauses.some(({ entries }) =>
+        entries.some((entry) => entry.kind === "assignment" && entry.entity_id.startsWith("native:")))) {
+        this.authority.finish(record.head, record.request_id);
+        return failure("CAPABILITY_MISSING", base.draft
+          ? "The opening already executed. This fixture has no pre-start or native editing capability."
+          : "This fixture has no native editing capability.");
+      }
       const result = existing.success ? ok(existing.data.proposal) : compileDirective(context, action.interpretation);
       if (!result.ok) {
         const diagnostic = "diagnostics" in result ? result.diagnostics[0] : undefined;
@@ -586,7 +618,7 @@ export class TurnService {
   private async execute(access: Access, envelope: TurnEnvelope, work: Work, permit: Permit | undefined, abort: AbortController): Promise<Commit> {
     const { image, stage, plan, claim } = work;
     const id = requestKey(envelope);
-    const timeout = setTimeout(() => abort.abort(), 5_000);
+    const timeout = setTimeout(() => abort.abort(), limits.turn_ms);
     const interrupted = new Promise<ReturnType<typeof timedOut>>((resolve) => {
       if (abort.signal.aborted) resolve(timedOut());
       else abort.signal.addEventListener("abort", () => resolve(timedOut()), { once: true });

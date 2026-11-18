@@ -2,5 +2,5 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "zmachine-if-remix",
   "version": "1.0.0",
-  "description": "Start, play, edit, and inspect the private synthetic interactive-fiction fixture."
+  "description": "Start, play, edit, and inspect the configured bundled interactive-fiction fixture."
 }

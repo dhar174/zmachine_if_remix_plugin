@@ -35,7 +35,7 @@ export type DurableReceipt = z.infer<typeof DurableReceipt>;
 
 export type Access = Pick<z.infer<typeof HeadExpectation>, "owner_id" | "session_id" | "branch_id">;
 
-export const limits = Object.freeze({ operations: 32, events: 32, output_bytes: 65_536, checkpoint_bytes: 1_048_576 });
+export const limits = Object.freeze({ operations: 32, events: 32, output_bytes: 65_536, checkpoint_bytes: 1_048_576, turn_ms: 5_000 });
 export type FaultPoint = "before_checkpoint" | "after_checkpoint" | "before_commit" | "after_commit";
 export type Execution = {
   native: Json;
@@ -54,7 +54,8 @@ export interface TurnExecutor {
   project(image: TurnImage, proposal: ResolverProposal): Result<ResolverSnapshot["native"]>;
   execute(image: TurnImage, plan: EffectPlan, budget: typeof limits, signal: AbortSignal): Promise<Result<Execution>>;
   verifyNative(before: TurnImage, after: Execution, plan: EffectPlan): Result<void>;
-  /** Verify version/identity and fully recreate the executor state, without running a turn. */
+  /** Verify persisted version, identity and state consistency without running a turn.
+   * Executors with isolated workers verify actual recreation before returning executable images. */
   verifyRestore(image: TurnImage): Result<void>;
 }
 
