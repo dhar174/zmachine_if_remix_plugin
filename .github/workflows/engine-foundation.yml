@@ -23,6 +23,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: engine/.node-version
+      - name: Normalize checkout to LF bytes
+        working-directory: .
+        run: node .github/scripts/normalize-checkout.js
       - run: npm install --global npm@11.12.1
       - run: npm ci
       - run: npm run build
@@ -45,6 +48,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 26
+      - name: Normalize checkout to LF bytes
+        working-directory: .
+        run: node .github/scripts/normalize-checkout.js
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
