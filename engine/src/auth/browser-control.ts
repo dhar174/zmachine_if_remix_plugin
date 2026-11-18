@@ -2,8 +2,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import { HeadExpectation, OwnerId } from "../contracts.ts";
 import type { Authority } from "./authority.ts";
-import { capture, opaque, requestId, sessionRef, subset, target } from "../fixture/session-contracts.ts";
+import { capture, digest, opaque, requestId, sessionRef, subset, target } from "../fixture/session-contracts.ts";
 import type { TurnService } from "../turn/service.ts";
+import { restoreId } from "../fixture/recovery-contracts.ts";
 
 export interface BrowserSession {
   readonly owner: z.infer<typeof OwnerId>;
@@ -40,7 +41,8 @@ async function body(request: IncomingMessage): Promise<unknown> {
 
 /** Framework-neutral local control endpoints. No tool route is mounted here. */
 type FixtureControl = Pick<TurnService, "fixtureProfile" | "issueFixtureLaunch" | "readFixture" | "recordFixtureSource" |
-  "readFixtureSubset" | "selectFixtureSubset">;
+  "readFixtureSubset" | "selectFixtureSubset" | "recovery">;
+const restoreForm = z.strictObject({ id: restoreId, digest });
 const fixtureMode = target.extend({ command: z.enum(["/play", "/edit"]) });
 const subsetForm = subset.omit({ clause_ids: true }).extend({ clause_ids: z.string().max(8192) });
 const formRevision = (value: unknown) => typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value) ? Number(value) : value;
@@ -117,6 +119,21 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
           <button>Preview selected changes</button></form>`);
         return;
       }
+      if (fixture && request.method === "GET" && url.pathname === "/fixture-restore") {
+        const id = restoreId.safeParse(url.searchParams.get("id"));
+        if (!id.success) return reply(404, { error: "UNAVAILABLE" });
+        const reviewed = fixture.recovery.review(session.owner, id.data);
+        if (!reviewed.ok) return result(reviewed);
+        const { current, saved, save_id, digest, current_clocks, saved_clocks, pending } = reviewed.value;
+        page("Restore saved fixture",
+          `<p>Restore ${escaped(save_id)} from world revision ${saved.expected_revision} and policy revision ${saved.expected_policy_revision}.</p>` +
+          `<p>Current world revision ${current.expected_revision}, policy revision ${current.expected_policy_revision}.</p>` +
+          `<p>Branch ${escaped(current.branch_id)}. Current generation ${escaped(current.generation_id)}. Saved generation ${escaped(saved.generation_id)}.</p>` +
+          `<p>Current native and remix clocks are ${current_clocks.native} and ${current_clocks.overlay}. The save restores them to ${saved_clocks.native} and ${saved_clocks.overlay} and resumes ${escaped(pending)} input.</p>` +
+          "<p>Restore switches the whole game to a fresh generation in Play. Current Editor authority expires. Prior chat remains visible.</p>" +
+          `<form method="post" action="/fixture-restore">${csrfField}${hidden("id", id.data)}${hidden("digest", digest)}<button>Approve this restore</button></form>`);
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/candidate") {
         const id = candidateId.safeParse(url.searchParams.get("id"));
         if (!id.success) return reply(404, { error: "UNAVAILABLE" });
@@ -174,6 +191,12 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         response.writeHead(303, { location: "/candidate?id=" + encodeURIComponent(prepared.value.handle.candidate_id) });
         response.end();
         return;
+      }
+      if (fixture && url.pathname === "/fixture-restore") {
+        const parsed = restoreForm.safeParse(data);
+        if (!parsed.success) return reply(400, { error: "INVALID_CONTROL" });
+        const reviewed = fixture.recovery.review(session.owner, parsed.data.id, parsed.data.digest);
+        return reviewed.ok ? reply(200, { approved: true }) : result(reviewed);
       }
       if (url.pathname === "/approve") {
         const parsed = approve.safeParse(data);

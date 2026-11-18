@@ -24,6 +24,11 @@ if (!configPath || process.argv.length !== 3) {
     const auth = createFixtureAuth(config.auth);
     const executor = config.profile === "native-z5" ? createNativeFixtureExecutor() : createFixtureExecutor();
     const service = new TurnService(config.database_file, executor, undefined, undefined, config.profile);
+    const collected = service.collectAbandoned();
+    if (!collected.ok) {
+      service.close();
+      throw new Error("Fixture recovery cleanup failed.");
+    }
     const server = fixtureServer(service, config.auth.public_origin, auth, config.audit_tool_status ? {
       audit: ({ tool, status }) => { process.stdout.write(JSON.stringify({ tool, status }) + "\n"); },
     } : {});

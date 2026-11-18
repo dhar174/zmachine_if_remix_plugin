@@ -134,6 +134,11 @@ export class Authority implements AuthorizationPort {
     return same(state.head, expected(head)) ? success(state) : fail("STALE_REVISION", "Refresh the session head.");
   }
 
+  recoveryEpoch(owner: Identity, head: Head): Result<number> {
+    const current = this.state(owner, head);
+    return current.ok ? success(current.value.epoch) : current;
+  }
+
   /** Only a verified human control handler may call this method. */
   control(owner: Identity, head: Head, requestId: string, command: string): Result<{ mode: Mode; instruction: string | null }> {
     const result = this.state(owner, head);

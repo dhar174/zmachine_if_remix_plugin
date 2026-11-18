@@ -50,7 +50,7 @@ export const fixtureContext = z.strictObject({
   story_sha256: digest, pending_input: z.enum(["line", "character", "halted"]).nullable(),
   operations: z.array(z.enum(["initial_directive", "play", "editor_assignment", "policy_amendment", "inspect"])),
   clocks: z.strictObject({ native: z.int().nonnegative(), overlay: z.int().nonnegative() }).nullable(),
-  facts: visibleFacts, rules: publicRules, native: nativeContext.optional(),
+  facts: visibleFacts, rules: publicRules, native: nativeContext.optional(), restored_from: publicHead.optional(),
 });
 export const compilerView = z.strictObject({
   source_ref: opaque("source"), source_id: z.string(), text: z.string(),

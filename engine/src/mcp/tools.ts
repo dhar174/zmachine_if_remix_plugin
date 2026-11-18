@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { HeadExpectation } from "../contracts.ts";
+import { restoreResult, saveId, saveResult } from "../fixture/recovery-contracts.ts";
 import { compilerView, digest, fixtureContext, opaque, preparedAction, receiptView, requestAction, requestId,
   sessionRef, target } from "../fixture/session-contracts.ts";
 import type { Failure, Result } from "../ports.ts";
@@ -23,10 +24,11 @@ const failureView = z.strictObject({
   status: z.enum(["VALIDATION_FAILED", "NEEDS_CLARIFICATION", "NEEDS_APPROVAL", "STALE_REVISION", "POLICY_CONFLICT",
     "CAPABILITY_MISSING", "ABORTED", "INSUFFICIENT_SCOPE"]),
   message: z.string(), retry: z.enum(["none", "same_request", "refresh"]),
-  subtype: z.literal("IDEMPOTENCY_CONFLICT").optional(), handoff: z.literal("#21").optional(),
+  subtype: z.literal("IDEMPOTENCY_CONFLICT").optional(),
 });
 const view = z.strictObject({ status: z.literal("CONTEXT"), context: fixtureContext, compiler: compilerView.optional() });
 const approvalLink = z.string().url();
+const restoreControl = z.strictObject({ status: z.literal("NEEDS_BROWSER_CONTROL"), control_url: approvalLink });
 const candidatePreview = z.strictObject({
   route: z.enum(["native", "remix", "bridged"]), time: z.enum(["none", "native", "overlay"]),
   operations: z.array(z.string()).max(32),
@@ -40,13 +42,13 @@ const inactive = z.strictObject({ status: z.literal("INACTIVE"), proposal_digest
     requires: z.array(z.string()) })).max(512) });
 const committed = z.strictObject({ status: z.literal("COMMITTED"), receipt: receiptView });
 const inspection = z.strictObject({ status: z.literal("INSPECTION"), context: fixtureContext,
-  receipts: z.array(receiptView).max(10) });
+  receipts: z.array(receiptView).max(10), receipt_on_active_lineage: z.boolean().optional() });
 
 function route<T extends z.ZodObject, V extends z.ZodType>(
   input: T, output: V, scope: string, description: string, write: boolean, destructive: boolean,
   run: (principal: Principal, args: z.output<T>) => Result<z.input<V>> | Promise<Result<z.input<V>>>,
 ) {
-  return { input, output: z.strictObject({ version, result: output instanceof z.ZodNever ? failureView.omit({ version: true }) : z.union([output, failureView.omit({ version: true })]) }),
+  return { input, output: z.strictObject({ version, result: z.union([output, failureView.omit({ version: true })]) }),
     scope, description, write, destructive,
     run(principal: Principal, raw: unknown) {
       const args = input.safeParse(raw);
@@ -56,10 +58,7 @@ function route<T extends z.ZodObject, V extends z.ZodType>(
 }
 
 const unavailable = () => failure("NEEDS_APPROVAL", "Authenticated browser control is unavailable.");
-const handoff = () => ({ ok: false as const, error: {
-  status: "CAPABILITY_MISSING" as const, message: "Combined saves and restore are deferred to #21.", retry: "none" as const,
-  handoff: "#21" as const,
-} });
+
 const scoped = (principal: Principal, { session_id, branch_id }: z.infer<typeof sessionRef>) =>
   ({ owner_id: principal.owner, session_id, branch_id });
 const committedView = (receipt: z.infer<typeof receiptView>) => ({ status: "COMMITTED" as const, receipt });
@@ -148,34 +147,27 @@ export function fixtureTools(service: TurnService, origin: string, browserAvaila
     inspect_session: route(ref.extend({ query: historyQuery }), inspection, scopes.read,
       "Read an authorized fixture head and bounded facts, rules or receipts. This never advances time.",
       false, false, (who, args) => {
-        const access = scoped(who, args);
-        const context = service.readFixture(access);
-        if (!context.ok) return context;
-        const query = args.query;
-        const receipts = query.kind === "receipt" ? service.fixtureHistory(access,
-          { generation_id: query.generation_id, request_id: query.request_id }) :
-          query.kind === "history" ? service.fixtureHistory(access, undefined, query.limit) : ok([]);
-        if (!receipts.ok) return receipts;
-        return ok({ status: "INSPECTION" as const, context: { ...context.value,
-          facts: query.kind === "facts" ? context.value.facts : [],
-          rules: query.kind === "rules" ? context.value.rules : [] }, receipts: receipts.value });
+        const result = service.inspectFixture(scoped(who, args), args.query);
+        return result.ok ? ok({ status: "INSPECTION" as const, ...result.value }) : result;
       }),
-    save_session: route(ref, z.never(), scopes.read, "Unavailable. Combined saves are deferred to issue #21.", false, false,
-      (who, args) => {
-        const access = service.readFixture(scoped(who, args));
-        return access.ok ? handoff() : access;
-      }),
-    restore_session: route(ref, z.never(), scopes.read, "Unavailable. Combined restore is deferred to issue #21.", false, false,
-      (who, args) => {
-        const access = service.readFixture(scoped(who, args));
-        return access.ok ? handoff() : access;
+    save_session: route(z.strictObject({ version, target }), saveResult, scopes.commit,
+      "Save the active combined fixture head privately. Keep the returned save ID.", true, false,
+      (who, args) => service.recovery.save(who.owner, args.target)),
+    restore_session: route(z.strictObject({ version, target, save_id: saveId }),
+      z.union([restoreControl, restoreResult]), scopes.commit,
+      "Restore a combined save after independent browser approval. Retry the exact same arguments to recover the result.",
+      true, true, async (who, args) => {
+        const result = await service.recovery.restore(who.owner, args.target, args.save_id, browserAvailable);
+        if (!result.ok) return result;
+        if (result.value.status === "RESTORED") return ok(result.value);
+        return ok({ status: "NEEDS_BROWSER_CONTROL" as const,
+          control_url: browserUrl("/fixture-restore", { id: result.value.id }) });
       }),
   };
 }
 
-export function toolFailure({ status, message, retry, subtype }: Failure, handoff?: "#21") {
-  return failureView.omit({ version: true }).parse({ status, message, retry, ...(subtype ? { subtype } : {}),
-    ...(handoff ? { handoff } : {}) });
+export function toolFailure({ status, message, retry, subtype }: Failure) {
+  return failureView.omit({ version: true }).parse({ status, message, retry, ...(subtype ? { subtype } : {}) });
 }
 
 export function insufficientScope() {
