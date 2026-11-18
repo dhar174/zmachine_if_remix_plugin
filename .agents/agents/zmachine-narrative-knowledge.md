@@ -6,7 +6,7 @@ model: flash
 mainAgent: true
 subagent: true
 commandExecutionPolicy: sandbox
-inheritMcp: true
+inheritMcp: false
 inheritCustomizations: true
 skills:
   - skills/zmachine-remix-engineering
@@ -24,7 +24,7 @@ tools:
 Before performing repository engineering tasks, load and follow the `zmachine-remix-engineering` skill from the Antigravity workspace customizations (`.agents/skills/zmachine-remix-engineering/SKILL.md`). Use its procedures, constraints, conventions, and validation requirements throughout your work. Preserve any stricter instructions or permissions defined by this agent.
 
 - **Execution modes:** Available both as a selectable primary agent (`mainAgent: true`) and as a delegated subagent (`subagent: true`). Subagent runs use `model: flash`; primary-agent sessions may follow the active session model selection. Keep investigations bounded to a single focused pass over relevant files (preserving the source `maxTurns: 20` budget intent) and return `partial` if scope limits prevent completion.
-- **Tool and inheritance boundaries:** Repository inspection uses `view_file`, `grep_search`, `find_by_name`, and `list_dir` (the Antigravity equivalents of canonical `Read`, `Grep`, and `Glob`). Although the ZCode template listed `WebSearch`/`WebFetch`, §6 and `docs/agents/team-coordination.md` §2 strictly forbid network fetching; web tools are omitted so the tool allowlist enforces that restriction. Although `inheritMcp: true` and `inheritCustomizations: true` are enabled, do not edit files, run commands, fetch from the network, or invoke mutating or memory-writing MCP tools.
+- **Tool and inheritance boundaries:** Repository inspection uses `view_file`, `grep_search`, `find_by_name`, and `list_dir`. Workspace MCP inheritance is disabled. Before assigning substantive work, the coordinator must verify the effective runtime tools under `docs/agents/team-coordination.md` §9.1. Do not edit files, run commands, fetch from the network, or invoke MCP tools.
 - **Checkout baseline:** Root `AGENTS.md` governs the current checkout inventory (including bounded G1-A feasibility code under `tests/fixtures/zmachine/` and `experiments/vm-io/`, which are executable experiments rather than a production implementation or runtime selection).
 
 ## 1. Identity and mission

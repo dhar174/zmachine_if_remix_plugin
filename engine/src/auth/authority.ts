@@ -13,7 +13,8 @@ type Entry = Pick<Head, "owner_id" | "session_id" | "branch_id" | "generation_id
 type Endpoint = { entity_id: string; field: string };
 type StoreState = { head: Head; mode: Mode; epoch: number };
 type Bound = { head: Head; epoch: number; expires: number };
-type Override = Bound & { instruction: string };
+type RecordedDirective = { id: string; origin: "editor" | "initial"; text: string };
+type Override = Bound & { instruction: string; recorded?: RecordedDirective };
 type Lease = Bound & { remaining: number; fields: Endpoint[] };
 type Candidate = Bound & {
   handle: Handle;
@@ -146,12 +147,27 @@ export class Authority implements AuthorizationPort {
     }
     const match = /^\/edit ([^\r\n]+)$/.exec(command);
     const instruction = match?.[1]?.trim();
-    const key = this.request(head, requestId);
-    if (!instruction || /(?:^|\s)\/(?:play|edit)(?:\s|$)/.test(instruction) || !/^request:[A-Za-z0-9._:-]+$/.test(requestId) ||
-        this.overrides.has(key) || this.requestCandidates.has(key)) {
+    if (!instruction || /(?:^|\s)\/(?:play|edit)(?:\s|$)/.test(instruction)) {
       return fail("NEEDS_CLARIFICATION", "Use a single explicit mode control for a fresh logical request.");
     }
-    this.overrides.set(key, { head: state.head, epoch: state.epoch, expires: this.clock() + ttl, instruction });
+    return this.oneTurn(state, requestId, instruction);
+  }
+
+  /** Bind a separately authenticated source capture to its one-turn control. */
+  controlRecordedDirective(owner: Identity, head: Head, requestId: string, recorded: RecordedDirective) {
+    const current = this.state(owner, head);
+    if (!current.ok) return current;
+    return this.oneTurn(current.value, requestId, recorded.text, recorded);
+  }
+
+  private oneTurn(state: StoreState, requestId: string, instruction: string, recorded?: RecordedDirective):
+    Result<{ mode: Mode; instruction: string }> {
+    const key = this.request(state.head, requestId);
+    if (!/^request:[A-Za-z0-9._:-]+$/.test(requestId) || this.overrides.has(key) || this.requestCandidates.has(key)) {
+      return fail("NEEDS_CLARIFICATION", "Use a single explicit mode control for a fresh logical request.");
+    }
+    this.overrides.set(key, { head: state.head, epoch: state.epoch, expires: this.clock() + ttl, instruction,
+      ...(recorded ? { recorded } : {}) });
     return success({ mode: "EDITOR", instruction });
   }
 
@@ -187,12 +203,14 @@ export class Authority implements AuthorizationPort {
     return success(undefined);
   }
 
-  context(owner: Identity, head: Head, requestId: string): Result<TrustedContext> {
+  context(owner: Identity, head: Head, requestId?: string): Result<TrustedContext> {
     const result = this.state(owner, head);
     if (!result.ok) return result;
     const state = result.value;
-    const override = this.activeOverride(state, requestId);
-    if (!override && this.overrides.has(this.request(state.head, requestId))) return approvalNeeded("The one-turn Editor instruction has ended.");
+    const override = requestId === undefined ? undefined : this.activeOverride(state, requestId);
+    if (requestId !== undefined && !override && this.overrides.has(this.request(state.head, requestId))) {
+      return approvalNeeded("The one-turn Editor instruction has ended.");
+    }
     return success({ owner_id: owner, head: structuredClone(state.head), mode: override ? "EDITOR" : state.mode });
   }
 
@@ -247,8 +265,9 @@ export class Authority implements AuthorizationPort {
       this.finish(trusted.value.head, request.request_id);
       return deny();
     }
-    if (override && request.amendment && !snapshot.data.compiler_context?.sources.some((source) =>
-      source.origin === "editor" && source.provenance === "caller_recorded" && source.text === override.instruction)) {
+    if (override && (request.amendment || override.recorded) && !snapshot.data.compiler_context?.sources.some((source) =>
+      source.provenance === "caller_recorded" && source.text === override.instruction &&
+      (override.recorded ? source.origin === override.recorded.origin && source.id === override.recorded.id : source.origin === "editor"))) {
       this.finish(state.head, request.request_id);
       return deny();
     }

@@ -11,7 +11,7 @@ export const branchKey = (scope: Access) => canonicalJson([scope.owner_id, scope
 const dispositions = ["active", "cancelled", "expired"] as const;
 const requestRow = z.object({
   envelope: z.string(), proposal: z.string().nullable(), stage: z.string().nullable(),
-  claim: z.string().nullable(), receipt: z.string().nullable(), cancelled: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+  claim: z.string().nullable(), committed_candidate: z.string().nullable(), committed_digest: z.string().nullable(), receipt: z.string().nullable(), cancelled: z.union([z.literal(0), z.literal(1), z.literal(2)]),
 });
 const parseJson = (text: string): unknown => JSON.parse(text) as unknown;
 
@@ -31,14 +31,20 @@ export class SQLiteTurns {
       }
       this.atomic(() => {
         const version = this.db.prepare("PRAGMA user_version").get()?.user_version;
-        if (version !== 0 && version !== 1) throw new Error("Unsupported turn database version.");
-        if (version === 0) this.db.exec("PRAGMA user_version=1");
+        if (version !== 0 && version !== 1 && version !== 2) throw new Error("Unsupported turn database version.");
         this.db.exec("CREATE TABLE IF NOT EXISTS coordinator (id INTEGER PRIMARY KEY CHECK(id=1), token TEXT NOT NULL) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS authority (area TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(area,key)) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS checkpoints (id TEXT PRIMARY KEY, digest TEXT NOT NULL, body TEXT NOT NULL, published INTEGER NOT NULL, claim TEXT) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS heads (branch TEXT PRIMARY KEY, checkpoint TEXT NOT NULL REFERENCES checkpoints(id)) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, envelope TEXT NOT NULL, proposal TEXT, stage TEXT, claim TEXT, receipt TEXT, cancelled INTEGER NOT NULL DEFAULT 0, checkpoint TEXT REFERENCES checkpoints(id)) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, request TEXT NOT NULL REFERENCES requests(id), body TEXT NOT NULL) STRICT");
+        if (version !== 2) {
+          this.db.exec("ALTER TABLE requests ADD COLUMN committed_candidate TEXT");
+          this.db.exec("ALTER TABLE requests ADD COLUMN committed_digest TEXT");
+          this.db.exec("PRAGMA user_version=2");
+        }
+        this.db.exec("CREATE TABLE IF NOT EXISTS fixture_records (area TEXT NOT NULL, key TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(area,key)) STRICT");
+        this.db.exec("CREATE TABLE IF NOT EXISTS fixture_drafts (branch TEXT PRIMARY KEY, checkpoint TEXT NOT NULL UNIQUE, digest TEXT NOT NULL, body TEXT NOT NULL) STRICT");
         this.db.prepare("INSERT INTO coordinator VALUES(1,?) ON CONFLICT(id) DO UPDATE SET token=excluded.token").run(this.token);
         this.db.exec("UPDATE requests SET claim=NULL WHERE receipt IS NULL");
         // Keep branch freshness and one-turn tombstones. Restart never resurrects Editor mode or permits.
@@ -97,8 +103,40 @@ export class SQLiteTurns {
     return image;
   }
 
+  draft(scope: Access): TurnImage | undefined {
+    const row = this.db.prepare("SELECT body,digest FROM fixture_drafts WHERE branch=?").get(branchKey(scope));
+    if (!row) return undefined;
+    const image = TurnImage.parse(parseJson(z.string().parse(row.body)));
+    if (canonicalDigest(image) !== row.digest) throw new Error("Draft digest mismatch.");
+    return image;
+  }
+
+  initializeDraft(image: TurnImage): void {
+    this.db.prepare("INSERT INTO fixture_drafts VALUES(?,?,?,?)")
+      .run(branchKey(image.snapshot.head), image.checkpoint.checkpoint_id, canonicalDigest(image), canonicalJson(image));
+  }
+
+  fixtureRecord(area: "launch" | "session" | "source" | "compilation", key: string): unknown {
+    const row = this.db.prepare("SELECT body FROM fixture_records WHERE area=? AND key=?").get(area, key);
+    return typeof row?.body === "string" ? parseJson(row.body) : undefined;
+  }
+
+  saveFixtureRecord(area: "launch" | "session" | "source" | "compilation", key: string, body: CanonicalValue): void {
+    this.db.prepare("INSERT INTO fixture_records VALUES(?,?,?) ON CONFLICT(area,key) DO UPDATE SET body=excluded.body")
+      .run(area, key, canonicalJson(body));
+  }
+
+  fixtureReceipts(scope: Access, limit: number): DurableReceipt[] {
+    return this.db.prepare(
+      "SELECT receipt FROM requests WHERE receipt IS NOT NULL AND json_extract(id,'$.owner_id')=? " +
+      "AND json_extract(id,'$.session_id')=? AND json_extract(id,'$.branch_id')=? " +
+      "ORDER BY json_extract(receipt,'$.receipt.revision') DESC LIMIT ?",
+    ).all(scope.owner_id, scope.session_id, scope.branch_id, limit)
+      .map(({ receipt }) => DurableReceipt.parse(parseJson(z.string().parse(receipt))));
+  }
+
   hasCheckpoint(id: string): boolean {
-    return this.db.prepare("SELECT 1 FROM checkpoints WHERE id=?").get(id) !== undefined;
+    return this.db.prepare("SELECT 1 FROM checkpoints WHERE id=? UNION ALL SELECT 1 FROM fixture_drafts WHERE checkpoint=?").get(id, id) !== undefined;
   }
 
   initialize(image: TurnImage): void {
@@ -108,7 +146,7 @@ export class SQLiteTurns {
   }
 
   request(id: string) {
-    const row = this.db.prepare("SELECT envelope,proposal,stage,claim,receipt,cancelled FROM requests WHERE id=?").get(id);
+    const row = this.db.prepare("SELECT envelope,proposal,stage,claim,receipt,cancelled,committed_candidate,committed_digest FROM requests WHERE id=?").get(id);
     if (!row) return undefined;
     const data = requestRow.parse(row);
     const stage = data.stage === null ? null : Stage.parse(parseJson(data.stage));
@@ -136,21 +174,30 @@ export class SQLiteTurns {
   }
 
   publish(id: string, claim: string, old: TurnImage, image: TurnImage, receipt: DurableReceipt,
-    events: readonly CanonicalValue[]): void {
+    events: readonly CanonicalValue[], stage: Stage, draft: boolean): void {
     const value = image.checkpoint.checkpoint_id;
     const checkpoint = this.db.prepare("UPDATE checkpoints SET published=1,claim=NULL WHERE id=? AND claim=? AND published=0 AND digest=?")
       .run(value, claim, canonicalDigest(image));
     if (checkpoint.changes !== 1) throw new Error("Staged checkpoint is missing.");
-    const head = this.db.prepare("UPDATE heads SET checkpoint=? WHERE branch=? AND checkpoint=?")
-      .run(value, branchKey(old.snapshot.head), old.checkpoint.checkpoint_id);
+    const branch = branchKey(old.snapshot.head);
+    let head;
+    if (draft) {
+      const removed = this.db.prepare("DELETE FROM fixture_drafts WHERE branch=? AND checkpoint=?")
+        .run(branch, old.checkpoint.checkpoint_id);
+      if (removed.changes !== 1) throw new Error("Draft base changed.");
+      head = this.db.prepare("INSERT INTO heads VALUES(?,?)").run(branch, value);
+    } else {
+      head = this.db.prepare("UPDATE heads SET checkpoint=? WHERE branch=? AND checkpoint=?")
+        .run(value, branch, old.checkpoint.checkpoint_id);
+    }
     if (head.changes !== 1) throw new Error("Committed head changed.");
     for (const [index, event] of events.entries()) {
       const eventId = receipt.receipt.event_ids[index];
       if (!eventId) throw new Error("Missing event ID.");
       this.db.prepare("INSERT INTO events VALUES(?,?,?)").run(eventId, id, canonicalJson(event));
     }
-    const saved = this.db.prepare("UPDATE requests SET receipt=?,checkpoint=?,claim=NULL,stage=NULL WHERE id=? AND claim=? AND receipt IS NULL")
-      .run(canonicalJson(receipt), value, id, claim);
+    const saved = this.db.prepare("UPDATE requests SET receipt=?,checkpoint=?,committed_candidate=?,committed_digest=?,claim=NULL,stage=NULL WHERE id=? AND claim=? AND receipt IS NULL")
+      .run(canonicalJson(receipt), value, stage.handle.candidate_id, stage.diff_digest, id, claim);
     if (saved.changes !== 1) throw new Error("Request claim changed.");
   }
 
@@ -167,4 +214,4 @@ export class SQLiteTurns {
 
 /** Synchronous atomic storage boundary for one active coordinator per database. */
 export type TurnStore = Pick<SQLiteTurns, "transaction" | "close" | "authority" | "head" | "initialize" |
-  "hasCheckpoint" | "request" | "bind" | "claim" | "cancel" | "insertCheckpoint" | "publish" | "collect">;
+  "draft" | "initializeDraft" | "fixtureRecord" | "saveFixtureRecord" | "fixtureReceipts" | "hasCheckpoint" | "request" | "bind" | "claim" | "cancel" | "insertCheckpoint" | "publish" | "collect">;

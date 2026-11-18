@@ -1,6 +1,6 @@
 # Antigravity Workspace Agents (Migrated from ZCode)
 
-This directory contains the Google Antigravity workspace-level counterparts of the eight read-only specialist agent definitions in [`.zcode/agents/`](../../.zcode/agents/). The original `.zcode/agents/*.md` files remain unchanged and continue operating independently in ZCode.
+This directory contains eight Google Antigravity workspace candidates based on the specialist definitions in [`.zcode/agents/`](../../.zcode/agents/). Before substantive delegation, verify their effective read-only tool surface under the [specialist admission gate](../../docs/agents/team-coordination.md#91-project-adapters-and-specialist-admission).
 
 This `README.md` has no YAML agent frontmatter and is documentation only — not an agent definition.
 
@@ -30,7 +30,7 @@ model: flash
 mainAgent: true
 subagent: true
 commandExecutionPolicy: sandbox
-inheritMcp: true
+inheritMcp: false
 inheritCustomizations: true
 skills:
   - skills/zmachine-remix-engineering
@@ -47,18 +47,18 @@ All eight agents declare `skills: [skills/zmachine-remix-engineering]` in YAML f
 
 All eight source specialists are defined as read-only, non-mutating, non-network investigators in `docs/agents/team-coordination.md` (§2, §8.9–§8.10) and in each definition's §6 ("Allowed operations and limits"):
 
-- **Granted Antigravity tools (all 8 agents):** `view_file`, `grep_search`, `find_by_name`, `list_dir` (functional equivalents of ZCode `Read`, `Grep`, `Glob`, plus read-only directory listing).
-- **Omitted write/shell tools:** None of the eight agents are granted `write_to_file`, `replace_file_content`, `multi_replace_file_content`, or `run_command`.
+- **Declared Antigravity tools (all 8 agents):** `view_file`, `grep_search`, `find_by_name`, `list_dir` (functional equivalents of ZCode `Read`, `Grep`, `Glob`, plus read-only directory listing).
+- **Omitted write/shell tools:** The eight `tools` declarations omit `write_to_file`, `replace_file_content`, `multi_replace_file_content`, and `run_command`.
 - **Omitted `TodoWrite`:** No direct Antigravity built-in tool equivalent exists; progress tracking stays inline without mutating workspace files.
 - **Intentionally excluded web tools (`WebSearch` / `WebFetch`):** Five ZCode templates (`zmachine-context-contracts`, `zmachine-vm-bridge`, `zmachine-narrative-knowledge`, `zmachine-continuity-provenance`, `zmachine-acceptance-reviewer`) listed `WebFetch` and/or `WebSearch` in YAML frontmatter (see `docs/agents/README.md`), even though their own §6 and `docs/agents/team-coordination.md` §2 explicitly forbid network fetching. To preserve the effective read-only, offline/packet-only intent, `search_web` and `read_url_content` are omitted from all eight Antigravity `tools` allowlists.
-- **MCP inheritance (`inheritMcp: true`):** Enabled per configuration requirements; agent instructions explicitly prohibit invoking mutating, network-fetching, or memory-writing MCP tools unless separately authorized in an assignment packet.
+- **MCP inheritance (`inheritMcp: false`):** Disables inheritance of workspace MCP servers. Verify the effective tools separately, including runtime task management and delegation. See the [Antigravity frontmatter reference](https://antigravity.google/docs/build-plugins#subagents).
 
 ## Differences and Compatibility Limitations
 
 1. **CLI vs. App/IDE tool surface (`agy 1.5.8`):** In Antigravity CLI (`agy 1.5.8`), `view_file` resolves to the built-in `read_file` tool, whereas `grep_search`, `find_by_name`, and `list_dir` are not exposed as separate CLI built-ins (they apply on surfaces such as Antigravity App/IDE where those tools exist). When running under CLI-only restrictions without `run_command`, specialists read known paths with `read_file` and request search/listing excerpts or commands from the coordinator via the assignment packet (`docs/agents/team-coordination.md` §5).
 2. **Primary-agent `model` precedence:** Selecting an agent as a primary session agent (`agy --agent <name>` or `/agents`) can inherit or follow the active session model rather than forcing `flash`.
 3. **No frontmatter `maxTurns` enforcement:** Turn budgets are guidance in instructions rather than a hard Antigravity frontmatter cap.
-4. **Inherited MCP exposure:** With `inheritMcp: true`, inherited workspace/user MCP servers remain visible to the runtime; read-only and no-memory-write boundaries for those tools rely on prompt discipline and parent/session MCP configuration rather than per-agent MCP denylists.
+4. **Runtime admission:** The review at `7dbb00d` observed inherited MCP tools and process control through `manage_task` in the earlier configuration. The revised frontmatter still requires fresh effective-tool verification on the intended client.
 
 ## Discovery and Invocation
 
@@ -72,5 +72,5 @@ All eight source specialists are defined as read-only, non-mutating, non-network
 `.zcode/agents/` remains the upstream template source for ZCode. When updating a specialist role:
 
 1. Update the canonical policy (`docs/agents/team-coordination.md`) or `.zcode/agents/<name>.md` first as required by the task.
-2. Mirror domain-scope, invariant, startup-read, and return-contract edits into `.agents/agents/<name>.md`, keeping Antigravity YAML frontmatter (`model: flash`, `mainAgent: true`, `subagent: true`, `commandExecutionPolicy: sandbox`, `inheritMcp: true`, `inheritCustomizations: true`, `skills`, and the read-only `tools` list) intact.
-3. Re-run static YAML/tool validation and `agy agents` discovery checks before closeout.
+2. Mirror domain-scope, invariant, startup-read, and return-contract edits into `.agents/agents/<name>.md`, keeping Antigravity YAML frontmatter (`model: flash`, `mainAgent: true`, `subagent: true`, `commandExecutionPolicy: sandbox`, `inheritMcp: false`, `inheritCustomizations: true`, `skills`, and the read-only `tools` list) intact.
+3. Check the YAML and declared tools, then verify that the intended workspace client lists the expected eight `zmachine-*` roles.
