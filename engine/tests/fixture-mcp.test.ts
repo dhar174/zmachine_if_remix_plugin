@@ -289,7 +289,12 @@ void test("native Z5 through MCP matches uninterrupted authored play, discards c
   }, "native-z5");
   try {
     assert.match(await (await fixture.get("/session")).text(), /SEED 42.*advances native time/u);
-    const launch = await fixture.launch();
+    const consent = await fixture.post("/fixture-launch", {});
+    assert.equal(consent.status, 200);
+    const consentPage = await consent.text();
+    assert.match(consentPage, /launch handle into your local MCP client/u);
+    const launch = /launch:[0-9a-f-]{36}/u.exec(consentPage)?.[0];
+    assert.ok(launch);
     const [draft, duplicate] = await Promise.all([fixture.open(launch), fixture.open(launch)]);
     assert.deepEqual(draft, duplicate);
     assert.equal(draft.story_sha256, nativeStory);

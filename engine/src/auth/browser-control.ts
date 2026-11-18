@@ -138,7 +138,8 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         if (!z.strictObject({}).safeParse(data).success) return reply(400, { error: "INVALID_CONTROL" });
         const launch = fixture.issueFixtureLaunch(session.owner);
         if (!launch.ok) return result(launch);
-        page("Fixture launch authorized", `<p>Copy this launch handle into ChatGPT.</p><pre>${escaped(launch.value)}</pre>`);
+        const client = fixture.fixtureProfile === "native-z5" ? "your local MCP client" : "ChatGPT";
+        page("Fixture launch authorized", `<p>Copy this launch handle into ${client}.</p><pre>${escaped(launch.value)}</pre>`);
         return;
       }
       if (fixture && (url.pathname === "/fixture-source" || url.pathname === "/fixture-mode")) {
@@ -149,7 +150,8 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
           if (!parsed.success) return reply(400, { error: "INVALID_CONTROL" });
           const record = fixture.recordFixtureSource(session.owner, parsed.data);
           if (!record.ok) return result(record);
-          page("Directive recorded", `<p>Copy this source reference into ChatGPT.</p><pre>${escaped(record.value)}</pre>`);
+          const client = fixture.fixtureProfile === "native-z5" ? "your local MCP client" : "ChatGPT";
+          page("Directive recorded", `<p>Copy this source reference into ${client}.</p><pre>${escaped(record.value)}</pre>`);
           return;
         }
         const parsed = fixtureMode.safeParse(values);
