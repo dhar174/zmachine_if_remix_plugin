@@ -163,10 +163,15 @@ export function observe(before: View, after: View, input: NativeInput) {
   const effects = changed.map(effect);
   const allowed = new Set(covered.value.map(({ field }) => field));
   const chime = output.includes("[F06:event=chime]");
+  // On this story, the parser can take the key before checking an unlocked door.
+  const tookKeyBeforeFailedUnlock = input.kind === "line" && input.text === "unlock vault door with brass key" &&
+    !before.locked && !after.locked && before.holder === before.room && after.holder === objects.player &&
+    after.moved && output.includes("(first taking the brass key)\n");
+  const unexpectedFailureEffect = outcome === "failure" && changed.some((field) =>
+    field !== "turns" && !(tookKeyBeforeFailedUnlock && (field === "holder" || field === "moved")));
   if (!outcome || after.pending.kind !== (menu ? "character" : "line") || time_cost !== (menu ? 0 : 1) ||
       (!menu && !output.includes("[F06:turn=" + after.turns + "]")) || chime !== (time_cost === 1 && after.turns === 3) ||
-      effects.some(({ field }) => !allowed.has(field)) ||
-      (outcome === "failure" && changed.some((field) => field !== "turns"))) return invalid();
+      effects.some(({ field }) => !allowed.has(field)) || unexpectedFailureEffect) return invalid();
   return ok({ outcome, time_cost, output: [output], effects,
     events: chime ? [{ kind: "native_timer", event: "chime", turn: after.turns }] : [] });
 }

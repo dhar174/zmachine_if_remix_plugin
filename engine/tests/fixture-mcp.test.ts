@@ -330,6 +330,9 @@ void test("native Z5 through MCP matches uninterrupted authored play, discards c
     assert.equal(outcome.parse(await fixture.call("prepare_turn", {
       version, target: attempted.target, action: { ...attempted.action, interpretation },
     })).status, "CAPABILITY_MISSING");
+    assert.equal(outcome.parse(await fixture.call("get_turn_context", {
+      ...ref, request_id: attempted.target.request_id,
+    })).status, "NEEDS_APPROVAL");
     assert.deepEqual(await read(), draft);
 
     const initial = await initialDraft(fixture, draft);
@@ -344,6 +347,22 @@ void test("native Z5 through MCP matches uninterrupted authored play, discards c
     assert.equal(publishedInitial.time_cost, 0);
     assert.deepEqual(nativePayload.parse(published().native).checkpoint, initialCheckpoint);
     assert.equal((await read()).native?.projection?.room.name, "Probe Chamber");
+
+    const activeBefore = published();
+    const activeEdit = "Move the brass key to my inventory.";
+    const recordedEdit = await fixture.record((await read()).head, "request:native-assignment", "assignment", activeEdit);
+    const activeInterpretation = { version, context_digest: recordedEdit.compiler.context_digest, clauses: [
+      clause(activeEdit, recordedEdit.compiler.source_id, "move-key", activeEdit,
+        [{ kind: "assignment", entity_id: "native:object-30", field: "inventory:holder", value: "native:object-21" }]),
+    ] };
+    const rejectedEdit = z.object({ status: z.literal("CAPABILITY_MISSING"), message: z.string() }).parse(
+      await fixture.call("prepare_turn", { version, target: recordedEdit.target,
+        action: { ...recordedEdit.action, interpretation: activeInterpretation } }));
+    assert.match(rejectedEdit.message, /no native editing capability/u);
+    assert.equal(outcome.parse(await fixture.call("get_turn_context", {
+      ...ref, request_id: recordedEdit.target.request_id,
+    })).status, "NEEDS_APPROVAL");
+    assert.deepEqual(published(), activeBefore);
 
     let request = 0;
     type Input = { kind: "line"; text: string } | { kind: "character"; value: string };
@@ -442,7 +461,11 @@ void test("native Z5 through MCP matches uninterrupted authored play, discards c
     assert.equal((await read()).pending_input, "line");
     await attempt(line("north"), "failure", 1);
     await attempt(line("unlock vault door with brass key"), "success", 1);
-    await attempt(line("unlock vault door with brass key"), "failure", 1);
+    await attempt(line("drop brass key"), "success", 1);
+    assert.deepEqual((await read()).native?.projection?.inventory, []);
+    const implicitTake = await attempt(line("unlock vault door with brass key"), "failure", 1);
+    assert.match(implicitTake.native_output.join(""), /first taking the brass key.*vault door is unlocked/su);
+    assert.equal((await read()).native?.projection?.inventory[0]?.id, "native:object-30");
     await attempt(line("open vault door"), "success", 1);
     await attempt(line("north"), "success", 1);
     assert.equal((await read()).native?.projection?.room.name, "Records Vault");

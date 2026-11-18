@@ -320,9 +320,12 @@ export class TurnService {
       if (!trusted.ok) return trusted;
       const { record, context } = trusted.value;
       if (id !== requestKey({ ...record.head, request_id: record.request_id }) || canonicalDigest(record.head) !== canonicalDigest(expected(envelope))) return invalid();
-      if (base.draft && base.image.checkpoint.story_sha256 === nativeStory && action.interpretation.clauses.some(({ entries }) =>
+      if (base.image.checkpoint.story_sha256 === nativeStory && action.interpretation.clauses.some(({ entries }) =>
         entries.some((entry) => entry.kind === "assignment" && entry.entity_id.startsWith("native:")))) {
-        return failure("CAPABILITY_MISSING", "The opening already executed. This fixture has no pre-start or native editing capability.");
+        this.authority.finish(record.head, record.request_id);
+        return failure("CAPABILITY_MISSING", base.draft
+          ? "The opening already executed. This fixture has no pre-start or native editing capability."
+          : "This fixture has no native editing capability.");
       }
       const result = existing.success ? ok(existing.data.proposal) : compileDirective(context, action.interpretation);
       if (!result.ok) {
