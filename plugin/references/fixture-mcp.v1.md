@@ -5,7 +5,7 @@ Send `version: "1.0.0"` on every call. Read typed data in `structuredContent.res
 | Tool | Arguments and result |
 | --- | --- |
 | `open_story_session` | Pass the exact browser `launch_handle`. Keep the returned IDs. A draft becomes active after its initial commit. |
-| `get_turn_context` | Pass `session_id` and `branch_id`. For compilation, add the owner's `source_ref` and the corresponding `request_id`. |
+| `get_turn_context` | Pass `session_id` and `branch_id`. For compilation, add the owner's `source_ref` and the corresponding `request_id`. A generation created by restore exposes its saved origin in `context.restored_from`. |
 | `set_input_mode` | Pass session and branch IDs, a fresh `request_id`, and `mode` (`PLAY` or `EDITOR`). Follow the returned browser link to record a directive or change mode. |
 | `prepare_turn` | Pass `target` with the returned head fields plus your `request_id`. Use a Play action, a directive interpretation, or `{ "kind": "mixed" }` when intent needs clarification. |
 | `commit_turn` | Pass the original `target`, `action`, `candidate_id`, and `diff_digest`. Omit `interpretation` from the directive action at commit. |
@@ -41,6 +41,8 @@ Use one registered command per Play line. For interpreted entity actions, use th
 At the fixture menu, `a`, `b`, and `q` are character inputs. Confirm the prompt before sending a key. For compound requests, commit and refresh each subturn before the next action. Stop on failure, ambiguity, an unexpected prompt, or a rejected or uncertain commit. Context reads consume no native time. The explicit `look` and `inventory` commands advance this fixture's native clock.
 
 Native editing, pre-opening edits, and arbitrary parser input are outside this profile. Native save, restore, undo, and restart are blocked. Use the combined tools for a saved line or character boundary.
+
+## Restore, narration, and error handling
 
 After `RESTORED`, refresh context. Use its active branch, generation, both revisions, and input boundary for new requests. The service returns to Play. Recent history follows the restored ancestry. On exact receipt lookup, `receipt_on_active_lineage: false` marks a displaced receipt. Earlier chat can still contain spoilers and superseded facts. Reconstructed state uses committed content and recorded RNG. Later model generation belongs to the new history.
 

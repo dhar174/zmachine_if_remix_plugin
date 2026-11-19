@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { request } from "node:http";
+import { createRequire } from "node:module";
 import type { IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,7 +22,7 @@ import { createNativeFixtureExecutor } from "../src/native/executor.ts";
 import { TurnImage } from "../src/turn/contracts.ts";
 import type { FaultPoint } from "../src/turn/contracts.ts";
 import { TurnService } from "../src/turn/service.ts";
-import { makeFixture, play, take } from "./turn-fixture.ts";
+import { edit, endpoint, makeFixture, play, take } from "./turn-fixture.ts";
 
 const origin = "https://fixture.test";
 const version = "1.0.0";
@@ -190,8 +191,8 @@ async function reviewRestore(fixture: Awaited<ReturnType<typeof harness>>, args:
   return { id, digest };
 }
 
-async function activateFixture(fixture: Awaited<ReturnType<typeof harness>>) {
-  const draft = await fixture.open(await fixture.launch());
+async function activateFixture(fixture: Awaited<ReturnType<typeof harness>>, existingDraft?: Context) {
+  const draft = existingDraft ?? await fixture.open(await fixture.launch());
   const initial = await initialDraft(fixture, draft);
   assert.equal((await fixture.post("/fixture-subset", { source_ref: initial.action.source_ref,
     proposal_digest: initial.inactive.proposal_digest, clause_ids: ["label", "protect"] })).status, 303);
@@ -241,13 +242,23 @@ void test("combined restore through MCP creates a fresh Play generation and reta
     const ref = await activateFixture(fixture);
     const read = async () => context.parse(await fixture.call("get_turn_context", ref)).context;
     const saved = await read();
-    const save_id = await saveCombined(fixture, saved.head, "request:save");
+    const mode = (head: Context["head"], command: "/edit" | "/play") =>
+      fixture.post("/fixture-mode", { ...head, request_id: "request:mode", command });
+    assert.equal((await mode(saved.head, "/edit")).status, 200);
+    const editor = await read();
+    assert.equal(editor.mode, "EDITOR");
+    const save_id = await saveCombined(fixture, editor.head, "request:save");
+    assert.deepEqual(await read(), editor);
+    assert.equal((await mode(saved.head, "/play")).status, 200);
     const playArgs = { version, target: { ...saved.head, request_id: "request:later" },
       action: { kind: "play", input: { kind: "line", text: "look" } } };
     const playStage = prepared.parse(await fixture.call("prepare_turn", playArgs));
     const historical = await fixture.call("commit_turn", { ...playArgs, ...playStage });
     assert.equal(outcome.parse(historical).status, "COMMITTED");
     const later = await read();
+    assert.equal((await mode(later.head, "/edit")).status, 200);
+    const oldLease = take(fixture.service.browser.issueLease(owner, { owner_id: owner, ...later.head }, [endpoint], 300_000, 1));
+    const source = await fixture.record(later.head, "request:recorded", "assignment", "Rename the room to Old Name.");
     const args = { version, target: { ...later.head, request_id: "request:rollback" }, save_id };
     const { id, digest } = await reviewRestore(fixture, args);
     const results = await Promise.all([fixture.call("restore_session", args), fixture.call("restore_session", args)]);
@@ -260,6 +271,15 @@ void test("combined restore through MCP creates a fresh Play generation and reta
     assert.equal(restored.mode, "PLAY");
     assert.deepEqual(restored.clocks, saved.clocks);
     assert.deepEqual(restored.facts, saved.facts);
+    assert.equal(outcome.parse(await fixture.call("get_turn_context", {
+      ...ref, source_ref: source.action.source_ref, request_id: source.target.request_id,
+    })).status, "STALE_REVISION");
+    assert.equal(outcome.parse(await fixture.call("prepare_turn", {
+      version, target: { ...restored.head, request_id: source.target.request_id },
+      action: { ...source.action, interpretation: { version, context_digest: source.compiler.context_digest,
+        clauses: [clause(source.compiler.text, source.compiler.source_id, "old", source.compiler.text,
+          [assignment(endpoint.field, "Old Name")])] } },
+    })).status, "STALE_REVISION");
     assert.equal((await fixture.post("/fixture-restore", { id, digest })).status, 404);
     const history = inspection.parse(await fixture.call("inspect_session", { ...ref, query: { kind: "history" } }));
     assert.deepEqual(history.receipts.map((item) => item.request_id), ["request:initial"]);
@@ -280,6 +300,26 @@ void test("combined restore through MCP creates a fresh Play generation and reta
     assert.equal(outcome.parse(await fixture.call("save_session", {
       version, target: { ...restored.head, request_id: "request:reader" },
     }, "reader")).status, "INSUFFICIENT_SCOPE");
+
+    // Leases are available to the internal coordinator API. Test the old lease against a fresh
+    // candidate at the same policy revision, then prove that the candidate accepts a current lease.
+    assert.equal((await mode(restored.head, "/edit")).status, 200);
+    const head = { owner_id: owner, ...restored.head };
+    assert.equal(head.expected_policy_revision, later.head.expected_policy_revision);
+    const request = edit("request:fresh-editor");
+    const envelope = { ...request.envelope, ...head };
+    const proposal = { ...request.proposal, ...head };
+    const candidate = take(fixture.service.prepareTurn(head, envelope, proposal));
+    assert.equal(candidate.kind, "prepared");
+    const candidate_id = candidate.handle.candidate_id;
+    const permit = { candidate_id, diff_digest: candidate.diff_digest, source: "lease" as const, reference: oldLease };
+    const failed = await fixture.service.commitTurn(head, envelope, candidate_id, permit);
+    assert.equal(failed.ok, false);
+    if (!failed.ok) assert.equal(failed.error.status, "NEEDS_APPROVAL");
+    assert.equal((await read()).head.expected_revision, restored.head.expected_revision);
+    const renewed = take(fixture.service.browser.issueLease(owner, head, [endpoint], 300_000, 1));
+    const committed = take(await fixture.service.commitTurn(head, envelope, candidate_id, { ...permit, reference: renewed }));
+    assert.equal(committed.receipt.status, "COMMITTED");
   } finally {
     await fixture.close();
     rmSync(directory, { recursive: true, force: true });
@@ -314,9 +354,13 @@ void test("native combined line and character saves restore exact state and cont
     const menu = { kind: "line", text: "menu" } as const;
     const opened = await commitFixtureInput(fixture, lineHead.head, "request:menu", menu);
     assert.deepEqual(receipt.parse(opened.result).receipt.native_output, [send(reference, menu).delta]);
+    await commitFixtureEdit(fixture, (await read()).head, "request:saved-lineage", "amendment",
+      "Update the inscription protection.", { kind: "supersession", old_rule_id: "rule:inscription",
+        replacement: protection("rule:inscription-v2", "presentation:inscription"), retained: [] });
     const characterHead = await read();
     assert.equal(characterHead.pending_input, "character");
     const characterImage = publishedImage(path);
+    assert.deepEqual(characterImage.snapshot.history.map(({ id }) => id), ["rule:inscription"]);
     const charSave = await saveCombined(fixture, characterHead.head, "request:char-save");
 
     const choice = { kind: "character", value: "b" } as const;
@@ -335,8 +379,9 @@ void test("native combined line and character saves restore exact state and cont
     await commitFixtureEdit(fixture, (await read()).head, "request:rename", "assignment",
       "Rename the room to After Save.", assignment("presentation:label", "After Save"));
     await commitFixtureEdit(fixture, (await read()).head, "request:amend", "amendment",
-      "Replace inscription protection with label protection.", { kind: "supersession", old_rule_id: "rule:inscription",
+      "Replace inscription protection with label protection.", { kind: "supersession", old_rule_id: "rule:inscription-v2",
         replacement: protection("rule:label", "presentation:label"), retained: [] });
+    assert.deepEqual(publishedImage(path).snapshot.history.map(({ id }) => id), ["rule:inscription", "rule:inscription-v2"]);
     const edited = await read();
     assert.equal(edited.head.expected_policy_revision, characterHead.head.expected_policy_revision + 1);
     assert.ok(edited.facts.some(({ value }) => value === "After Save"));
@@ -456,11 +501,28 @@ void test("invalid or incompatible saved data leaves the active combined head in
         assert.equal(result.status, field === "native_state" ? "CAPABILITY_MISSING" : "VALIDATION_FAILED", field);
         assert.deepEqual(publishedImage(path), active);
       }
-      for (const data of ["{", canonicalJson({ ...source, native: null })]) {
-        writeSource(data, canonicalDigest(source));
-        assert.equal(impossible.parse(await fixture.call("restore_session", args)).status, "VALIDATION_FAILED");
+      for (const [name, raw] of [
+        ["snapshot schema", { ...source, snapshot: { ...source.snapshot, version: "2.0.0" } }],
+        ["policy schema", { ...source, snapshot: { ...source.snapshot, policy: { ...source.snapshot.policy, version: "2.0.0" } } }],
+      ] as const) {
+        const incompatible = z.json().parse(raw);
+        writeSource(canonicalJson(incompatible), canonicalDigest(incompatible));
+        assert.equal(impossible.parse(await fixture.call("restore_session", args)).status, "VALIDATION_FAILED", name);
         assert.deepEqual(publishedImage(path), active);
       }
+      // Invalid JSON exercises decoding. The null payload uses matching row and payload digests
+      // so the synthetic executor has to reject it.
+      writeSource("{", canonicalDigest(source));
+      assert.equal(impossible.parse(await fixture.call("restore_session", args)).status, "VALIDATION_FAILED");
+      assert.deepEqual(publishedImage(path), active);
+      const payload_sha256 = canonicalDigest(null);
+      const missingNative = TurnImage.parse({ ...source, native: null, checkpoint: {
+        ...source.checkpoint, native_state: { ...source.checkpoint.native_state, payload_sha256,
+          payload_ref: "blob:" + payload_sha256 },
+      } });
+      writeSource(canonicalJson(missingNative), canonicalDigest(missingNative));
+      assert.equal(impossible.parse(await fixture.call("restore_session", args)).status, "VALIDATION_FAILED");
+      assert.deepEqual(publishedImage(path), active);
       writeSource(canonicalJson(source), canonicalDigest(source));
       const event = db.prepare("SELECT id,request,body FROM events WHERE request IN (SELECT id FROM requests WHERE checkpoint=?)")
         .get(source.checkpoint.checkpoint_id);
@@ -479,6 +541,178 @@ void test("invalid or incompatible saved data leaves the active combined head in
       assert.equal((await fixture.post("/fixture-restore", prepared)).status, 200);
       assert.equal(impossible.parse(await fixture.call("restore_session", args)).status, "RESTORED");
     } finally { db.close(); }
+  } finally {
+    await fixture.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+void test("native restore rejects incompatible saved images at validation and in the fresh worker", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "zirp-native-invalid-save-"));
+  const path = join(directory, "fixture.sqlite");
+  let fixture = await harness(directory, true, undefined, "native-z5");
+  try {
+    const ref = await activateFixture(fixture);
+    const source = publishedImage(path);
+    const savedHead = context.parse(await fixture.call("get_turn_context", ref)).context.head;
+    const save_id = await saveCombined(fixture, savedHead, "request:native-save");
+    const played = await commitFixtureInput(fixture, savedHead, "request:advance", { kind: "line", text: "look" });
+    assert.equal(outcome.parse(played.result).status, "COMMITTED");
+    const active = publishedImage(path);
+    const head = context.parse(await fixture.call("get_turn_context", ref)).context.head;
+    const args = { version, target: { ...head, request_id: "request:native-restore" }, save_id };
+    const original = nativePayload.parse(source.native);
+    const window = z.object({ text: z.string(), cursorX: z.number(), cursorY: z.number(), rock: z.number() });
+    const envelope = z.object({
+      integrity: z.object({ envelopeSha256: z.string() }).passthrough(),
+      payload: z.object({ quetzalB64: z.string(), readData: z.object({}).passthrough(),
+        windows: z.object({ status: window.nullable() }).passthrough() }).passthrough(),
+    }).passthrough();
+    const require = createRequire(import.meta.url);
+    const codec = require("../../experiments/vm-checkpoint/lib/checkpoint-format.js") as {
+      canonicalEnvelopeString: (value: unknown) => string;
+      sha256Hex: (value: string) => string;
+    };
+    const checkpoint = (change: (image: z.infer<typeof envelope>) => void) => {
+      const image = envelope.parse(original.checkpoint);
+      change(image);
+      image.integrity.envelopeSha256 = codec.sha256Hex(codec.canonicalEnvelopeString(image));
+      return nativePayload.parse({ ...original, checkpoint: image });
+    };
+    const db = new DatabaseSync(path);
+    try {
+      const overwrite = (image: TurnImage) => {
+        const digest = canonicalDigest(image);
+        assert.equal(db.prepare("UPDATE checkpoints SET body=?,digest=? WHERE id=?")
+          .run(canonicalJson(image), digest, source.checkpoint.checkpoint_id).changes, 1);
+        assert.equal(db.prepare("UPDATE saved_sessions SET body=json_set(body, '$.digest', ?, '$.head', json(?)) WHERE id=?")
+          .run(digest, canonicalJson(image.snapshot.head), save_id).changes, 1);
+      };
+      const overwriteNative = (native: typeof original) => {
+        const payload_sha256 = canonicalDigest(native);
+        overwrite(TurnImage.parse({ ...source, native, checkpoint: { ...source.checkpoint, native_state: {
+          ...source.checkpoint.native_state, payload_sha256, payload_ref: "blob:" + payload_sha256,
+        } } }));
+      };
+      for (const [name, invalid] of [
+        ["opening mismatch", { ...original, opening: { ...original.opening, output: ["Different opening", original.opening.output[1] ?? ""] } }],
+        ["truncated Quetzal", checkpoint((image) => { image.payload.quetzalB64 = image.payload.quetzalB64.slice(0, 8); })],
+        ["unsupported timed continuation", checkpoint((image) => { image.payload.readData.time = 1; })],
+      ] satisfies [string, typeof original][]) {
+        overwriteNative(invalid);
+        const rejected = z.object({ status: z.literal("VALIDATION_FAILED"), message: z.string() })
+          .parse(await fixture.call("restore_session", args));
+        assert.equal(rejected.message, "Invalid native fixture image.", name);
+        assert.deepEqual(publishedImage(path), active);
+      }
+      const futureRevision = active.checkpoint.revision + 1;
+      overwrite(TurnImage.parse({ ...source, checkpoint: { ...source.checkpoint, revision: futureRevision },
+        snapshot: { ...source.snapshot, head: { ...source.snapshot.head, expected_revision: futureRevision } } }));
+      assert.equal(outcome.parse(await fixture.call("restore_session", args)).status, "VALIDATION_FAILED");
+      assert.deepEqual(publishedImage(path), active);
+
+      // The envelope is valid in isolation, but its status-window presence differs from the fresh VM.
+      overwriteNative(checkpoint((image) => {
+        image.payload.windows.status = image.payload.windows.status ? null : { text: "", cursorX: 0, cursorY: 0, rock: 202 };
+      }));
+      await reviewRestore(fixture, args);
+      const rejected = z.object({ status: z.literal("CAPABILITY_MISSING"), message: z.string() })
+        .parse(await fixture.call("restore_session", args));
+      assert.match(rejected.message, /pinned native checkpoint.*could not be verified/u);
+      assert.deepEqual(publishedImage(path), active);
+      assert.equal(db.prepare("SELECT count(*) AS staged FROM checkpoints WHERE published=0").get()?.staged, 0);
+      overwrite(source);
+    } finally { db.close(); }
+
+    await fixture.close();
+    fixture = await harness(directory);
+    assert.equal(outcome.parse(await fixture.call("restore_session", args)).status, "CAPABILITY_MISSING");
+    assert.deepEqual(publishedImage(path), active);
+    await fixture.close();
+    fixture = await harness(directory, true, undefined, "native-z5");
+    await reviewRestore(fixture, args);
+    assert.equal(outcome.parse(await fixture.call("restore_session", args)).status, "RESTORED");
+  } finally {
+    await fixture.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+void test("collection preserves live turn and restore claims while a nonzero overlay clock is restored", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "zirp-live-claim-"));
+  const path = join(directory, "fixture.sqlite");
+  let atStaged = () => {};
+  const fixture = await harness(directory, true, (point) => {
+    if (point === "after_checkpoint") atStaged();
+  });
+  try {
+    const draft = await fixture.open(await fixture.launch());
+    const item = "remix:key";
+    const from = "remix:player";
+    const to = "remix:floor";
+    const db = new DatabaseSync(path);
+    try {
+      // Extend only this test's synthetic draft with the inventory needed for a real overlay turn.
+      const row = z.object({ body: z.string() }).parse(db.prepare("SELECT body FROM fixture_drafts").get());
+      const image = TurnImage.parse(JSON.parse(row.body));
+      const room = image.snapshot.entities.find(({ id }) => id === "remix:room");
+      const surface = room?.surfaces[0];
+      assert.ok(room && surface);
+      const inventory = (id: string, field: string, value: string | string[]) => ({
+        ...room, id, surfaces: [{ ...surface, field, domain: "inventory" as const, direct_assignment: false,
+          fact: { state: "present" as const, value, evidence_id: "evidence:inventory" } }],
+      });
+      image.snapshot.entities.push(inventory(item, "inventory:holder", from),
+        inventory(from, "inventory:contents", [item]), inventory(to, "inventory:contents", []));
+      image.checkpoint.remix_state_ref = "blob:" + canonicalDigest(image.snapshot.entities);
+      assert.equal(db.prepare("UPDATE fixture_drafts SET body=?,digest=? WHERE checkpoint=?")
+        .run(canonicalJson(image), canonicalDigest(image), image.checkpoint.checkpoint_id).changes, 1);
+    } finally { db.close(); }
+
+    const ref = await activateFixture(fixture, draft);
+    const read = async () => context.parse(await fixture.call("get_turn_context", ref)).context;
+    const transfer = async (origin: string, destination: string, request_id: string) => {
+      const head = { owner_id: owner, ...(await read()).head };
+      const envelope = { ...head, version, request_id, intent: "play", input: { kind: "line", text: "move the key" } };
+      const proposal = { ...head, version, request_id, mode: "PLAY", amendment: null,
+        operations: [{ kind: "inventory.transfer", item, from: origin, to: destination }],
+        declared_effects: [{ entity_id: item, field: "inventory:holder", change: "write" },
+          ...[origin, destination].map((entity_id) => ({ entity_id, field: "inventory:contents", change: "write" }))] };
+      const stage = take(fixture.service.prepareTurn(head, envelope, proposal));
+      assert.equal(stage.kind, "prepared");
+      const published = take(await fixture.service.commitTurn(head, envelope, stage.handle.candidate_id));
+      assert.equal(published.receipt.time_cost, 1);
+    };
+    const observedClaims: string[] = [];
+    atStaged = () => {
+      const readDb = new DatabaseSync(path, { readOnly: true });
+      try {
+        const rows = readDb.prepare(`
+          SELECT 'turn' AS kind FROM checkpoints c JOIN requests r USING(claim) WHERE c.published=0
+          UNION ALL
+          SELECT 'restore' AS kind FROM checkpoints c JOIN recovery_requests r USING(claim) WHERE c.published=0
+        `).all();
+        assert.equal(rows.length, 1);
+        assert.equal(take(fixture.service.collectAbandoned()), 0);
+        const kind = z.enum(["turn", "restore"]).parse(rows[0]?.kind);
+        observedClaims.push(kind);
+      } finally { readDb.close(); }
+    };
+    await transfer(from, to, "request:overlay-first");
+    const saved = publishedImage(path);
+    const save_id = await saveCombined(fixture, (await read()).head, "request:overlay-save");
+    assert.equal(saved.checkpoint.clocks.overlay, 1);
+    await transfer(to, from, "request:overlay-later");
+    assert.equal(publishedImage(path).checkpoint.clocks.overlay, 2);
+    const args = { version, target: { ...(await read()).head, request_id: "request:overlay-restore" }, save_id };
+    await reviewRestore(fixture, args);
+    assert.equal(outcome.parse(await fixture.call("restore_session", args)).status, "RESTORED");
+    assert.deepEqual(observedClaims, ["turn", "turn", "restore"]);
+    const recovered = publishedImage(path);
+    assert.equal(recovered.snapshot.clock.overlay_turn, 1);
+    assert.deepEqual(recovered.checkpoint.clocks, saved.checkpoint.clocks);
+    assert.deepEqual(recovered.snapshot.entities, saved.snapshot.entities);
+    assert.deepEqual(recovered.native, saved.native);
   } finally {
     await fixture.close();
     rmSync(directory, { recursive: true, force: true });
@@ -516,11 +750,15 @@ async function killRestore(path: string, args: unknown, point: FaultPoint, profi
   return approval;
 }
 
-for (const point of ["before_checkpoint", "after_checkpoint", "before_commit", "after_commit"] as const) {
-  void test("combined restore process death at " + point, async () => {
+const restoreInterruptions = [
+  ["synthetic", "before_checkpoint"], ["synthetic", "after_checkpoint"], ["synthetic", "before_commit"],
+  ["native-z5", "before_checkpoint"], ["native-z5", "after_checkpoint"],
+  ["native-z5", "before_commit"], ["native-z5", "after_commit"],
+] as const;
+for (const [profile, point] of restoreInterruptions) {
+  void test(`combined restore process death at ${point} (${profile})`, async () => {
     const directory = mkdtempSync(join(tmpdir(), "zirp-restore-kill-"));
     const path = join(directory, "fixture.sqlite");
-    const profile = point === "after_commit" ? "native-z5" : "synthetic";
     let fixture = await harness(directory, true, undefined, profile);
     try {
       const ref = await activateFixture(fixture);
@@ -567,6 +805,12 @@ for (const point of ["before_checkpoint", "after_checkpoint", "before_commit", "
         assert.notEqual(fresh.id, oldApproval);
         assert.equal(outcome.parse(await fixture.call("restore_session", args)).status, "RESTORED");
       }
+      const restored = publishedImage(path);
+      assert.deepEqual(restored.native, savedImage.native);
+      assert.deepEqual(restored.snapshot.entities, savedImage.snapshot.entities);
+      assert.deepEqual(restored.snapshot.policy, savedImage.snapshot.policy);
+      assert.deepEqual(restored.snapshot.history, savedImage.snapshot.history);
+      assert.deepEqual(restored.checkpoint.clocks, savedImage.checkpoint.clocks);
       const db = new DatabaseSync(path, { readOnly: true });
       try {
         assert.equal(db.prepare("SELECT COUNT(*) AS total FROM saved_sessions").get()?.total, 1);
