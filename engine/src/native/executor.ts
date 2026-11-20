@@ -161,6 +161,14 @@ export function createNativeFixtureExecutor(): TurnExecutor {
         canonicalDigest(execution.pending) === canonicalDigest(after.pending) &&
         canonicalDigest(old.opening) === canonicalDigest(next.opening) && execution.facts.length === 0 ? ok(undefined) : invalid();
     },
+    async recreateNative(image, signal) {
+      const payload = nativePayload.safeParse(image.native);
+      if (!payload.success || image.checkpoint.story_sha256 !== nativeStory) return invalid();
+      const recovered = await worker({ kind: "verify", checkpoint: payload.data.checkpoint }, signal);
+      if (!recovered.ok) return recovered;
+      return canonicalDigest(recovered.value.checkpoint) === canonicalDigest(payload.data.checkpoint)
+        ? ok(undefined) : invalid();
+    },
     verifyRestore(image) {
       if (image.checkpoint.story_sha256 !== nativeStory) return synthetic.verifyRestore(image);
       // This synchronous hook checks persisted data. The two fresh workers

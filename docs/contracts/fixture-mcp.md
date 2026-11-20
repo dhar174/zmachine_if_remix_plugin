@@ -1,4 +1,4 @@
-# Issue #19 private fixture runtime
+# Private fixture runtime
 
 The [v1 skill reference](../../plugin/references/fixture-mcp.v1.md) describes model-facing calls. The service listens on loopback and uses a local SQLite file. Default mode after a service start is Play. No private story files enter this runtime.
 
@@ -20,4 +20,6 @@ An initial directive that contains only one-time assignments advances the world 
 
 The v2 SQLite migration retains existing v1 history. It adds the fixture draft and control records and durable candidate/diff bindings. Old kernel receipts remain available to their existing callers. V1 rows lack the new exact MCP replay binding. A fixture retry binds the original target and action, candidate, and digest. Receipt recovery runs before any live-head or grant check. Restart clears active Editor authority and uncommitted Editor stages. Re-establish authority with a new browser-recorded request when needed.
 
-Fixture data and authorized source text may travel to the ChatGPT model during a trial. The local database retains source and receipt history for verification. Remove the operator-owned store after the agreed retention period. That removal concerns the local store. ChatGPT retains chat according to the account's settings. Combined save, restore and export are outside this fixture.
+The additive v3 upgrade retains prior checkpoints and receipts. It adds `checkpoint_links` for ancestry, `saved_sessions` for private saves, and `recovery_requests` for restore approval and durable request outcomes. See the [restore runbook](issue-21-restore-runbook.md) for compatibility and restart behavior.
+
+Fixture data and authorized source text may travel to the ChatGPT model during a trial. The local database retains source and receipt history for verification. Remove the operator-owned store after the agreed retention period. That removal concerns the local store. ChatGPT retains chat according to the account's settings. Combined save and restore use the same private store. Portable export is tracked in Issue #22.

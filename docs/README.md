@@ -44,6 +44,7 @@ Feasibility-probe evidence (executed experiments, not design documents — each 
 - [evidence/g1-chat-host-closeout.md](evidence/g1-chat-host-closeout.md) — G1-C Issue #13 criterion mapping, bounded route limitations and owner acceptance.
 - [evidence/g2-live-kernel.md](evidence/g2-live-kernel.md) — Issue #19 synthetic kernel and bounded live ChatGPT trial.
 - [evidence/g3-native-turns.md](evidence/g3-native-turns.md) — Issue #20 seeded Z5 native turns, local MCP reproduction, and acceptance evidence.
+- [evidence/g3-combined-restore.md](evidence/g3-combined-restore.md) — Issue #21 combined restore, branch freshness, and crash recovery evidence.
 
 Probe implementation lives outside `docs/`: fixtures under `tests/fixtures/zmachine/`, the G1-A I/O harness under `experiments/vm-io/`, the G1-B checkpoint probe under `experiments/vm-checkpoint/`, and the G1-C host probe under `experiments/chat-host/`. Production adoption requires separate review.
 

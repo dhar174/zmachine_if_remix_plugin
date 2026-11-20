@@ -64,6 +64,9 @@ export function nativeEffects(view: View, input: NativeInput) {
   if (ambiguous.test(input.text) && view.room === objects.gallery) {
     return failure("NEEDS_CLARIFICATION", "Which brass token do you mean, the red token or the blue token?");
   }
+  if (/^(?:save|restore|undo|restart|\/?reset)\b/iu.test(input.text.trim())) {
+    return failure("CAPABILITY_MISSING", "Native save, restore, undo, and restart are blocked. Use the combined session tools.");
+  }
   if (!Object.hasOwn(commands, input.text)) return failure("CAPABILITY_MISSING", "The line is outside the qualified fixture commands.");
   const command = input.text as Command;
   if (entityScope[command]?.(view) === false) {

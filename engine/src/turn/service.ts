@@ -20,6 +20,7 @@ import type { Access, FaultPoint, Stage, TurnExecutor } from "./contracts.ts";
 import { buildImage, jsonEvent, supported, validateImage } from "./execution.ts";
 import { SQLiteTurns, branchKey } from "./sqlite-turns.ts";
 import type { TurnStore } from "./sqlite-turns.ts";
+import { FixtureRecovery } from "../fixture/recovery.ts";
 
 type Head = ReturnType<typeof expected>;
 type Prepared = { kind: "prepared"; handle: CandidateHandle; diff: string; diff_digest: string };
@@ -64,6 +65,7 @@ export class TurnService {
   private inTransaction = false;
   readonly browser: BrowserOperations;
   readonly fixtureProfile: "synthetic" | "native-z5";
+  readonly recovery: FixtureRecovery;
 
   private readonly executor: TurnExecutor;
   private readonly clock: () => number;
@@ -77,6 +79,8 @@ export class TurnService {
     this.fault = fault;
     this.store = typeof storage === "string" ? new SQLiteTurns(storage) : storage;
     this.authority = new Authority(clock, this.store.authority);
+    this.recovery = new FixtureRecovery(this.store, this.authority, this.executor, this.fixtureProfile,
+      (run) => this.atomic(run), clock, fault);
     this.browser = {
       display: (...args) => this.atomic(() => this.authority.display(...args)),
       confirm: (...args) => this.atomic(() => this.authority.confirm(...args)),
@@ -188,7 +192,9 @@ export class TurnService {
         surfaces.flatMap(({ field, coverage, domain, fact }) =>
           coverage === "complete" && domain === "presentation" && fact.state === "present" && typeof fact.value === "string"
             ? [{ entity_id, field, value: fact.value, evidence_id: fact.evidence_id }] : []));
+      const restored_from = draft ? undefined : this.store.restoreOrigin(image.snapshot.head);
       return ok(fixtureContext.parse({
+        ...(restored_from ? { restored_from } : {}),
         head, state: draft ? "draft" : "active", mode: mode.value.mode, story_sha256: story,
         pending_input: draft ? null : image.checkpoint.native_state.pending_input.kind,
         operations: draft ? ["initial_directive"] : ["play", "editor_assignment", "policy_amendment", "inspect"],
@@ -391,17 +397,26 @@ export class TurnService {
     return this.commitTurn(access, this.fixtureEnvelope(access, request, action), candidate, undefined, { diff, browserAvailable });
   }
 
-  fixtureHistory(access: Access, identity?: Pick<z.infer<typeof target>, "generation_id" | "request_id">,
-    limit = 10): Result<z.infer<typeof receiptView>[]> {
-    return this.atomic(() => {
-      const base = this.fixtureBase(access);
-      if (!base) return invalid();
-      if (identity) {
-        const receipt = this.store.request(requestKey({ owner_id: access.owner_id, session_id: access.session_id,
-          branch_id: access.branch_id, ...identity }))?.receipt;
-        return receipt ? ok([this.viewFixtureReceipt(receipt)]) : ok([]);
+  inspectFixture(access: Access, query:
+    { kind: "facts" | "rules" } | { kind: "history"; limit?: number | undefined } |
+    ({ kind: "receipt" } & Pick<z.infer<typeof target>, "generation_id" | "request_id">)) {
+    return this.atomic((): Result<{ context: z.infer<typeof fixtureContext>; receipts: z.infer<typeof receiptView>[];
+      receipt_on_active_lineage?: boolean }> => {
+      const view = this.readFixture(access);
+      if (!view.ok) return view;
+      const context = { ...view.value, facts: query.kind === "facts" ? view.value.facts : [],
+        rules: query.kind === "rules" ? view.value.rules : [] };
+      const base = this.store.head(access);
+      if (query.kind === "receipt") {
+        const receipt = this.store.request(requestKey({ ...access, generation_id: query.generation_id,
+          request_id: query.request_id }))?.receipt;
+        if (!receipt) return ok({ context, receipts: [] });
+        return ok({ context, receipts: [this.viewFixtureReceipt(receipt)], receipt_on_active_lineage: !!base &&
+          this.store.isAncestor(base.checkpoint.checkpoint_id, receipt.receipt.post_checkpoint) });
       }
-      return ok(this.store.fixtureReceipts(access, limit).map((record) => this.viewFixtureReceipt(record)));
+      const receipts = base && query.kind === "history" ? this.store.fixtureReceipts(base.checkpoint.checkpoint_id, query.limit ?? 10)
+        .map((record) => this.viewFixtureReceipt(record)) : [];
+      return ok({ context, receipts });
     });
   }
 
