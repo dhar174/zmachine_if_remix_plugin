@@ -320,6 +320,8 @@ void test("combined restore through MCP creates a fresh Play generation and reta
     const renewed = take(fixture.service.browser.issueLease(owner, head, [endpoint], 300_000, 1));
     const committed = take(await fixture.service.commitTurn(head, envelope, candidate_id, { ...permit, reference: renewed }));
     assert.equal(committed.receipt.status, "COMMITTED");
+    const laterHistory = inspection.parse(await fixture.call("inspect_session", { ...ref, query: { kind: "history" } }));
+    assert.deepEqual(laterHistory.receipts, [fixture.service.viewFixtureReceipt(committed), ...history.receipts]);
   } finally {
     await fixture.close();
     rmSync(directory, { recursive: true, force: true });
@@ -430,6 +432,7 @@ void test("native combined line and character saves restore exact state and cont
     checkRestored(lineImage);
     const lineReference = restore(nativePayload.parse(lineImage.native).checkpoint, storyBytes());
     const rolledFromLine = await commitFixtureInput(fixture, (await read()).head, "request:roll", roll);
+    assert.equal(outcome.parse(rolledFromLine.result).status, "COMMITTED", JSON.stringify(rolledFromLine.result));
     assert.deepEqual(receipt.parse(rolledFromLine.result).receipt.native_output, [send(lineReference, roll).delta]);
     assert.deepEqual(nativePayload.parse(publishedImage(path).native).checkpoint, capture(lineReference));
     await commitFixtureInput(fixture, (await read()).head, "request:menu", menu);
@@ -751,7 +754,8 @@ async function killRestore(path: string, args: unknown, point: FaultPoint, profi
 }
 
 const restoreInterruptions = [
-  ["synthetic", "before_checkpoint"], ["synthetic", "after_checkpoint"], ["synthetic", "before_commit"],
+  ["synthetic", "before_checkpoint"], ["synthetic", "after_checkpoint"],
+  ["synthetic", "before_commit"], ["synthetic", "after_commit"],
   ["native-z5", "before_checkpoint"], ["native-z5", "after_checkpoint"],
   ["native-z5", "before_commit"], ["native-z5", "after_commit"],
 ] as const;
