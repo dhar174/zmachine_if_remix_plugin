@@ -472,6 +472,61 @@ void test("restore approvals expire and a competing turn fences an approved stal
   }
 });
 
+void test("restore rejects malformed receipts on the displaced save ancestry", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "zirp-receipt-restore-"));
+  const path = join(directory, "fixture.sqlite");
+  let damageAfterStaging: (() => void) | undefined;
+  const fixture = await harness(directory, true, (point) => {
+    if (point === "after_checkpoint") damageAfterStaging?.();
+  });
+  const db = new DatabaseSync(path);
+  try {
+    const ref = await activateFixture(fixture);
+    const head = async () => context.parse(await fixture.call("get_turn_context", ref)).context.head;
+    const history = () => fixture.call("inspect_session", { ...ref, query: { kind: "history" } });
+    const earlier = await saveCombined(fixture, await head(), "request:earlier");
+    const turn = await commitFixtureInput(fixture, await head(), "request:later-turn", { kind: "line", text: "look" });
+    const originalReceipt = receipt.parse(turn.result).receipt;
+    const checkpoint = publishedImage(path).checkpoint.checkpoint_id;
+    const later = await saveCombined(fixture, await head(), "request:later");
+    const back = { version, target: { ...await head(), request_id: "request:back" }, save_id: earlier };
+    await reviewRestore(fixture, back);
+    assert.equal(outcome.parse(await fixture.call("restore_session", back)).status, "RESTORED");
+    const before = publishedImage(path);
+    const activeHistory = inspection.parse(await history());
+    const args = { version, target: { ...await head(), request_id: "request:forward" }, save_id: later };
+    const original = z.object({ receipt: z.string() }).parse(
+      db.prepare("SELECT receipt FROM requests WHERE checkpoint=?").get(checkpoint));
+    const damage = () => {
+      assert.equal(db.prepare("UPDATE requests SET receipt=json_remove(receipt,'$.receipt.status') WHERE checkpoint=?")
+        .run(checkpoint).changes, 1);
+    };
+    const reset = () => db.prepare("UPDATE requests SET receipt=? WHERE checkpoint=?").run(original.receipt, checkpoint);
+    const reject = async () => {
+      assert.equal(outcome.parse(await fixture.call("restore_session", args)).status, "VALIDATION_FAILED");
+      assert.deepEqual(publishedImage(path), before);
+      assert.deepEqual(inspection.parse(await history()), activeHistory);
+    };
+    damage();
+    await reject();
+    reset();
+    await reviewRestore(fixture, args);
+    damageAfterStaging = damage;
+    await reject();
+    damageAfterStaging = undefined;
+    await reject();
+    reset();
+    const valid = { ...args, target: { ...args.target, request_id: "request:healthy" } };
+    await reviewRestore(fixture, valid);
+    assert.equal(outcome.parse(await fixture.call("restore_session", valid)).status, "RESTORED");
+    assert.deepEqual(inspection.parse(await history()).receipts[0], originalReceipt);
+  } finally {
+    db.close();
+    await fixture.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 void test("invalid or incompatible saved data leaves the active combined head intact", async () => {
   const directory = mkdtempSync(join(tmpdir(), "zirp-invalid-saves-"));
   const path = join(directory, "fixture.sqlite");

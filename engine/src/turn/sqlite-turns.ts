@@ -180,7 +180,7 @@ export class SQLiteTurns {
 
   checkpointHistoryValid(image: TurnImage): boolean {
     const { checkpoint, snapshot } = image;
-    return this.db.prepare(lineage + `
+    const brokenLink = this.db.prepare(lineage + `
       SELECT 1 FROM ancestry a
       LEFT JOIN checkpoint_links l ON l.id=a.id
       LEFT JOIN checkpoints c ON c.id=a.id AND c.published=1
@@ -197,7 +197,14 @@ export class SQLiteTurns {
             WHERE NOT EXISTS(SELECT 1 FROM events WHERE id=e.value AND request=r.id)
           )))
       LIMIT 1
-    `).get(checkpoint.checkpoint_id, branchKey(snapshot.head)) === undefined;
+    `).get(checkpoint.checkpoint_id, branchKey(snapshot.head));
+    if (brokenLink) return false;
+    const receipts = this.db.prepare(lineage +
+      "SELECT r.receipt FROM ancestry a JOIN requests r ON r.checkpoint=a.id");
+    for (const { receipt } of receipts.iterate(checkpoint.checkpoint_id)) {
+      if (typeof receipt !== "string" || !DurableReceipt.safeParse(parseJson(receipt)).success) return false;
+    }
+    return true;
   }
 
   savedSession(scope: Access, id: string): SavedSession | undefined {
