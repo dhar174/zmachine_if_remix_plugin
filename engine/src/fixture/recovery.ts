@@ -4,7 +4,7 @@ import { HeadExpectation, canonicalDigest, canonicalJson } from "../contracts.ts
 import type { Authority } from "../auth/authority.ts";
 import type { Result } from "../ports.ts";
 import { fixtureStory } from "./synthetic-world.ts";
-import { nativeStory } from "../native/checkpoint.ts";
+import { isNativeStory } from "../native/checkpoint.ts";
 import { TurnImage, conflict, failure, invalid, limits, ok, stale } from "../turn/contracts.ts";
 import type { Access, FaultPoint, TurnExecutor } from "../turn/contracts.ts";
 import { validateImage } from "../turn/execution.ts";
@@ -60,13 +60,13 @@ export class FixtureRecovery {
     if (!image) return failure("NEEDS_APPROVAL", "Activate the fixture before saving or restoring.");
     if (canonicalDigest(image.snapshot.head) !== canonicalDigest(head)) return stale();
     const story = image.checkpoint.story_sha256;
-    if (story !== fixtureStory && (story !== nativeStory || this.profile !== "native-z5")) return unsupported();
+    if (story !== fixtureStory && (!isNativeStory(story) || this.profile !== "native-z5")) return unsupported();
     return ok(image);
   }
 
   private validate(image: TurnImage): Result<void> {
     if (image.checkpoint.native_state.pending_input.kind === "halted" ||
-        (image.checkpoint.story_sha256 === nativeStory && !this.executor.recreateNative)) return unsupported();
+        (isNativeStory(image.checkpoint.story_sha256) && !this.executor.recreateNative)) return unsupported();
     try {
       const valid = validateImage(image, this.executor);
       if (!valid.ok) return valid;
@@ -206,7 +206,7 @@ export class FixtureRecovery {
   }
 
   private async publish(owner: Owner, id: string, { intent, image, claim }: Claimed): Promise<Result<RestoreResult>> {
-    if (image.checkpoint.story_sha256 === nativeStory) {
+    if (isNativeStory(image.checkpoint.story_sha256)) {
       const recreated = await this.executor.recreateNative?.(image, AbortSignal.timeout(limits.turn_ms));
       if (!recreated) return unsupported();
       if (!recreated.ok) return recreated;

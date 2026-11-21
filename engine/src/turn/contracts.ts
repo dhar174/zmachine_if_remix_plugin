@@ -58,7 +58,7 @@ export interface TurnExecutor {
    * Executors with isolated workers verify actual recreation before returning executable images. */
   verifyRestore(image: TurnImage): Result<void>;
   /** Recreate a persisted native image in isolation without executing input. */
-  recreateNative?(image: TurnImage, signal: AbortSignal): Promise<Result<void>>;
+  recreateNative?(image: TurnImage, signal: AbortSignal, uploadedStory?: Buffer): Promise<Result<void>>;
 }
 
 export const ok = <T>(value: T): Result<T> => ({ ok: true, value });

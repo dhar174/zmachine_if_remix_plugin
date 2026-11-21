@@ -3,9 +3,9 @@ import { z } from "zod";
 import { capture, compilationRecord, compilerView, fixtureContext, launchRecord, preparedAction, publicHead,
   receiptView, requestAction, sessionRef, sourceRecord, subset, target } from "../fixture/session-contracts.ts";
 import { fixtureGuards, fixtureImage, fixtureNativeWrite, fixtureRoom, fixtureStory } from "../fixture/synthetic-world.ts";
-import { checkpointView, nativePayload, nativeStory } from "../native/checkpoint.ts";
-import { nativeContext, openNativeFixture } from "../native/executor.ts";
-import { nativeEffects } from "../native/fixture-rules.ts";
+import { heidiStory, isNativeStory, nativePayload, validateStoryBytes } from "../native/checkpoint.ts";
+import { createNativeFixtureExecutor, nativeContext, openNativeFixture } from "../native/executor.ts";
+import { coveredInput } from "../native/profiles.ts";
 import { compileDirective, selectDirectiveSubset } from "../policy/directive-compiler.ts";
 import type { CompilationProposal, ModelInterpretation, SupportedSubsetSelection } from "../policy/directive-contracts.ts";
 import { Authority } from "../auth/authority.ts";
@@ -21,6 +21,8 @@ import { buildImage, jsonEvent, supported, validateImage } from "./execution.ts"
 import { SQLiteTurns, branchKey } from "./sqlite-turns.ts";
 import type { TurnStore } from "./sqlite-turns.ts";
 import { FixtureRecovery } from "../fixture/recovery.ts";
+import { decodePortable, encodePortable, relocatePortable } from "../fixture/portable-session.ts";
+import type { UploadPurpose } from "../fixture/portable-session.ts";
 
 type Head = ReturnType<typeof expected>;
 type Prepared = { kind: "prepared"; handle: CandidateHandle; diff: string; diff_digest: string };
@@ -66,18 +68,27 @@ export class TurnService {
   readonly browser: BrowserOperations;
   readonly fixtureProfile: "synthetic" | "native-z5";
   readonly recovery: FixtureRecovery;
+  readonly privateStories: boolean;
+  readonly heidiTrial: boolean;
+  private readonly transferKey: Buffer | undefined;
 
   private readonly executor: TurnExecutor;
   private readonly clock: () => number;
   private readonly fault: (point: FaultPoint) => void;
   constructor(storage: string | TurnStore, executor: TurnExecutor,
     clock: () => number = Date.now, fault: (point: FaultPoint) => void = () => {},
-    fixtureProfile: "synthetic" | "native-z5" = "synthetic") {
+    fixtureProfile: "synthetic" | "native-z5" = "synthetic", privateFiles?: { key: Buffer; heidiTrial?: boolean }) {
+    if (privateFiles && (fixtureProfile !== "native-z5" || privateFiles.key.length !== 32)) {
+      throw new Error("Private transfers require the native profile and a 32-byte key.");
+    }
     this.fixtureProfile = fixtureProfile;
-    this.executor = executor;
+    this.privateStories = privateFiles !== undefined;
+    this.heidiTrial = privateFiles?.heidiTrial ?? false;
+    this.transferKey = privateFiles ? Buffer.from(privateFiles.key) : undefined;
     this.clock = clock;
     this.fault = fault;
     this.store = typeof storage === "string" ? new SQLiteTurns(storage) : storage;
+    this.executor = this.privateStories ? createNativeFixtureExecutor((scope) => this.store.storyFor(scope)) : executor;
     this.authority = new Authority(clock, this.store.authority);
     this.recovery = new FixtureRecovery(this.store, this.authority, this.executor, this.fixtureProfile,
       (run) => this.atomic(run), clock, fault);
@@ -132,7 +143,121 @@ export class TurnService {
     });
   }
 
+  uploadPrivateStory(owner: Access["owner_id"], purpose: UploadPurpose, story: Buffer): Result<string> {
+    if (!this.privateStories || !validateStoryBytes(story) || (!this.heidiTrial && createHash("sha256").update(story).digest("hex") === heidiStory)) return invalid();
+    return this.atomic(() => {
+      const handle = (purpose === "open" ? "launch:" : "upload:") + randomUUID();
+      return this.store.stageStory(owner, handle, purpose, story, this.clock()) ? ok(handle)
+        : failure("ABORTED", "Pending upload limit reached. Revoke an unused upload or wait for expiry.");
+    });
+  }
+
+  revokePrivateUpload(owner: Access["owner_id"], handle: string): Result<void> {
+    return this.atomic(() => this.store.removeUpload(owner, handle) ? ok(undefined) : invalid());
+  }
+
+  listPrivateSessions(owner: Access["owner_id"]) {
+    return this.atomic(() => this.privateStories ? ok(this.store.privateSessions(owner)) : invalid());
+  }
+
+  managePrivateSession(scope: Access) {
+    return this.atomic(() => this.privateStories && this.store.storyFor(scope)
+      ? ok(this.store.privateSaveIds(scope)) : invalid());
+  }
+
+  deletePrivateSession(scope: Access) {
+    return this.atomic(() => this.privateStories && this.store.deletePrivateSession(scope) ? ok(undefined) : invalid());
+  }
+
+  authorizePrivateDownload(scope: Access, saveId: string): Result<string> {
+    if (!this.privateStories || !this.transferKey) return invalid();
+    return this.atomic(() => {
+      if (!this.store.savedSession(scope, saveId)) return invalid();
+      const id = "download:" + randomUUID();
+      this.store.issueDownload(id, scope, saveId, this.clock() + 300_000);
+      return ok(id);
+    });
+  }
+
+  exportPrivateSession(scope: Access, saveId: string, download: string): Result<Buffer> {
+    const key = this.transferKey;
+    if (!this.privateStories || !key) return invalid();
+    return this.atomic(() => {
+      if (!this.store.consumeDownload(download, scope, saveId, this.clock())) return invalid();
+      const saved = this.store.savedSession(scope, saveId);
+      const image = saved && this.store.savedImage(saved);
+      if (!image || !isNativeStory(image.checkpoint.story_sha256)) return invalid();
+      const history = this.store.portableHistory(image);
+      if (!history?.every(({ image }) => validateImage(image, this.executor).ok)) return invalid();
+      const bytes = encodePortable(history, key);
+      return bytes ? ok(bytes) : failure("VALIDATION_FAILED", "The combined save exceeds the transfer limit.");
+    });
+  }
+
+  async importPrivateSession(owner: Access["owner_id"], upload: string, requestId: string, bytes: Buffer) {
+    const key = this.transferKey;
+    if (!this.privateStories || !key || !this.executor.recreateNative) return invalid();
+    const id = canonicalJson([owner, requestId]);
+    const digest = createHash("sha256").update(upload).update(bytes).digest("hex");
+    const retry = () => {
+      const existing = this.store.priorImport(id);
+      if (existing) return existing.digest === digest ? ok(existing.result) : conflict();
+    };
+    const staged = this.atomic(() => ok({ prior: retry(), story: this.store.pendingStory(owner, upload, "combined", this.clock()) }));
+    if (!staged.ok) return staged;
+    if (staged.value.prior) return staged.value.prior;
+    const story = staged.value.story;
+    if (!story) return invalid();
+    const history = decodePortable(bytes, owner, key);
+    if (!history || !validateStoryBytes(story) || history.at(-1)?.image.checkpoint.story_sha256 !== createHash("sha256").update(story).digest("hex") ||
+        !history.every(({ image }) => validateImage(image, this.executor).ok)) return invalid();
+    try {
+      const data = relocatePortable(history);
+      const valid = await this.executor.recreateNative(data.imported, AbortSignal.timeout(limits.turn_ms), story);
+      return this.atomic(() => {
+        const prior = retry();
+        if (prior) return prior;
+        if (!this.store.pendingStory(owner, upload, "combined", this.clock())) return invalid();
+        this.store.removeUpload(owner, upload);
+        if (!valid.ok) return valid;
+        const set = this.authority.setHead(data.imported.snapshot.head, "initialize");
+        if (!set.ok) return set;
+        const result = this.store.importSession(id, digest, story, data);
+        if (!this.store.checkpointHistoryValid(data.imported)) throw new RejectPublication(invalid());
+        this.fault("before_commit");
+        return ok(result);
+      });
+    } catch { return invalid(); }
+  }
+
+  private async openPrivateStory(owner: Access["owner_id"], handle: string, bytes: Buffer) {
+    const created = await openNativeFixture(owner, bytes);
+    return this.atomic(() => {
+      // Recheck ownership, revocation and expiry after isolated execution.
+      if (!this.store.pendingStory(owner, handle, "open", this.clock())) return invalid();
+      this.store.removeUpload(owner, handle);
+      if (!created.ok) return created;
+      const image = created.value;
+      const valid = validateImage(image, this.executor);
+      if (!valid.ok) return valid;
+      const scope = image.snapshot.head;
+      const set = this.authority.setHead(scope, "initialize");
+      if (!set.ok) return set;
+      this.store.retainStory(scope, bytes);
+      this.store.initializeDraft(image);
+      this.store.saveFixtureRecord("session", branchKey(scope), true);
+      const view = this.readFixture(scope);
+      if (!view.ok) throw new RejectPublication(view);
+      return view;
+    });
+  }
+
   async openFixture(owner: Access["owner_id"], handle: string): Promise<Result<z.infer<typeof fixtureContext>>> {
+    if (this.privateStories) {
+      const pending = this.atomic(() => ok(this.store.pendingStory(owner, handle, "open", this.clock())));
+      if (!pending.ok) return pending;
+      if (pending.value) return this.openPrivateStory(owner, handle, pending.value);
+    }
     const lookup = () => {
       const entry = launchRecord.safeParse(this.store.fixtureRecord("launch", handle));
       return entry.success && entry.data.owner === owner && (entry.data.profile ?? "synthetic") === this.fixtureProfile &&
@@ -165,7 +290,7 @@ export class TurnService {
     const active = this.store.head(access);
     const image = active ?? this.store.draft(access);
     const story = image?.checkpoint.story_sha256;
-    return image && (story === fixtureStory || (story === nativeStory && this.fixtureProfile === "native-z5"))
+    return image && (story === fixtureStory || (isNativeStory(story) && this.fixtureProfile === "native-z5"))
       ? { image, draft: !active } : undefined;
   }
 
@@ -200,7 +325,7 @@ export class TurnService {
         operations: draft ? ["initial_directive"] : ["play", "editor_assignment", "policy_amendment", "inspect"],
         clocks: draft ? null : { native: image.checkpoint.clocks.native, overlay: image.checkpoint.clocks.overlay },
         facts: draft ? [] : facts,
-        ...(story === nativeStory ? { native: nativeContext(image, draft) } : {}),
+        ...(isNativeStory(story) ? { native: nativeContext(image, draft) } : {}),
         rules: this.fixtureRules(image).slice(0, 128).map(({ id, kind, source, supersedes }) =>
           ({ id, kind, source_id: source.source_id, supersedes })),
       }));
@@ -309,8 +434,8 @@ export class TurnService {
         if (input.kind !== pending) return failure("CAPABILITY_MISSING", "Fixture input does not match the pending boundary.");
         const operation = input.kind === "line" ? { kind: "native.line", text: input.text } :
           { kind: "native.character", value: input.value };
-        const declared = base.image.checkpoint.story_sha256 === nativeStory
-          ? nativeEffects(checkpointView(nativePayload.parse(base.image.native).checkpoint), input) : ok([fixtureNativeWrite]);
+        const declared = isNativeStory(base.image.checkpoint.story_sha256)
+          ? coveredInput(base.image.checkpoint.story_sha256, nativePayload.parse(base.image.native).checkpoint, input) : ok([fixtureNativeWrite]);
         if (!declared.ok) return declared;
         return this.prepareTurn(access, envelope, { ...expected(envelope), version: "1.0.0", request_id: envelope.request_id,
           mode: "PLAY", operations: [operation], declared_effects: declared.value, amendment: null });
@@ -326,7 +451,7 @@ export class TurnService {
       if (!trusted.ok) return trusted;
       const { record, context } = trusted.value;
       if (id !== requestKey({ ...record.head, request_id: record.request_id }) || canonicalDigest(record.head) !== canonicalDigest(expected(envelope))) return invalid();
-      if (base.image.checkpoint.story_sha256 === nativeStory && action.interpretation.clauses.some(({ entries }) =>
+      if (isNativeStory(base.image.checkpoint.story_sha256) && action.interpretation.clauses.some(({ entries }) =>
         entries.some((entry) => entry.kind === "assignment" && entry.entity_id.startsWith("native:")))) {
         this.authority.finish(record.head, record.request_id);
         return failure("CAPABILITY_MISSING", base.draft

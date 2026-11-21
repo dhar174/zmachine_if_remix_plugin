@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { once } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request } from "node:http";
 import { createRequire } from "node:module";
 import type { IncomingMessage } from "node:http";
@@ -13,11 +14,12 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { z } from "zod";
 import { OwnerId, canonicalDigest, canonicalJson } from "../src/contracts.ts";
+import { importedSession } from "../src/fixture/portable-session.ts";
 import { compilerView, fixtureContext, receiptView } from "../src/fixture/session-contracts.ts";
 import { createFixtureExecutor } from "../src/fixture/synthetic-world.ts";
 import { fixtureServer } from "../src/mcp/server.ts";
 import { scopes } from "../src/mcp/tools.ts";
-import { capture, checkpointView, fingerprint, nativePayload, nativeStory, openStory, restore, send, storyBytes } from "../src/native/checkpoint.ts";
+import { capture, checkpointView, fingerprint, heidiStory, nativePayload, nativeStory, openStory, priorFixtureAdapter, restore, send, storyBytes } from "../src/native/checkpoint.ts";
 import { createNativeFixtureExecutor } from "../src/native/executor.ts";
 import { TurnImage } from "../src/turn/contracts.ts";
 import type { FaultPoint } from "../src/turn/contracts.ts";
@@ -49,9 +51,10 @@ const protection = (id: string, field: string) => ({
 });
 
 async function harness(directory: string, browserEnabled = true, fault?: (point: FaultPoint) => void,
-  profile: "synthetic" | "native-z5" = "synthetic", clock = Date.now) {
+  profile: "synthetic" | "native-z5" = "synthetic", clock = Date.now, transfers = false) {
   const executor = profile === "native-z5" ? createNativeFixtureExecutor() : createFixtureExecutor();
-  const service = new TurnService(join(directory, "fixture.sqlite"), executor, clock, fault, profile);
+  const service = new TurnService(join(directory, "fixture.sqlite"), executor, clock, fault, profile,
+    transfers ? { key: Buffer.alloc(32, 42), heidiTrial: true } : undefined);
   const auth = {
     authenticate: (req: IncomingMessage) => {
       const token = req.headers.authorization;
@@ -87,11 +90,12 @@ async function harness(directory: string, browserEnabled = true, fault?: (point:
     const raw = await rpc("tools/call", { name, arguments: args }, token);
     return z.object({ structuredContent: z.object({ version: z.literal(version), result: z.unknown() }) }).parse(raw).structuredContent.result;
   }
-  function browserRequest(path: string, method: string, browser: string, requestOrigin: string, body?: string) {
+  function browserRequest(path: string, method: string, browser: string, requestOrigin: string, body?: string | Buffer,
+    extra: Record<string, string> = {}) {
     return new Promise<Response>((resolve, reject) => {
       const call = request(base + path, { method,
         headers: { host: "fixture.test", origin: requestOrigin, cookie: "fixture=" + browser,
-          ...(body ? { "content-type": "application/json" } : {}) },
+          ...(body ? { "content-type": "application/json" } : {}), ...extra },
       }, (incoming) => {
         const chunks: Buffer[] = [];
         incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -133,6 +137,10 @@ async function harness(directory: string, browserEnabled = true, fault?: (point:
     return { target: { ...head, request_id }, compiler, action: { kind: "directive", source_ref } };
   }
   return { base, rpc, call, post, get, open, record, service,
+    upload(path: string, bytes: Buffer, browser = "owner", headers: Record<string, string> = {}) {
+      return browserRequest(path, "POST", browser, origin, bytes, { "content-type": "application/octet-stream",
+        "x-csrf-token": "csrf-" + browser, "content-length": String(bytes.length), ...headers });
+    },
     launch: () => reference("/fixture-launch", {}, /launch:[0-9a-f-]{36}/u),
     async approve({ candidate_id, diff_digest }: z.infer<typeof prepared>) {
       const response = await post("/approve", { candidate: candidate_id, digest: diff_digest });
@@ -1443,3 +1451,196 @@ void test("v1 store upgrade preserves the prior head and stored receipt", async 
     } finally { migrated.close(); }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
+  void test("private portable " + profile + " round trip transfers committed state and denies stale access", async (t) => {
+    const sourceDir = mkdtempSync(join(tmpdir(), "zirp-transfer-source-"));
+    const targetDir = mkdtempSync(join(tmpdir(), "zirp-transfer-target-"));
+    let now = Date.now();
+    const source = await harness(sourceDir, true, undefined, "native-z5", () => now, true);
+    let interrupt = false;
+    let target = await harness(targetDir, true, (point) => {
+      if (interrupt && point === "before_commit") throw new Error("Interrupt portable publication.");
+    }, "native-z5", () => now, true);
+    t.after(async () => {
+      await source.close();
+      await target.close();
+      rmSync(sourceDir, { recursive: true, force: true });
+      rmSync(targetDir, { recursive: true, force: true });
+    });
+    const heidi = profile === "heidi";
+    const character = profile === "fixture-character";
+    const story = heidi ? readFileSync(new URL("../../tests/fixtures/zmachine/heidi/Heidi.z5", import.meta.url)) : storyBytes();
+    const stage = async (fixture: Awaited<ReturnType<typeof harness>>, browser = "owner", purpose = "open", storyBytes = story) => {
+      const delivered = await fixture.upload("/private-story", storyBytes, browser, { "x-upload-purpose": purpose });
+      assert.equal(delivered.status, 200, await delivered.clone().text());
+      return z.object({ ok: z.literal(true), value: z.string() }).parse(await delivered.json()).value;
+    };
+    assert.match(await (await source.get("/private-story")).text(), /I consent/u);
+    assert.equal((await source.upload("/private-story", story, "owner", { "x-upload-purpose": "open", "x-csrf-token": "wrong" })).status, 403);
+    assert.equal((await source.upload("/private-story", Buffer.alloc(256 * 1024 + 1), "owner", { "x-upload-purpose": "open" })).status, 413);
+    const wrongVersion = Buffer.from(story);
+    wrongVersion[0] = 3;
+    assert.equal((await source.upload("/private-story", wrongVersion, "owner", { "x-upload-purpose": "open" })).status, 404);
+    const modified = Buffer.from(story);
+    modified[100] = (modified[100] ?? 0) ^ 1;
+    assert.equal((await source.upload("/private-story", modified, "owner", { "x-upload-purpose": "open" })).status, 404);
+    const catalog = z.object({ tools: z.array(z.object({ name: z.string() })) }).parse(await source.rpc("tools/list", {}));
+    assert.ok(catalog.tools.every(({ name }) => !/upload|export|fetch|delete|publish/u.test(name)));
+    const handle = await stage(source);
+    const args = { version, launch_handle: handle };
+    assert.equal(outcome.parse(await source.call("open_story_session", args, "other")).status, "VALIDATION_FAILED");
+    const attempted = await Promise.all([source.call("open_story_session", args), source.call("open_story_session", args)]);
+    const contexts = attempted.map((value) => context.safeParse(value)).filter((x) => x.success);
+    assert.equal(contexts.length, 1);
+    const draft = contexts[0]?.data.context;
+    assert.ok(draft);
+    assert.equal(draft.story_sha256, heidi ? heidiStory : nativeStory);
+    assert.equal(outcome.parse(await source.call("open_story_session", args)).status, "VALIDATION_FAILED");
+    const ref = await activateFixture(source, draft);
+    const read = async (fixture: Awaited<ReturnType<typeof harness>>, object: unknown) =>
+      context.parse(await fixture.call("get_turn_context", object)).context;
+
+    const doLine = async (fixture: Awaited<ReturnType<typeof harness>>, head: Context["head"], text: string) => {
+      const { result } = await commitFixtureInput(fixture, head, "request:" + randomUUID(), { kind: "line", text });
+      return receipt.parse(result).receipt;
+    };
+    for (const command of heidi ? ["east", "take bird"] : character ? ["menu"] : ["look"]) {
+      await doLine(source, (await read(source, ref)).head, command);
+    }
+    const saved = await read(source, ref);
+    assert.equal(saved.pending_input, character ? "character" : "line");
+    const save_id = await saveCombined(source, saved.head, "request:portable-save");
+    const selection = { session_id: ref.session_id, branch_id: ref.branch_id, save_id };
+    const review = await source.post("/private-export-review", selection);
+    const download = /download:[0-9a-f-]{36}/u.exec(await review.text())?.[0];
+    assert.ok(download);
+    const fields = { ...selection, download };
+    assert.equal((await source.post("/private-export", fields, "other")).status, 404);
+    const file = await source.post("/private-export", fields);
+    assert.equal(file.status, 200, await file.clone().text());
+    assert.match(file.headers.get("content-disposition") ?? "", /^attachment;/u);
+    const bytes = Buffer.from(await file.arrayBuffer());
+    assert.equal(bytes.includes(story.toString("base64")), false);
+    assert.equal((await source.post("/private-export", fields)).status, 404);
+    assert.equal((await source.post("/private-export-review", { ...selection, save_id }, "other")).status, 404);
+
+    const wrongStory = heidi ? storyBytes() : readFileSync(new URL("../../tests/fixtures/zmachine/heidi/Heidi.z5", import.meta.url));
+    const wrongHandle = await stage(target, "owner", "combined", wrongStory);
+    assert.equal((await target.upload("/private-import", bytes, "owner", {
+      "x-story-handle": wrongHandle, "x-import-request": randomUUID(),
+    })).status, 404);
+    const importHandle = await stage(target, "owner", "combined");
+    const headers = { "x-story-handle": importHandle, "x-import-request": randomUUID() };
+    assert.equal((await target.upload("/private-import", bytes, "other", headers)).status, 404);
+    assert.equal((await target.upload("/private-import", bytes.subarray(0, -2), "owner", headers)).status, 404);
+    interrupt = true;
+    assert.equal((await target.upload("/private-import", bytes, "owner", headers)).status, 409);
+    const interrupted = new DatabaseSync(join(targetDir, "fixture.sqlite"), { readOnly: true });
+    try {
+      for (const table of ["private_stories", "private_imports", "checkpoints", "requests", "heads"]) {
+        assert.equal(interrupted.prepare("SELECT COUNT(*) AS count FROM " + table).get()?.count, 0, table);
+      }
+    } finally { interrupted.close(); }
+    interrupt = false;
+    const imported = await target.upload("/private-import", bytes, "owner", headers);
+    assert.equal(imported.status, 200, await imported.clone().text());
+    const importedResult = z.object({ ok: z.literal(true), value: importedSession }).parse(await imported.json()).value;
+    const targetRef = { version, session_id: importedResult.head.session_id, branch_id: importedResult.head.branch_id };
+    const importedView = await read(target, targetRef);
+    assert.equal(importedView.mode, "PLAY");
+    assert.notEqual(importedView.head.session_id, saved.head.session_id);
+    assert.notEqual(importedView.head.generation_id, saved.head.generation_id);
+    assert.deepEqual(importedView.native, saved.native);
+    assert.deepEqual(importedView.rules, saved.rules);
+    assert.deepEqual(importedView.facts, saved.facts);
+    assert.deepEqual(importedView.clocks, saved.clocks);
+    const from = publishedImage(join(sourceDir, "fixture.sqlite"));
+    const into = publishedImage(join(targetDir, "fixture.sqlite"));
+    const check = createNativeFixtureExecutor();
+    const prior = TurnImage.parse({ ...from, checkpoint: { ...from.checkpoint, adapter_build: priorFixtureAdapter } });
+    assert.equal(check.verifyRestore(prior).ok, !heidi);
+    assert.deepEqual(into.native, from.native);
+    assert.deepEqual(into.snapshot.policy, from.snapshot.policy);
+    assert.deepEqual(into.snapshot.history, from.snapshot.history);
+
+    await target.close();
+    target = await harness(targetDir, true, undefined, "native-z5", () => now, true);
+    const retry = await target.upload("/private-import", bytes, "owner", headers);
+    assert.equal(retry.status, 200, await retry.clone().text());
+    assert.deepEqual(z.object({ value: importedSession }).parse(await retry.json()).value, importedResult);
+    const log = inspection.parse(await target.call("inspect_session", { ...targetRef, query: { kind: "history" } }));
+    assert.ok(log.receipts.length > 1);
+    if (heidi) {
+      const reference = openStory(story);
+      const systemRandom = Math.random;
+      let seed = 42;
+      try {
+        Math.random = () => {
+          seed ^= seed << 13;
+          seed ^= seed >>> 17;
+          seed ^= seed << 5;
+          return (seed >>> 0) / 2 ** 32;
+        };
+        assert.equal(reference.start().status, "waiting_for_line_input");
+      } finally { Math.random = systemRandom; }
+      reference.__g1bInternals().vm.xorshift_seed = 42;
+      for (const text of ["east", "take bird"]) send(reference, { kind: "line", text });
+      assert.deepEqual(capture(reference, heidiStory), nativePayload.parse(into.native).checkpoint);
+      let ending = "";
+      for (const text of ["northeast", "put bird in nest", "take nest", "up", "put nest on branch"]) {
+        const authored = send(reference, { kind: "line", text });
+        assert.deepEqual(authored.errors, []);
+        const next = await doLine(target, (await read(target, targetRef)).head, text);
+        assert.deepEqual(next.native_output, [authored.delta]);
+        ending = next.native_output.join("");
+      }
+      const final = publishedImage(join(targetDir, "fixture.sqlite"));
+      assert.deepEqual(capture(reference, heidiStory), nativePayload.parse(final.native).checkpoint);
+      assert.match(ending, /You have won/u);
+    } else {
+      if (character) {
+        const choice = { kind: "character", value: "b" } as const;
+        const old = receipt.parse((await commitFixtureInput(source, saved.head, "request:choice", choice)).result).receipt;
+        const restored = receipt.parse((await commitFixtureInput(target, importedView.head, "request:choice", choice)).result).receipt;
+        assert.deepEqual(restored.native_output, old.native_output);
+      }
+      const reference = await doLine(source, (await read(source, ref)).head, "roll");
+      const actual = await doLine(target, (await read(target, targetRef)).head, "roll");
+      assert.deepEqual(actual.native_output, reference.native_output);
+    }
+
+    const otherHandle = await stage(target, "other");
+    const expiredHandle = await stage(target);
+    now += 3_600_001;
+    take(target.service.collectAbandoned());
+    assert.equal(outcome.parse(await target.call("open_story_session", { version, launch_handle: expiredHandle })).status, "VALIDATION_FAILED");
+    assert.equal(outcome.parse(await target.call("open_story_session", { version, launch_handle: otherHandle }, "other")).status, "VALIDATION_FAILED");
+    const revoked = await stage(target);
+    assert.equal((await target.post("/private-story-revoke", { handle: revoked }, "other")).status, 404);
+    assert.equal((await target.post("/private-story-revoke", { handle: revoked })).status, 200);
+    assert.equal(outcome.parse(await target.call("open_story_session", { version, launch_handle: revoked })).status, "VALIDATION_FAILED");
+    const deletion = { session_id: targetRef.session_id, branch_id: targetRef.branch_id, confirmed: "yes" };
+    assert.equal((await target.post("/private-delete", deletion, "other")).status, 404);
+    assert.match(await (await target.get("/private-sessions")).text(), new RegExp(importedResult.head.session_id, "u"));
+    assert.doesNotMatch(await (await target.get("/private-sessions", "other")).text(), new RegExp(importedResult.head.session_id, "u"));
+    assert.equal((await target.post("/private-delete", deletion)).status, 200);
+    assert.doesNotMatch(await (await target.get("/private-sessions")).text(), new RegExp(importedResult.head.session_id, "u"));
+    assert.equal((await target.upload("/private-import", bytes, "owner", headers)).status, 404);
+    assert.equal(outcome.parse(await target.call("get_turn_context", targetRef)).status, "VALIDATION_FAILED");
+    const deleted = new DatabaseSync(join(targetDir, "fixture.sqlite"), { readOnly: true });
+    try {
+      for (const table of ["private_stories", "private_uploads", "private_imports", "checkpoints", "checkpoint_links", "requests", "events", "heads"]) {
+        assert.equal(deleted.prepare("SELECT COUNT(*) AS count FROM " + table).get()?.count, 0, table);
+      }
+    } finally { deleted.close(); }
+    const unaffected = context.parse(await target.call("open_story_session", {
+      version, launch_handle: await stage(target, "other"),
+    }, "other")).context;
+    const own = context.parse(await target.call("open_story_session", { version, launch_handle: await stage(target) })).context;
+    assert.equal((await target.post("/private-delete", { session_id: own.head.session_id, branch_id: own.head.branch_id, confirmed: "yes" })).status, 200);
+    assert.deepEqual(context.parse(await target.call("get_turn_context", {
+      version, session_id: unaffected.head.session_id, branch_id: unaffected.head.branch_id,
+    }, "other")).context, unaffected);
+  });
+}

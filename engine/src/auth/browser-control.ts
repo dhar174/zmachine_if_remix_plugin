@@ -1,10 +1,13 @@
+import { randomBytes, randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import { HeadExpectation, OwnerId } from "../contracts.ts";
 import type { Authority } from "./authority.ts";
+import { storyUploadBytes } from "../native/checkpoint.ts";
 import { capture, digest, opaque, requestId, sessionRef, subset, target } from "../fixture/session-contracts.ts";
 import type { TurnService } from "../turn/service.ts";
-import { restoreId } from "../fixture/recovery-contracts.ts";
+import { restoreId, saveId } from "../fixture/recovery-contracts.ts";
+import { portableBytes, uploadPurpose } from "../fixture/portable-session.ts";
 
 export interface BrowserSession {
   readonly owner: z.infer<typeof OwnerId>;
@@ -41,7 +44,8 @@ async function body(request: IncomingMessage): Promise<unknown> {
 
 /** Framework-neutral local control endpoints. No tool route is mounted here. */
 type FixtureControl = Pick<TurnService, "fixtureProfile" | "issueFixtureLaunch" | "readFixture" | "recordFixtureSource" |
-  "readFixtureSubset" | "selectFixtureSubset" | "recovery">;
+  "readFixtureSubset" | "selectFixtureSubset" | "recovery" | "privateStories" | "uploadPrivateStory" | "revokePrivateUpload" |
+  "listPrivateSessions" | "managePrivateSession" | "deletePrivateSession" | "authorizePrivateDownload" | "exportPrivateSession" | "importPrivateSession">;
 const restoreForm = z.strictObject({ id: restoreId, digest });
 const fixtureMode = target.extend({ command: z.enum(["/play", "/edit"]) });
 const subsetForm = subset.omit({ clause_ids: true }).extend({ clause_ids: z.string().max(8192) });
@@ -74,6 +78,89 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         response.writeHead(200, { "content-type": "text/html; charset=utf-8", "referrer-policy": "same-origin" });
         response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><title>${title}</title><h1>${title}</h1>${content}</html>`);
       };
+      if (fixture?.privateStories && request.method === "GET" && url.pathname === "/private-sessions") {
+        const sessions = fixture.listPrivateSessions(session.owner);
+        if (!sessions.ok) return result(sessions);
+        const links = sessions.value.map(({ session_id, branch_id }) =>
+          `<li><a href="/private-session?session_id=${encodeURIComponent(session_id)}&amp;branch_id=${encodeURIComponent(branch_id)}">${escaped(session_id)}</a></li>`).join("");
+        page("Your private adventures", `<ul>${links}</ul><p><a href="/private-story">Import a story</a></p>`);
+        return;
+      }
+      if (fixture?.privateStories && request.method === "GET" && url.pathname === "/private-session") {
+        const scope = sessionRef.safeParse({ session_id: url.searchParams.get("session_id"), branch_id: url.searchParams.get("branch_id") });
+        if (!scope.success) return reply(404, { error: "UNAVAILABLE" });
+        const access = { ...scope.data, owner_id: session.owner };
+        const manage = fixture.managePrivateSession(access);
+        if (!manage.ok) return result(manage);
+        const fields = hidden("session_id", scope.data.session_id) + hidden("branch_id", scope.data.branch_id);
+        const forms = manage.value.map((id) => `<li><form method="post" action="/private-export-review">
+          ${csrfField}${fields}${hidden("save_id", id)}<button>Review export of ${escaped(id)}</button></form></li>`).join("");
+        page("Manage private adventure", `<p>Use these references to reopen this adventure in ChatGPT.</p>
+          <dl><dt>Session</dt><dd>${escaped(scope.data.session_id)}</dd><dt>Branch</dt><dd>${escaped(scope.data.branch_id)}</dd></dl><ul>${forms}</ul>
+          <p>Deleting this adventure removes its story, session and ${manage.value.length} combined saves from the engine.</p>
+          <p>Downloaded copies, backups and ChatGPT conversations have their own retention.</p>
+          <form method="post" action="/private-delete">${csrfField}${fields}
+          <label><input type="checkbox" name="confirmed" value="yes" required> Delete this adventure and its saves</label>
+          <button>Delete private adventure</button></form>`);
+        return;
+      }
+      if (fixture?.privateStories && request.method === "GET" &&
+          (url.pathname === "/private-story" || url.pathname === "/private-import")) {
+        const importing = url.pathname === "/private-import";
+        const nonce = randomBytes(18).toString("base64");
+        response.setHeader("content-security-policy", "default-src 'none'; script-src 'nonce-" + nonce +
+          "'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+        const path = importing ? "/private-import" : "/private-story";
+        const controls = importing
+          ? `<label>Unused matching-story handle <input name="story" required></label>${hidden("request", randomUUID())}`
+          : `<label>Use this file to <select name="purpose"><option value="open">Start a new adventure</option>
+            <option value="combined">Import a combined save</option></select></label>`;
+        page(importing ? "Import a private combined save" : "Import a private Z5 story", `<p>${importing
+          ? "Upload the matching story first and keep its handle unused. Choose the combined save from your device."
+          : "Choose a supported Z5 story from your device."}
+          The engine stores the original bytes privately until you delete the adventure.
+          Story output and approved directive text can enter your ChatGPT conversation.</p>
+          <form id="upload" method="post">${csrfField}${controls}<label>File <input type="file" required></label>
+          <label><input type="checkbox" required> I consent to sending this file to the private engine.</label>
+          <button>Upload and authorize import</button></form><pre role="status"></pre>
+          <script nonce="${nonce}">
+            const form = document.querySelector('#upload');
+            const status = document.querySelector('[role=status]');
+            const button = form.querySelector('button');
+            form.addEventListener('submit', async (event) => {
+              event.preventDefault();
+              button.disabled = true;
+              status.textContent = 'Uploading…';
+              try {
+                const extra = ${importing} ? {
+                  'X-Story-Handle': form.elements.story.value, 'X-Import-Request': form.elements.request.value,
+                } : { 'X-Upload-Purpose': form.elements.purpose.value };
+                const response = await fetch('${path}', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/octet-stream', 'X-CSRF-Token': form.elements.csrf.value, ...extra},
+                  body: form.querySelector('input[type=file]').files[0],
+                });
+                const result = await response.json();
+                if (!result.ok) status.textContent = 'Upload rejected.';
+                else if (${importing}) {
+                  status.textContent = 'Imported into Play. Share these session identifiers with ChatGPT: ' +
+                    result.value.head.session_id + ' / ' + result.value.head.branch_id;
+                  button.hidden = true;
+                } else {
+                  const destination = form.elements.purpose.value === 'open' ? 'to ChatGPT' : 'to the combined save page';
+                  status.textContent = 'Copy this single-use handle ' + destination + ': ' + result.value;
+                  document.querySelector('#revoke input[name=handle]').value = result.value;
+                  document.querySelector('#revoke').hidden = false;
+                  form.reset();
+                }
+              } catch { status.textContent = 'Upload did not finish.'; }
+              finally { button.disabled = false; }
+            });
+          </script>${importing ? "" : `<form id="revoke" hidden method="post" action="/private-story-revoke">
+          ${csrfField}<input type="hidden" name="handle"><button>Revoke this upload</button></form>
+          <p><a href="/private-import">Import a combined save instead</a></p>`}`);
+        return;
+      }
       if (fixture && request.method === "GET" && url.pathname === "/session") {
         const native = fixture.fixtureProfile === "native-z5";
         const disclosure = native
@@ -84,6 +171,7 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
             "Authorized directive text and visible facts are sent to ChatGPT. Use synthetic text only. " +
             "ChatGPT retains chat data according to your account settings. The local trial store is retained for verification until removed.";
         page(native ? "Open the bundled Z5 fixture" : "Open the synthetic fixture", "<p>" + disclosure + "</p>" +
+          (fixture.privateStories ? '<p><a href="/private-story">Import a private story</a> · <a href="/private-sessions">Your private adventures</a></p>' : "") +
           `<form method="post" action="/fixture-launch">${csrfField}<button>Consent and create launch handle</button></form>`);
         return;
       }
@@ -102,7 +190,9 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         page("Record a fixture directive", `<form method="post" action="/fixture-source">${csrfField}${fields}
           <label>Purpose <select name="purpose">${choices}</select></label>
           <label>Exact directive <textarea name="text" required maxlength="4096"></textarea></label>
-          <button>Record directive</button></form>${mode}`);
+          <button>Record directive</button></form>${mode}` + (fixture.privateStories
+          ? `<p><a href="/private-session?session_id=${encodeURIComponent(head.session_id)}&amp;branch_id=${encodeURIComponent(head.branch_id)}">Manage private adventure</a></p>`
+          : ""));
         return;
       }
       if (fixture && request.method === "GET" && url.pathname === "/fixture-subset") {
@@ -144,12 +234,69 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
       }
       if (request.method !== "POST") return reply(404, { error: "UNAVAILABLE" });
       if (request.headers.origin !== origin) return reply(403, { error: "CONTROL_ORIGIN" });
+      if (fixture?.privateStories && (url.pathname === "/private-story" || url.pathname === "/private-import")) {
+        const importing = url.pathname === "/private-import";
+        const limit = importing ? portableBytes : storyUploadBytes;
+        const purpose = uploadPurpose.safeParse(request.headers["x-upload-purpose"]);
+        const handle = opaque("upload").safeParse(request.headers["x-story-handle"]);
+        const logical = z.uuid().safeParse(request.headers["x-import-request"]);
+        if (importing ? !handle.success || !logical.success : !purpose.success) return reply(400, { error: "INVALID_CONTROL" });
+        if (!session.csrf || request.headers["x-csrf-token"] !== session.csrf) return reply(403, { error: "CONTROL_CSRF" });
+        if (url.search || request.headers["content-type"] !== "application/octet-stream") return reply(400, { error: "INVALID_CONTROL" });
+        if (Number(request.headers["content-length"]) > limit) return reply(413, { error: "REQUEST_LIMIT" });
+        let size = 0;
+        const chunks: Buffer[] = [];
+        for await (const chunk of request.iterator({ destroyOnReturn: false }) as AsyncIterable<Buffer>) {
+          size += chunk.length;
+          if (size > limit) {
+            response.setHeader("connection", "close");
+            return reply(413, { error: "REQUEST_LIMIT" });
+          }
+          chunks.push(chunk);
+        }
+        const bytes = Buffer.concat(chunks);
+        if (!importing && purpose.success) return result(fixture.uploadPrivateStory(session.owner, purpose.data, bytes));
+        if (handle.success && logical.success) return result(await fixture.importPrivateSession(session.owner, handle.data, logical.data, bytes));
+        return reply(400, { error: "INVALID_CONTROL" });
+      }
       const raw = await body(request);
       const input = z.record(z.string(), z.unknown()).safeParse(raw);
       if (!input.success) return reply(400, { error: "INVALID_CONTROL" });
       const { csrf, ...data } = input.data;
       if (!session.csrf || (csrf ?? request.headers["x-csrf-token"]) !== session.csrf) {
         return reply(403, { error: "CONTROL_CSRF" });
+      }
+      if (fixture?.privateStories && url.pathname === "/private-delete") {
+        const parsed = sessionRef.extend({ confirmed: z.literal("yes") }).safeParse(data);
+        if (!parsed.success) return reply(400, { error: "INVALID_CONTROL" });
+        return result(fixture.deletePrivateSession({ ...parsed.data, owner_id: session.owner }));
+      }
+      if (fixture?.privateStories && url.pathname === "/private-export-review") {
+        const parsed = sessionRef.extend({ save_id: saveId }).safeParse(data);
+        if (!parsed.success) return reply(400, { error: "INVALID_CONTROL" });
+        const authorization = fixture.authorizePrivateDownload({ ...parsed.data, owner_id: session.owner }, parsed.data.save_id);
+        if (!authorization.ok) return result(authorization);
+        const fields = Object.entries(parsed.data).map(([name, value]) => hidden(name, value)).join("");
+        page("Download combined save", `<p>This combined package includes saved story text and user content.
+          Keep it private. Recovery requires a compatible engine and the matching story. Native-only saves cannot recover this session.</p>
+          <form method="post" action="/private-export">${csrfField}${fields}
+          ${hidden("download", authorization.value)}<button>Download private combined save</button></form>`);
+        return;
+      }
+      if (fixture?.privateStories && url.pathname === "/private-export") {
+        const parsed = sessionRef.extend({ save_id: saveId, download: opaque("download") }).safeParse(data);
+        if (!parsed.success) return reply(400, { error: "INVALID_CONTROL" });
+        const file = fixture.exportPrivateSession({ ...parsed.data, owner_id: session.owner }, parsed.data.save_id, parsed.data.download);
+        if (!file.ok) return result(file);
+        response.writeHead(200, { "content-type": "application/octet-stream", "content-length": file.value.length,
+          "content-disposition": 'attachment; filename="zmachine-combined.json"' });
+        response.end(file.value);
+        return;
+      }
+      if (fixture?.privateStories && url.pathname === "/private-story-revoke") {
+        const parsed = z.strictObject({ handle: z.union([opaque("launch"), opaque("upload")]) }).safeParse(data);
+        return parsed.success ? result(fixture.revokePrivateUpload(session.owner, parsed.data.handle))
+          : reply(400, { error: "INVALID_CONTROL" });
       }
       if (fixture && url.pathname === "/fixture-launch") {
         if (!z.strictObject({}).safeParse(data).success) return reply(400, { error: "INVALID_CONTROL" });

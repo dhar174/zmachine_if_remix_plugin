@@ -175,7 +175,8 @@ export function fixtureServer(service: TurnService, origin: string, auth: Fixtur
         if (url.pathname === "/oauth/callback") return await auth.callback(request, response, url);
         if ((url.pathname === "/session" || url.pathname === "/fixture-control" ||
             url.pathname === "/fixture-subset" || url.pathname === "/candidate" ||
-            url.pathname === "/fixture-restore") && !auth.browser(request)) {
+            url.pathname === "/fixture-restore" || url.pathname === "/private-story" ||
+            url.pathname === "/private-import" || url.pathname === "/private-session" || url.pathname === "/private-sessions") && !auth.browser(request)) {
           // Preserve the control destination via user navigation, never an open redirect.
           response.writeHead(401, { "content-type": "text/html; charset=utf-8",
             "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'" });
