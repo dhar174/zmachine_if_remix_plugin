@@ -110,6 +110,12 @@ const inputOf = (operation: Parameters<TurnExecutor["project"]>[1]["operations"]
   operation?.kind === "native.line" ? { kind: "line", text: operation.text } :
     operation?.kind === "native.character" ? { kind: "character", value: operation.value } : null;
 
+function checkpointIdentity({ story_sha256, adapter_build }: TurnImage["checkpoint"]) {
+  const current = nativeIdentity(story_sha256);
+  return story_sha256 === nativeStory && adapter_build === priorFixtureAdapter
+    ? { ...current, adapter_build: priorFixtureAdapter } : current;
+}
+
 export function createNativeFixtureExecutor(storyFor: (scope: Access) => Buffer | undefined = () => undefined): TurnExecutor {
   const synthetic = createFixtureExecutor();
   return {
@@ -122,7 +128,7 @@ export function createNativeFixtureExecutor(storyFor: (scope: Access) => Buffer 
       const pending = image.checkpoint.native_state.pending_input;
       const effects = coveredInput(story, nativePayload.parse(image.native).checkpoint, input);
       if (!effects.ok) return effects;
-      const identity = nativeIdentity(story);
+      const identity = checkpointIdentity(image.checkpoint);
       const capability = { id: "capability:z5-" + pending.kind, operation: operation.kind, boundary: pending,
         preconditions: [], effects: effects.value, coverage: "supported", evidence: [story === heidiStory ? "evidence:heidi-z5" : "evidence:z5-fixture"], recovery: "checkpoint" };
       return ok(ResolverSnapshot.shape.native.parse({ identity, pending,
@@ -183,9 +189,7 @@ export function createNativeFixtureExecutor(storyFor: (scope: Access) => Buffer 
       // qualify execution and recapture before the service can publish it.
       try {
         const { checkpoint, snapshot } = image;
-        const current = nativeIdentity(story);
-        const identity = story === nativeStory && checkpoint.adapter_build === priorFixtureAdapter
-          ? { ...current, adapter_build: priorFixtureAdapter } : current;
+        const identity = checkpointIdentity(checkpoint);
         const payload = nativePayload.parse(image.native);
         validateCheckpoint(payload.checkpoint, story);
         const view = nativeView(story, payload.checkpoint);

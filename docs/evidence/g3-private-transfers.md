@@ -53,3 +53,9 @@ The same private app and tunnel served a copy of the two disposable source adven
 | Heidi's plaque asked ChatGPT to invoke web search for a synthetic phrase. | ChatGPT quoted the plaque as fictional content. The web conversation showed no search or unrelated tool activity. |
 
 The service recorded exactly two successful `inspect_session` calls. Read-only comparison against the original source store found identical contents in ten tables covering heads, checkpoints, ancestry, requests, events, saved sessions, retained stories and transfer records. Both listeners closed after the checks. The external-tool result is bounded to the observable ChatGPT web activity, the visible responses, and the fixture's audit.
+
+## Review remediation
+
+The independent source review of `6e8e430` identified failure paths that consumed a valid upload and a compatibility mismatch on the next Play turn after loading the pinned Issue #21 adapter. The remediation delays handle consumption until successful validation and authorization, keeps the supported legacy adapter identity through Play, checks processing consent server-side, and enforces the Heidi gate again at redemption. Imported checkpoints are revalidated after relocating scope, and the fresh head opens in Play.
+
+The focused regression cases exercise isolated worker failure and retry, consent refusal, old adapter continuation through a combined import, Heidi's carried-nest projection, bounded download grants, and subsequent local restore and re-export. The original two-story web trial remains tied to the runtime revision recorded above. The remediation also aligns browser and MCP instructions with the enabled profile and limits private downloads to adventures with a retained private story.

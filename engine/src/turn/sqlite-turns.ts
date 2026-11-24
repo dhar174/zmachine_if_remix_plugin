@@ -42,7 +42,7 @@ export class SQLiteTurns {
       }
       this.atomic(() => {
         const version = this.db.prepare("PRAGMA user_version").get()?.user_version;
-        if (version !== 0 && version !== 1 && version !== 2 && version !== 3) throw new Error("Unsupported turn database version.");
+        if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4) throw new Error("Unsupported turn database version.");
         this.db.exec("CREATE TABLE IF NOT EXISTS coordinator (id INTEGER PRIMARY KEY CHECK(id=1), token TEXT NOT NULL) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS authority (area TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(area,key)) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS checkpoints (id TEXT PRIMARY KEY, digest TEXT NOT NULL, body TEXT NOT NULL, published INTEGER NOT NULL, claim TEXT) STRICT");
@@ -55,7 +55,7 @@ export class SQLiteTurns {
         }
         this.db.exec("CREATE TABLE IF NOT EXISTS fixture_records (area TEXT NOT NULL, key TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(area,key)) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS fixture_drafts (branch TEXT PRIMARY KEY, checkpoint TEXT NOT NULL UNIQUE, digest TEXT NOT NULL, body TEXT NOT NULL) STRICT");
-        if (version !== 3) {
+        if (version < 3) {
           this.db.exec(`
             CREATE TABLE checkpoint_links (
               id TEXT PRIMARY KEY REFERENCES checkpoints(id), parent TEXT REFERENCES checkpoints(id),
@@ -78,14 +78,14 @@ export class SQLiteTurns {
               id TEXT PRIMARY KEY, digest TEXT NOT NULL, approval_id TEXT UNIQUE, intent TEXT,
               approved INTEGER NOT NULL DEFAULT 0, claim TEXT, result TEXT
             ) STRICT;
-            PRAGMA user_version=3;
           `);
         }
         this.db.exec(
           "CREATE TABLE IF NOT EXISTS private_uploads (id TEXT PRIMARY KEY, owner TEXT NOT NULL, purpose TEXT NOT NULL, bytes BLOB NOT NULL, expires INTEGER NOT NULL) STRICT;" +
           "CREATE TABLE IF NOT EXISTS private_stories (branch TEXT PRIMARY KEY, bytes BLOB NOT NULL) STRICT;" +
           "CREATE TABLE IF NOT EXISTS private_imports (id TEXT PRIMARY KEY, branch TEXT NOT NULL, digest TEXT NOT NULL, result TEXT NOT NULL) STRICT;" +
-          "CREATE TABLE IF NOT EXISTS private_downloads (id TEXT PRIMARY KEY, branch TEXT NOT NULL, save TEXT NOT NULL, expires INTEGER NOT NULL) STRICT;",
+          "CREATE TABLE IF NOT EXISTS private_downloads (id TEXT PRIMARY KEY, branch TEXT NOT NULL, save TEXT NOT NULL, expires INTEGER NOT NULL) STRICT;" +
+          "PRAGMA user_version=4;",
         );
         this.db.prepare("INSERT INTO coordinator VALUES(1,?) ON CONFLICT(id) DO UPDATE SET token=excluded.token").run(this.token);
         this.db.exec("UPDATE recovery_requests SET approval_id=NULL,intent=NULL,approved=0,claim=NULL WHERE result IS NULL");
@@ -359,8 +359,12 @@ export class SQLiteTurns {
     return { digest: row.digest, result: importedSession.parse(parseJson(row.result)) };
   }
 
-  issueDownload(id: string, scope: Access, save: string, expires: number): void {
-    this.db.prepare("INSERT INTO private_downloads VALUES(?,?,?,?)").run(id, branchKey(scope), save, expires);
+  issueDownload(id: string, scope: Access, save: string, now: number): boolean {
+    const branch = branchKey(scope);
+    this.db.prepare("DELETE FROM private_downloads WHERE branch=? AND expires<=?").run(branch, now);
+    const issued = this.db.prepare("INSERT INTO private_downloads SELECT ?,?,?,? WHERE " +
+      "(SELECT COUNT(*) FROM private_downloads WHERE branch=?) < 8").run(id, branch, save, now + 300_000, branch);
+    return issued.changes === 1;
   }
 
   consumeDownload(id: string, scope: Access, save: string, now: number): boolean {

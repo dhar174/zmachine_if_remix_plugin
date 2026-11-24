@@ -88,12 +88,14 @@ export function heidiEntities(view: View): EntityProjection[] {
 }
 
 export function heidiProjection(view: View) {
-  const label = (id: number) => ({ id: entityId(id), name: names[id] ?? "", qualifier: null });
+  const label = (id: number, qualifier: string | null = null) => ({ id: entityId(id), name: names[id] ?? "", qualifier });
   const movable = [[bird, view.birdHolder], [nest, view.nestHolder]] as const;
   const here = (holder: number) => holder === view.room || holder === 33 && view.room === 32;
-  const visible = movable.filter(([, holder]) => here(holder) || holder === nest && here(view.nestHolder)).map(([id]) => label(id));
+  const locate = ([id, holder]: typeof movable[number]) => label(id, holder === nest ? "in the bird's nest" : null);
+  const visible = movable.filter(([, holder]) => here(holder) || holder === nest && here(view.nestHolder)).map(locate);
   if (view.room === 29) visible.push(label(31));
   if (view.room === 32) visible.push(label(33));
-  return { room: label(view.room), inventory: movable.filter(([, holder]) => holder === player).map(([id]) => label(id)),
+  const inventory = movable.filter(([, holder]) => holder === player || holder === nest && view.nestHolder === player).map(locate);
+  return { room: label(view.room), inventory,
     visible, status_line: view.grid };
 }

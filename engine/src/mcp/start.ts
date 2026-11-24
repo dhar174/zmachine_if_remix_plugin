@@ -27,6 +27,9 @@ if (!configPath || process.argv.length !== 3) {
     if (config.private_story_files && config.profile !== "native-z5") {
       throw new Error("Private stories require the native profile.");
     }
+    if (config.heidi_trial && !config.private_story_files) {
+      throw new Error("The Heidi trial requires private story transfers.");
+    }
     const key = config.transfer_key_env && process.env[config.transfer_key_env];
     if (config.private_story_files && (!key || !/^[0-9a-f]{64}$/u.test(key))) {
       throw new Error("Private transfers need a configured 32-byte hexadecimal key.");

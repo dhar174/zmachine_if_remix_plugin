@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { z } from "zod";
+import { Authority } from "../src/auth/authority.ts";
 import { OwnerId, canonicalDigest, canonicalJson } from "../src/contracts.ts";
 import { importedSession } from "../src/fixture/portable-session.ts";
 import { compilerView, fixtureContext, receiptView } from "../src/fixture/session-contracts.ts";
@@ -21,8 +22,8 @@ import { fixtureServer } from "../src/mcp/server.ts";
 import { scopes } from "../src/mcp/tools.ts";
 import { capture, checkpointView, fingerprint, heidiStory, nativePayload, nativeStory, openStory, priorFixtureAdapter, restore, send, storyBytes } from "../src/native/checkpoint.ts";
 import { createNativeFixtureExecutor } from "../src/native/executor.ts";
-import { TurnImage } from "../src/turn/contracts.ts";
-import type { FaultPoint } from "../src/turn/contracts.ts";
+import { TurnImage, failure } from "../src/turn/contracts.ts";
+import type { FaultPoint, TurnExecutor } from "../src/turn/contracts.ts";
 import { TurnService } from "../src/turn/service.ts";
 import { edit, endpoint, makeFixture, play, take } from "./turn-fixture.ts";
 
@@ -51,10 +52,10 @@ const protection = (id: string, field: string) => ({
 });
 
 async function harness(directory: string, browserEnabled = true, fault?: (point: FaultPoint) => void,
-  profile: "synthetic" | "native-z5" = "synthetic", clock = Date.now, transfers = false) {
+  profile: "synthetic" | "native-z5" = "synthetic", clock = Date.now, transfers = false, heidiTrial = true) {
   const executor = profile === "native-z5" ? createNativeFixtureExecutor() : createFixtureExecutor();
   const service = new TurnService(join(directory, "fixture.sqlite"), executor, clock, fault, profile,
-    transfers ? { key: Buffer.alloc(32, 42), heidiTrial: true } : undefined);
+    transfers ? { key: Buffer.alloc(32, 42), heidiTrial } : undefined);
   const auth = {
     authenticate: (req: IncomingMessage) => {
       const token = req.headers.authorization;
@@ -109,7 +110,8 @@ async function harness(directory: string, browserEnabled = true, fault?: (point:
         });
       });
       call.on("error", reject);
-      call.end(body);
+      if (extra.expect === "100-continue") call.flushHeaders();
+      else call.end(body);
     });
   }
   function post(path: string, payload: Record<string, unknown>, browser = "owner", requestOrigin = origin) {
@@ -139,7 +141,7 @@ async function harness(directory: string, browserEnabled = true, fault?: (point:
   return { base, rpc, call, post, get, open, record, service,
     upload(path: string, bytes: Buffer, browser = "owner", headers: Record<string, string> = {}) {
       return browserRequest(path, "POST", browser, origin, bytes, { "content-type": "application/octet-stream",
-        "x-csrf-token": "csrf-" + browser, "content-length": String(bytes.length), ...headers });
+        "x-csrf-token": "csrf-" + browser, "x-upload-consent": "yes", "content-length": String(bytes.length), ...headers });
     },
     launch: () => reference("/fixture-launch", {}, /launch:[0-9a-f-]{36}/u),
     async approve({ candidate_id, diff_digest }: z.infer<typeof prepared>) {
@@ -1443,7 +1445,7 @@ void test("v1 store upgrade preserves the prior head and stored receipt", async 
       assert.ok(take(migrated.issueFixtureLaunch(owner)).startsWith("launch:"));
       const observed = new DatabaseSync(path, { readOnly: true });
       try {
-        assert.equal(observed.prepare("PRAGMA user_version").get()?.user_version, 3);
+        assert.equal(observed.prepare("PRAGMA user_version").get()?.user_version, 4);
         assert.deepEqual(observed.prepare("SELECT parent FROM checkpoint_links WHERE id=?")
           .get(committed.receipt.post_checkpoint)?.parent, committed.receipt.pre_checkpoint);
         assert.equal(observed.prepare("SELECT COUNT(*) AS total FROM heads").get()?.total, 1);
@@ -1457,11 +1459,12 @@ for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
     const sourceDir = mkdtempSync(join(tmpdir(), "zirp-transfer-source-"));
     const targetDir = mkdtempSync(join(tmpdir(), "zirp-transfer-target-"));
     let now = Date.now();
-    const source = await harness(sourceDir, true, undefined, "native-z5", () => now, true);
+    let source = await harness(sourceDir, true, undefined, "native-z5", () => now, true);
     let interrupt = false;
-    let target = await harness(targetDir, true, (point) => {
+    const startTarget = (heidiTrial = true) => harness(targetDir, true, (point) => {
       if (interrupt && point === "before_commit") throw new Error("Interrupt portable publication.");
-    }, "native-z5", () => now, true);
+    }, "native-z5", () => now, true, heidiTrial);
+    let target = await startTarget();
     t.after(async () => {
       await source.close();
       await target.close();
@@ -1477,6 +1480,11 @@ for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
       return z.object({ ok: z.literal(true), value: z.string() }).parse(await delivered.json()).value;
     };
     assert.match(await (await source.get("/private-story")).text(), /I consent/u);
+    const noStoryConsent = await source.upload("/private-story", story, "owner", {
+      "x-upload-purpose": "open", "x-upload-consent": "no",
+    });
+    assert.equal(noStoryConsent.status, 400);
+    assert.deepEqual(await noStoryConsent.json(), { error: "CONSENT_REQUIRED" });
     assert.equal((await source.upload("/private-story", story, "owner", { "x-upload-purpose": "open", "x-csrf-token": "wrong" })).status, 403);
     assert.equal((await source.upload("/private-story", Buffer.alloc(256 * 1024 + 1), "owner", { "x-upload-purpose": "open" })).status, 413);
     const wrongVersion = Buffer.from(story);
@@ -1490,14 +1498,33 @@ for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
     const handle = await stage(source);
     const args = { version, launch_handle: handle };
     assert.equal(outcome.parse(await source.call("open_story_session", args, "other")).status, "VALIDATION_FAILED");
+    if (!heidi && !character) {
+      const rejectHead = t.mock.method(Authority.prototype, "setHead", () => failure("ABORTED", "Simulated launch publication failure."));
+      try {
+        assert.equal(outcome.parse(await source.call("open_story_session", args)).status, "ABORTED");
+      } finally { rejectHead.mock.restore(); }
+    }
     const attempted = await Promise.all([source.call("open_story_session", args), source.call("open_story_session", args)]);
     const contexts = attempted.map((value) => context.safeParse(value)).filter((x) => x.success);
-    assert.equal(contexts.length, 1);
+    assert.equal(contexts.length, 1, JSON.stringify(attempted.map((value) => outcome.parse(value).status)));
     const draft = contexts[0]?.data.context;
     assert.ok(draft);
     assert.equal(draft.story_sha256, heidi ? heidiStory : nativeStory);
     assert.equal(outcome.parse(await source.call("open_story_session", args)).status, "VALIDATION_FAILED");
     const ref = await activateFixture(source, draft);
+    if (character) {
+      const database = join(sourceDir, "fixture.sqlite");
+      const image = publishedImage(database);
+      image.checkpoint.adapter_build = priorFixtureAdapter;
+      await source.close();
+      const legacy = new DatabaseSync(database);
+      try {
+        assert.equal(legacy.prepare("UPDATE checkpoints SET body=?,digest=? WHERE id=?")
+          .run(canonicalJson(image), canonicalDigest(image), image.checkpoint.checkpoint_id).changes, 1);
+        legacy.exec("PRAGMA user_version=3");
+      } finally { legacy.close(); }
+      source = await harness(sourceDir, true, undefined, "native-z5", () => now, true);
+    }
     const read = async (fixture: Awaited<ReturnType<typeof harness>>, object: unknown) =>
       context.parse(await fixture.call("get_turn_context", object)).context;
 
@@ -1524,6 +1551,19 @@ for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
     assert.equal(bytes.includes(story.toString("base64")), false);
     assert.equal((await source.post("/private-export", fields)).status, 404);
     assert.equal((await source.post("/private-export-review", { ...selection, save_id }, "other")).status, 404);
+    if (!heidi && !character) {
+      let lastGrant: string | undefined;
+      for (let i = 0; i < 8; i++) {
+        const authorization = await source.post("/private-export-review", selection);
+        assert.equal(authorization.status, 200);
+        lastGrant = /download:[0-9a-f-]{36}/u.exec(await authorization.text())?.[0];
+      }
+      assert.ok(lastGrant);
+      assert.equal((await source.post("/private-export-review", selection)).status, 409);
+      now += 300_001;
+      assert.equal((await source.post("/private-export", { ...selection, download: lastGrant })).status, 404);
+      assert.equal((await source.post("/private-export-review", selection)).status, 200);
+    }
 
     const wrongStory = heidi ? storyBytes() : readFileSync(new URL("../../tests/fixtures/zmachine/heidi/Heidi.z5", import.meta.url));
     const wrongHandle = await stage(target, "owner", "combined", wrongStory);
@@ -1532,7 +1572,36 @@ for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
     })).status, 404);
     const importHandle = await stage(target, "owner", "combined");
     const headers = { "x-story-handle": importHandle, "x-import-request": randomUUID() };
+    const noSaveConsent = await target.upload("/private-import", bytes, "owner", { ...headers, "x-upload-consent": "no" });
+    assert.equal(noSaveConsent.status, 400);
+    assert.deepEqual(await noSaveConsent.json(), { error: "CONSENT_REQUIRED" });
     assert.equal((await target.upload("/private-import", bytes, "other", headers)).status, 404);
+    if (!heidi && !character) {
+      const otherStory = await stage(target, "other", "combined");
+      assert.equal((await target.upload("/private-import", bytes, "other", {
+        "x-story-handle": otherStory, "x-import-request": randomUUID(),
+      })).status, 404);
+      const alteredMac = Buffer.from(bytes.toString("utf8").replace(/"mac":"[0-9a-f]/u, (prefix) => prefix.endsWith("0") ? '"mac":"1' : '"mac":"0'));
+      assert.notDeepEqual(alteredMac, bytes);
+      assert.equal((await target.upload("/private-import", alteredMac, "owner", headers)).status, 404);
+      assert.equal((await target.upload("/private-import", Buffer.alloc(0), "owner", {
+        ...headers, connection: "close", expect: "100-continue", "content-length": String(16 * 1024 * 1024 + 1),
+      })).status, 413);
+      const executor = Object.getOwnPropertyDescriptor(target.service, "executor")?.value as Required<Pick<TurnExecutor, "recreateNative">>;
+      const failedWorker = t.mock.method(executor, "recreateNative", () => Promise.resolve(failure("ABORTED", "Simulated worker timeout.")));
+      try {
+        assert.equal((await target.upload("/private-import", bytes, "owner", headers)).status, 409);
+      } finally { failedWorker.mock.restore(); }
+    }
+    if (heidi) {
+      const launch = await stage(target);
+      await target.close();
+      target = await startTarget(false);
+      assert.equal(outcome.parse(await target.call("open_story_session", { version, launch_handle: launch })).status, "VALIDATION_FAILED");
+      assert.equal((await target.upload("/private-import", bytes, "owner", headers)).status, 404);
+      await target.close();
+      target = await startTarget();
+    }
     assert.equal((await target.upload("/private-import", bytes.subarray(0, -2), "owner", headers)).status, 404);
     interrupt = true;
     assert.equal((await target.upload("/private-import", bytes, "owner", headers)).status, 409);
@@ -1557,6 +1626,13 @@ for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
     assert.deepEqual(importedView.clocks, saved.clocks);
     const from = publishedImage(join(sourceDir, "fixture.sqlite"));
     const into = publishedImage(join(targetDir, "fixture.sqlite"));
+    if (character) {
+      assert.equal(into.checkpoint.adapter_build, priorFixtureAdapter);
+      const legacy = new DatabaseSync(join(sourceDir, "fixture.sqlite"), { readOnly: true });
+      try {
+        assert.equal(legacy.prepare("PRAGMA user_version").get()?.user_version, 4);
+      } finally { legacy.close(); }
+    }
     const check = createNativeFixtureExecutor();
     const prior = TurnImage.parse({ ...from, checkpoint: { ...from.checkpoint, adapter_build: priorFixtureAdapter } });
     assert.equal(check.verifyRestore(prior).ok, !heidi);
@@ -1569,6 +1645,11 @@ for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
     const retry = await target.upload("/private-import", bytes, "owner", headers);
     assert.equal(retry.status, 200, await retry.clone().text());
     assert.deepEqual(z.object({ value: importedSession }).parse(await retry.json()).value, importedResult);
+    if (!heidi && !character) {
+      const conflict = await target.upload("/private-import", bytes.subarray(0, -2), "owner", headers);
+      assert.equal(conflict.status, 404);
+      z.object({ error: z.object({ subtype: z.literal("IDEMPOTENCY_CONFLICT") }) }).parse(await conflict.json());
+    }
     const log = inspection.parse(await target.call("inspect_session", { ...targetRef, query: { kind: "history" } }));
     assert.ok(log.receipts.length > 1);
     if (heidi) {
@@ -1594,6 +1675,12 @@ for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
         const next = await doLine(target, (await read(target, targetRef)).head, text);
         assert.deepEqual(next.native_output, [authored.delta]);
         ending = next.native_output.join("");
+        if (["take nest", "up", "put nest on branch"].includes(text)) {
+          const projection = (await read(target, targetRef)).native?.projection;
+          assert.ok(projection);
+          const location = text === "put nest on branch" ? projection.visible : projection.inventory;
+          assert.equal(location.find(({ name }) => name === "baby bird")?.qualifier, "in the bird's nest");
+        }
       }
       const final = publishedImage(join(targetDir, "fixture.sqlite"));
       assert.deepEqual(capture(reference, heidiStory), nativePayload.parse(final.native).checkpoint);
@@ -1610,12 +1697,31 @@ for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
       assert.deepEqual(actual.native_output, reference.native_output);
     }
 
+    if (!heidi && !character) {
+      const head = (await read(target, targetRef)).head;
+      const savedAgain = await saveCombined(target, head, "request:portable-resave");
+      const restore = { version, target: { ...head, request_id: "request:portable-restore" }, save_id: savedAgain };
+      await reviewRestore(target, restore);
+      assert.equal(outcome.parse(await target.call("restore_session", restore)).status, "RESTORED");
+      const newHead = (await read(target, targetRef)).head;
+      const exportAgain = { session_id: newHead.session_id, branch_id: newHead.branch_id,
+        save_id: await saveCombined(target, newHead, "request:portable-reexport") };
+      const confirmation = await target.post("/private-export-review", exportAgain);
+      const grant = /download:[0-9a-f-]{36}/u.exec(await confirmation.text())?.[0];
+      assert.ok(grant);
+      assert.equal((await target.post("/private-export", { ...exportAgain, download: grant })).status, 200);
+    }
+
     const otherHandle = await stage(target, "other");
     const expiredHandle = await stage(target);
+    const expiringCombined = await stage(target, "owner", "combined");
     now += 3_600_001;
     take(target.service.collectAbandoned());
     assert.equal(outcome.parse(await target.call("open_story_session", { version, launch_handle: expiredHandle })).status, "VALIDATION_FAILED");
     assert.equal(outcome.parse(await target.call("open_story_session", { version, launch_handle: otherHandle }, "other")).status, "VALIDATION_FAILED");
+    assert.equal((await target.upload("/private-import", bytes, "owner", {
+      "x-story-handle": expiringCombined, "x-import-request": randomUUID(),
+    })).status, 404);
     const revoked = await stage(target);
     assert.equal((await target.post("/private-story-revoke", { handle: revoked }, "other")).status, 404);
     assert.equal((await target.post("/private-story-revoke", { handle: revoked })).status, 200);
@@ -1642,5 +1748,14 @@ for (const profile of ["fixture-line", "fixture-character", "heidi"] as const) {
     assert.deepEqual(context.parse(await target.call("get_turn_context", {
       version, session_id: unaffected.head.session_id, branch_id: unaffected.head.branch_id,
     }, "other")).context, unaffected);
+    if (!heidi && !character) {
+      const bundled = await activateFixture(target);
+      const head = (await read(target, bundled)).head;
+      const save_id = await saveCombined(target, head, "request:bundled-nonportable");
+      const scope = { session_id: bundled.session_id, branch_id: bundled.branch_id };
+      const manager = "/private-session?" + new URLSearchParams(scope).toString();
+      assert.equal((await target.get(manager)).status, 404);
+      assert.equal((await target.post("/private-export-review", { ...scope, save_id })).status, 404);
+    }
   });
 }

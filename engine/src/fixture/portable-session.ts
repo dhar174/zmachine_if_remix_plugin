@@ -105,9 +105,10 @@ export function relocatePortable(history: PortableEntry[]) {
   const generation_id = "generation:" + randomUUID();
   const imported = TurnImage.parse({
     ...last.image,
+    amendment: null,
     checkpoint: { ...checkpoint, checkpoint_id: "checkpoint:" + randomUUID(), revision: checkpoint.revision + 1,
       generation_id, history_ref: "history:" + randomUUID() },
-    snapshot: { ...snapshot, head: { ...snapshot.head, expected_revision: checkpoint.revision + 1, generation_id } },
+    snapshot: { ...snapshot, mode: "PLAY", head: { ...snapshot.head, expected_revision: checkpoint.revision + 1, generation_id } },
   });
   return { entries, imported, parent: checkpoint.checkpoint_id, origin: publicHead.strip().parse(snapshot.head) };
 }

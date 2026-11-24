@@ -121,7 +121,7 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
           The engine stores the original bytes privately until you delete the adventure.
           Story output and approved directive text can enter your ChatGPT conversation.</p>
           <form id="upload" method="post">${csrfField}${controls}<label>File <input type="file" required></label>
-          <label><input type="checkbox" required> I consent to sending this file to the private engine.</label>
+          <label><input type="checkbox" name="consent" required> I consent to sending this file to the private engine.</label>
           <button>Upload and authorize import</button></form><pre role="status"></pre>
           <script nonce="${nonce}">
             const form = document.querySelector('#upload');
@@ -137,7 +137,8 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
                 } : { 'X-Upload-Purpose': form.elements.purpose.value };
                 const response = await fetch('${path}', {
                   method: 'POST',
-                  headers: {'Content-Type': 'application/octet-stream', 'X-CSRF-Token': form.elements.csrf.value, ...extra},
+                  headers: {'Content-Type': 'application/octet-stream', 'X-CSRF-Token': form.elements.csrf.value,
+                    'X-Upload-Consent': form.elements.consent.checked ? 'yes' : '', ...extra},
                   body: form.querySelector('input[type=file]').files[0],
                 });
                 const result = await response.json();
@@ -179,7 +180,8 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         const scope = sessionRef.safeParse({ session_id: url.searchParams.get("session_id"), branch_id: url.searchParams.get("branch_id") });
         const logical = requestId.safeParse(url.searchParams.get("request_id"));
         if (!scope.success || !logical.success) return reply(404, { error: "UNAVAILABLE" });
-        const view = fixture.readFixture({ owner_id: session.owner, ...scope.data });
+        const access = { owner_id: session.owner, ...scope.data };
+        const view = fixture.readFixture(access);
         if (!view.ok) return result(view);
         const { head, state } = view.value;
         const fields = Object.entries({ ...head, request_id: logical.data }).map(([key, value]) => hidden(key, String(value))).join("");
@@ -190,7 +192,7 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         page("Record a fixture directive", `<form method="post" action="/fixture-source">${csrfField}${fields}
           <label>Purpose <select name="purpose">${choices}</select></label>
           <label>Exact directive <textarea name="text" required maxlength="4096"></textarea></label>
-          <button>Record directive</button></form>${mode}` + (fixture.privateStories
+          <button>Record directive</button></form>${mode}` + (fixture.privateStories && fixture.managePrivateSession(access).ok
           ? `<p><a href="/private-session?session_id=${encodeURIComponent(head.session_id)}&amp;branch_id=${encodeURIComponent(head.branch_id)}">Manage private adventure</a></p>`
           : ""));
         return;
@@ -242,6 +244,7 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         const logical = z.uuid().safeParse(request.headers["x-import-request"]);
         if (importing ? !handle.success || !logical.success : !purpose.success) return reply(400, { error: "INVALID_CONTROL" });
         if (!session.csrf || request.headers["x-csrf-token"] !== session.csrf) return reply(403, { error: "CONTROL_CSRF" });
+        if (request.headers["x-upload-consent"] !== "yes") return reply(400, { error: "CONSENT_REQUIRED" });
         if (url.search || request.headers["content-type"] !== "application/octet-stream") return reply(400, { error: "INVALID_CONTROL" });
         if (Number(request.headers["content-length"]) > limit) return reply(413, { error: "REQUEST_LIMIT" });
         let size = 0;
@@ -302,7 +305,7 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         if (!z.strictObject({}).safeParse(data).success) return reply(400, { error: "INVALID_CONTROL" });
         const launch = fixture.issueFixtureLaunch(session.owner);
         if (!launch.ok) return result(launch);
-        const client = fixture.fixtureProfile === "native-z5" ? "your local MCP client" : "ChatGPT";
+        const client = fixture.fixtureProfile === "native-z5" && !fixture.privateStories ? "your local MCP client" : "ChatGPT";
         page("Fixture launch authorized", `<p>Copy this launch handle into ${client}.</p><pre>${escaped(launch.value)}</pre>`);
         return;
       }
@@ -314,7 +317,7 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
           if (!parsed.success) return reply(400, { error: "INVALID_CONTROL" });
           const record = fixture.recordFixtureSource(session.owner, parsed.data);
           if (!record.ok) return result(record);
-          const client = fixture.fixtureProfile === "native-z5" ? "your local MCP client" : "ChatGPT";
+          const client = fixture.fixtureProfile === "native-z5" && !fixture.privateStories ? "your local MCP client" : "ChatGPT";
           page("Directive recorded", `<p>Copy this source reference into ${client}.</p><pre>${escaped(record.value)}</pre>`);
           return;
         }

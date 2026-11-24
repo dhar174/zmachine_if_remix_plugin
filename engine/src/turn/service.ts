@@ -143,8 +143,12 @@ export class TurnService {
     });
   }
 
+  private supportsPrivateStory(story: Buffer): boolean {
+    return validateStoryBytes(story) && (this.heidiTrial || createHash("sha256").update(story).digest("hex") !== heidiStory);
+  }
+
   uploadPrivateStory(owner: Access["owner_id"], purpose: UploadPurpose, story: Buffer): Result<string> {
-    if (!this.privateStories || !validateStoryBytes(story) || (!this.heidiTrial && createHash("sha256").update(story).digest("hex") === heidiStory)) return invalid();
+    if (!this.privateStories || !this.supportsPrivateStory(story)) return invalid();
     return this.atomic(() => {
       const handle = (purpose === "open" ? "launch:" : "upload:") + randomUUID();
       return this.store.stageStory(owner, handle, purpose, story, this.clock()) ? ok(handle)
@@ -172,10 +176,10 @@ export class TurnService {
   authorizePrivateDownload(scope: Access, saveId: string): Result<string> {
     if (!this.privateStories || !this.transferKey) return invalid();
     return this.atomic(() => {
-      if (!this.store.savedSession(scope, saveId)) return invalid();
+      if (!this.store.storyFor(scope) || !this.store.savedSession(scope, saveId)) return invalid();
       const id = "download:" + randomUUID();
-      this.store.issueDownload(id, scope, saveId, this.clock() + 300_000);
-      return ok(id);
+      return this.store.issueDownload(id, scope, saveId, this.clock()) ? ok(id) :
+        failure("ABORTED", "Pending download limit reached. Wait for an authorization to expire.");
     });
   }
 
@@ -183,7 +187,7 @@ export class TurnService {
     const key = this.transferKey;
     if (!this.privateStories || !key) return invalid();
     return this.atomic(() => {
-      if (!this.store.consumeDownload(download, scope, saveId, this.clock())) return invalid();
+      if (!this.store.storyFor(scope) || !this.store.consumeDownload(download, scope, saveId, this.clock())) return invalid();
       const saved = this.store.savedSession(scope, saveId);
       const image = saved && this.store.savedImage(saved);
       if (!image || !isNativeStory(image.checkpoint.story_sha256)) return invalid();
@@ -207,21 +211,24 @@ export class TurnService {
     if (!staged.ok) return staged;
     if (staged.value.prior) return staged.value.prior;
     const story = staged.value.story;
-    if (!story) return invalid();
+    if (!story || !this.supportsPrivateStory(story)) return invalid();
     const history = decodePortable(bytes, owner, key);
-    if (!history || !validateStoryBytes(story) || history.at(-1)?.image.checkpoint.story_sha256 !== createHash("sha256").update(story).digest("hex") ||
+    if (!history || history.at(-1)?.image.checkpoint.story_sha256 !== createHash("sha256").update(story).digest("hex") ||
         !history.every(({ image }) => validateImage(image, this.executor).ok)) return invalid();
     try {
       const data = relocatePortable(history);
+      if (data.imported.checkpoint.native_state.pending_input.kind === "halted" ||
+          !validateImage(data.imported, this.executor).ok ||
+          !data.entries.every(({ image }) => validateImage(image, this.executor).ok)) return invalid();
       const valid = await this.executor.recreateNative(data.imported, AbortSignal.timeout(limits.turn_ms), story);
       return this.atomic(() => {
         const prior = retry();
         if (prior) return prior;
         if (!this.store.pendingStory(owner, upload, "combined", this.clock())) return invalid();
-        this.store.removeUpload(owner, upload);
         if (!valid.ok) return valid;
         const set = this.authority.setHead(data.imported.snapshot.head, "initialize");
         if (!set.ok) return set;
+        if (!this.store.removeUpload(owner, upload)) throw new RejectPublication(invalid());
         const result = this.store.importSession(id, digest, story, data);
         if (!this.store.checkpointHistoryValid(data.imported)) throw new RejectPublication(invalid());
         this.fault("before_commit");
@@ -231,11 +238,11 @@ export class TurnService {
   }
 
   private async openPrivateStory(owner: Access["owner_id"], handle: string, bytes: Buffer) {
+    if (!this.supportsPrivateStory(bytes)) return invalid();
     const created = await openNativeFixture(owner, bytes);
     return this.atomic(() => {
       // Recheck ownership, revocation and expiry after isolated execution.
       if (!this.store.pendingStory(owner, handle, "open", this.clock())) return invalid();
-      this.store.removeUpload(owner, handle);
       if (!created.ok) return created;
       const image = created.value;
       const valid = validateImage(image, this.executor);
@@ -243,6 +250,7 @@ export class TurnService {
       const scope = image.snapshot.head;
       const set = this.authority.setHead(scope, "initialize");
       if (!set.ok) return set;
+      if (!this.store.removeUpload(owner, handle)) throw new RejectPublication(invalid());
       this.store.retainStory(scope, bytes);
       this.store.initializeDraft(image);
       this.store.saveFixtureRecord("session", branchKey(scope), true);
