@@ -8,7 +8,9 @@ import { DurableReceipt, Stage, TurnImage } from "./contracts.ts";
 import type { Access } from "./contracts.ts";
 import { recoveryResult, restoreIntent, savedSession } from "../fixture/recovery-contracts.ts";
 import type { RestoreIntent, RestoreResult, SavedSession } from "../fixture/recovery-contracts.ts";
-import { publicHead } from "../fixture/session-contracts.ts";
+import { publicHead, sessionRef } from "../fixture/session-contracts.ts";
+import { importedSession, portableBytes, portableEntry, portableHistoryLimit } from "../fixture/portable-session.ts";
+import type { PortableEntry, UploadPurpose } from "../fixture/portable-session.ts";
 
 export const branchKey = (scope: Access) => canonicalJson([scope.owner_id, scope.session_id, scope.branch_id]);
 const dispositions = ["active", "cancelled", "expired"] as const;
@@ -31,16 +33,16 @@ export class SQLiteTurns {
   constructor(path: string) {
     this.db = new DatabaseSync(path, { enableForeignKeyConstraints: true });
     try {
-      this.db.exec("PRAGMA busy_timeout=1000; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL");
+      this.db.exec("PRAGMA busy_timeout=1000; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA secure_delete=ON");
       const settings = [
-        ["journal_mode", "delete"], ["synchronous", 2], ["foreign_keys", 1], ["busy_timeout", 1000],
+        ["journal_mode", "delete"], ["synchronous", 2], ["foreign_keys", 1], ["busy_timeout", 1000], ["secure_delete", 1],
       ] as const;
       for (const [name, expected] of settings) {
         if (this.db.prepare("PRAGMA " + name).get()?.[name === "busy_timeout" ? "timeout" : name] !== expected) throw new Error("Unsupported SQLite setting: " + name);
       }
       this.atomic(() => {
         const version = this.db.prepare("PRAGMA user_version").get()?.user_version;
-        if (version !== 0 && version !== 1 && version !== 2 && version !== 3) throw new Error("Unsupported turn database version.");
+        if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4) throw new Error("Unsupported turn database version.");
         this.db.exec("CREATE TABLE IF NOT EXISTS coordinator (id INTEGER PRIMARY KEY CHECK(id=1), token TEXT NOT NULL) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS authority (area TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(area,key)) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS checkpoints (id TEXT PRIMARY KEY, digest TEXT NOT NULL, body TEXT NOT NULL, published INTEGER NOT NULL, claim TEXT) STRICT");
@@ -53,7 +55,7 @@ export class SQLiteTurns {
         }
         this.db.exec("CREATE TABLE IF NOT EXISTS fixture_records (area TEXT NOT NULL, key TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(area,key)) STRICT");
         this.db.exec("CREATE TABLE IF NOT EXISTS fixture_drafts (branch TEXT PRIMARY KEY, checkpoint TEXT NOT NULL UNIQUE, digest TEXT NOT NULL, body TEXT NOT NULL) STRICT");
-        if (version !== 3) {
+        if (version < 3) {
           this.db.exec(`
             CREATE TABLE checkpoint_links (
               id TEXT PRIMARY KEY REFERENCES checkpoints(id), parent TEXT REFERENCES checkpoints(id),
@@ -76,9 +78,15 @@ export class SQLiteTurns {
               id TEXT PRIMARY KEY, digest TEXT NOT NULL, approval_id TEXT UNIQUE, intent TEXT,
               approved INTEGER NOT NULL DEFAULT 0, claim TEXT, result TEXT
             ) STRICT;
-            PRAGMA user_version=3;
           `);
         }
+        this.db.exec(
+          "CREATE TABLE IF NOT EXISTS private_uploads (id TEXT PRIMARY KEY, owner TEXT NOT NULL, purpose TEXT NOT NULL, bytes BLOB NOT NULL, expires INTEGER NOT NULL) STRICT;" +
+          "CREATE TABLE IF NOT EXISTS private_stories (branch TEXT PRIMARY KEY, bytes BLOB NOT NULL) STRICT;" +
+          "CREATE TABLE IF NOT EXISTS private_imports (id TEXT PRIMARY KEY, branch TEXT NOT NULL, digest TEXT NOT NULL, result TEXT NOT NULL) STRICT;" +
+          "CREATE TABLE IF NOT EXISTS private_downloads (id TEXT PRIMARY KEY, branch TEXT NOT NULL, save TEXT NOT NULL, expires INTEGER NOT NULL) STRICT;" +
+          "PRAGMA user_version=4;",
+        );
         this.db.prepare("INSERT INTO coordinator VALUES(1,?) ON CONFLICT(id) DO UPDATE SET token=excluded.token").run(this.token);
         this.db.exec("UPDATE recovery_requests SET approval_id=NULL,intent=NULL,approved=0,claim=NULL WHERE result IS NULL");
         this.db.exec("UPDATE requests SET claim=NULL WHERE receipt IS NULL");
@@ -263,6 +271,151 @@ export class SQLiteTurns {
     if (saved.changes !== 1) throw new Error("Recovery request claim changed.");
   }
 
+  stageStory(owner: Access["owner_id"], id: string, purpose: UploadPurpose, story: Buffer, now: number): boolean {
+    this.db.prepare("DELETE FROM private_uploads WHERE owner=? AND expires<=?").run(owner, now);
+    const staged = this.db.prepare("INSERT INTO private_uploads SELECT ?,?,?,?,? WHERE " +
+      "(SELECT COUNT(*) FROM private_uploads WHERE owner=?) < 8").run(id, owner, purpose, story, now + 3_600_000, owner);
+    return staged.changes === 1;
+  }
+
+  pendingStory(owner: Access["owner_id"], id: string, purpose: UploadPurpose, now: number): Buffer | undefined {
+    const row = this.db.prepare("SELECT bytes FROM private_uploads WHERE owner=? AND id=? AND purpose=? AND expires>?")
+      .get(owner, id, purpose, now);
+    return row?.bytes instanceof Uint8Array ? Buffer.from(row.bytes) : undefined;
+  }
+
+  removeUpload(owner: Access["owner_id"], id: string): boolean {
+    return this.db.prepare("DELETE FROM private_uploads WHERE owner=? AND id=?").run(owner, id).changes === 1;
+  }
+
+  retainStory(scope: Access, story: Buffer): void {
+    this.db.prepare("INSERT INTO private_stories VALUES(?,?)").run(branchKey(scope), story);
+  }
+
+  storyFor(scope: Access): Buffer | undefined {
+    const row = this.db.prepare("SELECT bytes FROM private_stories WHERE branch=?").get(branchKey(scope));
+    return row?.bytes instanceof Uint8Array ? Buffer.from(row.bytes) : undefined;
+  }
+
+  portableHistory(image: TurnImage): PortableEntry[] | undefined {
+    if (!this.checkpointHistoryValid(image)) return;
+    const rows = this.db.prepare(lineage + "SELECT c.body,c.digest,l.parent,l.origin,r.id AS request,r.receipt " +
+      "FROM ancestry a JOIN checkpoints c ON c.id=a.id JOIN checkpoint_links l ON l.id=a.id " +
+      "LEFT JOIN requests r ON r.checkpoint=a.id ORDER BY l.revision LIMIT ?")
+      .iterate(image.checkpoint.checkpoint_id, portableHistoryLimit + 1);
+    const event = this.db.prepare("SELECT body FROM events WHERE request=? AND id=?");
+    const history: PortableEntry[] = [];
+    let bytes = 0;
+    for (const row of rows) {
+      const body = z.string().parse(row.body);
+      bytes += Buffer.byteLength(body);
+      if (history.length >= portableHistoryLimit || bytes > portableBytes) return;
+      const snapshot = TurnImage.parse(parseJson(body));
+      if (canonicalDigest(snapshot) !== row.digest) throw new Error("Invalid ancestral checkpoint.");
+      const receipt = row.receipt === null ? null : DurableReceipt.parse(parseJson(z.string().parse(row.receipt)));
+      const entry = portableEntry.parse({ image: snapshot, parent: row.parent, receipt,
+        origin: row.origin === null ? null : parseJson(z.string().parse(row.origin)),
+        events: receipt?.receipt.event_ids.map((id) => parseJson(z.string().parse(event.get(row.request ?? null, id)?.body))) ?? [],
+      });
+      bytes += Buffer.byteLength(canonicalJson({ ...entry, image: null }));
+      if (bytes > portableBytes) return;
+      history.push(entry);
+    }
+    return history;
+  }
+
+  importSession(id: string, digest: string, story: Buffer, data: {
+    entries: PortableEntry[]; imported: TurnImage; parent: string; origin: RestoreResult["restored_from"];
+  }): z.infer<typeof importedSession> {
+    for (const { image, parent, origin, receipt, events } of data.entries) {
+      this.insertCheckpoint(image, null);
+      this.db.prepare("UPDATE checkpoints SET published=1 WHERE id=?").run(image.checkpoint.checkpoint_id);
+      this.appendLineage(image, parent, origin);
+      if (!receipt) continue;
+      const { owner_id, session_id, branch_id, generation_id, request_id, event_ids } = receipt.receipt;
+      const key = canonicalJson({ owner_id, session_id, branch_id, generation_id, request_id });
+      this.db.prepare("INSERT INTO requests(id,envelope,receipt,checkpoint) VALUES(?,?,?,?)")
+        .run(key, "", canonicalJson(receipt), image.checkpoint.checkpoint_id);
+      for (const [index, eventId] of event_ids.entries()) {
+        this.db.prepare("INSERT INTO events VALUES(?,?,?)").run(eventId, key, canonicalJson(events[index] ?? null));
+      }
+    }
+    const { imported, parent, origin } = data;
+    const scope = imported.snapshot.head;
+    this.insertCheckpoint(imported, null);
+    this.db.prepare("UPDATE checkpoints SET published=1 WHERE id=?").run(imported.checkpoint.checkpoint_id);
+    this.appendLineage(imported, parent, origin);
+    this.db.prepare("INSERT INTO heads VALUES(?,?)").run(branchKey(scope), imported.checkpoint.checkpoint_id);
+    this.saveFixtureRecord("session", branchKey(scope), true);
+    this.retainStory(scope, story);
+    const result = importedSession.parse({ status: "IMPORTED", head: publicHead.strip().parse(scope) });
+    this.db.prepare("INSERT INTO private_imports VALUES(?,?,?,?)").run(id, branchKey(scope), digest, canonicalJson(result));
+    return result;
+  }
+
+  priorImport(id: string) {
+    const row = this.db.prepare("SELECT digest,result FROM private_imports WHERE id=?").get(id);
+    if (typeof row?.digest !== "string" || typeof row.result !== "string") return;
+    return { digest: row.digest, result: importedSession.parse(parseJson(row.result)) };
+  }
+
+  issueDownload(id: string, scope: Access, save: string, now: number): boolean {
+    const branch = branchKey(scope);
+    this.db.prepare("DELETE FROM private_downloads WHERE branch=? AND expires<=?").run(branch, now);
+    const issued = this.db.prepare("INSERT INTO private_downloads SELECT ?,?,?,? WHERE " +
+      "(SELECT COUNT(*) FROM private_downloads WHERE branch=?) < 8").run(id, branch, save, now + 300_000, branch);
+    return issued.changes === 1;
+  }
+
+  consumeDownload(id: string, scope: Access, save: string, now: number): boolean {
+    return this.db.prepare("DELETE FROM private_downloads WHERE id=? AND branch=? AND save=? AND expires>?")
+      .run(id, branchKey(scope), save, now).changes === 1;
+  }
+
+  privateSessions(owner: Access["owner_id"]): z.infer<typeof sessionRef>[] {
+    return this.db.prepare("SELECT json_extract(branch,'$[1]') AS session_id, json_extract(branch,'$[2]') AS branch_id " +
+      "FROM private_stories WHERE json_extract(branch,'$[0]')=? ORDER BY branch")
+      .all(owner).map((row) => sessionRef.parse(row));
+  }
+
+  privateSaveIds(scope: Access): string[] {
+    return this.db.prepare("SELECT id FROM saved_sessions WHERE branch=? ORDER BY id").all(branchKey(scope))
+      .map((row) => z.string().parse(row.id));
+  }
+
+  deletePrivateSession(scope: Access): boolean {
+    const branch = branchKey(scope);
+    if (this.db.prepare("DELETE FROM private_stories WHERE branch=?").run(branch).changes !== 1) return false;
+    const { owner_id, session_id, branch_id } = scope;
+    this.db.prepare("DELETE FROM private_downloads WHERE branch=?").run(branch);
+    this.db.prepare("DELETE FROM private_imports WHERE branch=?").run(branch);
+    this.db.prepare("DELETE FROM saved_sessions WHERE branch=?").run(branch);
+    this.db.prepare("DELETE FROM heads WHERE branch=?").run(branch);
+    this.db.prepare("DELETE FROM fixture_drafts WHERE branch=?").run(branch);
+    this.db.prepare("DELETE FROM recovery_requests WHERE json_extract(id,'$[1]')=? AND json_extract(id,'$[2]')=? AND json_extract(id,'$[3]')=?")
+      .run(owner_id, session_id, branch_id);
+    const requestScope = "json_extract(id,'$.owner_id')=? AND json_extract(id,'$.session_id')=? AND json_extract(id,'$.branch_id')=?";
+    this.db.prepare("DELETE FROM events WHERE request IN (SELECT id FROM requests WHERE json_valid(id) AND " + requestScope + ")")
+      .run(owner_id, session_id, branch_id);
+    this.db.prepare("DELETE FROM requests WHERE json_valid(id) AND " + requestScope).run(owner_id, session_id, branch_id);
+    this.db.prepare("DELETE FROM checkpoint_links WHERE branch=?").run(branch);
+    this.db.prepare("DELETE FROM checkpoints WHERE json_extract(body,'$.checkpoint.owner_id')=? " +
+      "AND json_extract(body,'$.checkpoint.session_id')=? AND json_extract(body,'$.checkpoint.branch_id')=?")
+      .run(owner_id, session_id, branch_id);
+    this.db.prepare("DELETE FROM fixture_records WHERE area='compilation' AND key IN " +
+      "(SELECT key FROM fixture_records WHERE area='source' AND json_extract(body,'$.head.owner_id')=? " +
+      "AND json_extract(body,'$.head.session_id')=? AND json_extract(body,'$.head.branch_id')=?)").run(owner_id, session_id, branch_id);
+    this.db.prepare("DELETE FROM fixture_records WHERE (area='session' AND key=?) OR (area='source' AND " +
+      "json_extract(body,'$.head.owner_id')=? AND json_extract(body,'$.head.session_id')=? AND json_extract(body,'$.head.branch_id')=?)")
+      .run(branch, owner_id, session_id, branch_id);
+    this.db.prepare("DELETE FROM authority WHERE (area IN ('states','generations') AND key=?) " +
+      "OR (area IN ('overrides','requestCandidates') AND json_valid(key) AND json_extract(key,'$[0]')=?) " +
+      "OR (area IN ('leases','candidates') AND json_extract(value,'$.head.owner_id')=? " +
+      "AND json_extract(value,'$.head.session_id')=? AND json_extract(value,'$.head.branch_id')=?)")
+      .run(branch, branch, owner_id, session_id, branch_id);
+    return true;
+  }
+
   hasCheckpoint(id: string): boolean {
     return this.db.prepare("SELECT 1 FROM checkpoints WHERE id=? UNION ALL SELECT 1 FROM fixture_drafts WHERE checkpoint=?").get(id, id) !== undefined;
   }
@@ -353,6 +506,8 @@ export class SQLiteTurns {
   }
 
   collect(now: number): number {
+    this.db.prepare("DELETE FROM private_uploads WHERE expires<=?").run(now);
+    this.db.prepare("DELETE FROM private_downloads WHERE expires<=?").run(now);
     this.db.prepare("UPDATE recovery_requests SET approval_id=NULL,intent=NULL,approved=0 " +
       "WHERE result IS NULL AND claim IS NULL AND json_extract(intent,'$.expires')<=?").run(now);
     const discarded = this.db.prepare("DELETE FROM checkpoints WHERE published=0 AND (claim IS NULL OR claim NOT IN (" +
@@ -371,4 +526,5 @@ export type TurnStore = Pick<SQLiteTurns, "transaction" | "close" | "authority" 
   "draft" | "initializeDraft" | "fixtureRecord" | "saveFixtureRecord" | "fixtureReceipts" | "hasCheckpoint" | "request" | "bind" | "claim" |
   "cancel" | "insertCheckpoint" | "publish" | "collect" | "isAncestor" | "restoreOrigin" | "checkpointHistoryValid" |
   "savedSession" | "savedImage" | "insertSave" | "recoveryRequest" | "restoreKey" | "bindRecovery" | "approveRestore" |
-  "claimRestore" | "completeRecovery" | "publishRestore">;
+  "claimRestore" | "completeRecovery" | "publishRestore" | "stageStory" | "pendingStory" | "removeUpload" | "retainStory" | "storyFor" |
+  "portableHistory" | "importSession" | "priorImport" | "issueDownload" | "consumeDownload" | "privateSessions" | "privateSaveIds" | "deletePrivateSession">;

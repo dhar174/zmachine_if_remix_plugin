@@ -87,7 +87,9 @@ export function fixtureTools(service: TurnService, origin: string, browserAvaila
   };
   return {
     open_story_session: route(z.strictObject({ version, launch_handle: opaque("launch") }), view, scopes.launch,
-      "Open the configured bundled fixture with an owner-approved browser launch handle. Repeat the same handle to recover the same session.",
+      service.privateStories
+        ? "Open with an owner-approved browser launch handle. Private story handles are single-use. Bundled fixture handles can reopen their existing session."
+        : "Open the configured bundled fixture with an owner-approved browser launch handle. Repeat the same handle to recover the same session.",
       true, false, async (who, args) => {
         const result = await service.openFixture(who.owner, args.launch_handle);
         return result.ok ? ok({ status: "CONTEXT" as const, context: result.value }) : result;
