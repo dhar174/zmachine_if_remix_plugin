@@ -1,0 +1,74 @@
+{
+  "version": "1.0.0",
+  "player": "remix:player",
+  "entities": [
+    {
+      "id": "remix:market",
+      "label": "Market",
+      "kind": "location",
+      "region": "region:market",
+      "source": "world-event:seed"
+    },
+    {
+      "id": "remix:vault",
+      "label": "Vault",
+      "kind": "location",
+      "region": "region:vault",
+      "source": "world-event:seed"
+    },
+    {
+      "id": "remix:player",
+      "label": "Player",
+      "kind": "character",
+      "room": "remix:market",
+      "source": "world-event:seed"
+    },
+    {
+      "id": "remix:guard",
+      "label": "Guard",
+      "kind": "character",
+      "room": "remix:market",
+      "source": "world-event:seed"
+    },
+    {
+      "id": "remix:distant-guard",
+      "label": "Guard",
+      "kind": "character",
+      "room": "remix:vault",
+      "source": "world-event:seed"
+    }
+  ],
+  "exits": [],
+  "facts": [
+    {
+      "subject": "remix:guard",
+      "field": "world:description",
+      "value": "A guard staffs the market.",
+      "from": 0,
+      "until": null,
+      "source": "world-event:seed",
+      "owner": "remix",
+      "visibility": "player",
+      "evidence": "fixture"
+    },
+    {
+      "subject": "remix:guard",
+      "field": "world:private_note",
+      "value": "The guard has not met the player before.",
+      "from": 0,
+      "until": null,
+      "source": "world-event:seed",
+      "owner": "remix",
+      "visibility": "owner",
+      "evidence": "fixture"
+    }
+  ],
+  "beliefs": [],
+  "events": [
+    {
+      "id": "world-event:seed",
+      "kind": "seed",
+      "revision": 0
+    }
+  ]
+}

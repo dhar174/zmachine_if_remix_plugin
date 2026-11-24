@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { CombinedCheckpoint, HeadExpectation, canonicalDigest, canonicalJson } from "../contracts.ts";
 import { DurableReceipt, TurnImage } from "../turn/contracts.ts";
+import { worldEventsMatch } from "../world/model.ts";
 import type { Access } from "../turn/contracts.ts";
 import { digest, publicHead } from "./session-contracts.ts";
 
@@ -66,6 +67,13 @@ export function decodePortable(bytes: Buffer, owner: Access["owner_id"], key: Bu
             new Set(receipt.event_ids).size !== entry.events.length ||
             receipt.event_ids.length !== entry.events.length) return;
       } else if (entry.events.length || (previous && !entry.origin)) return;
+      if (snapshot.world || previous?.image.snapshot.world) {
+        if (!snapshot.world || (previous && !previous.image.snapshot.world)) return;
+        const priorEvents = previous?.image.snapshot.world?.events ?? [];
+        if (canonicalDigest(snapshot.world.events.slice(0, priorEvents.length)) !== canonicalDigest(priorEvents) ||
+            !worldEventsMatch(snapshot.world.events.slice(priorEvents.length),
+              entry.events.map((body) => ({ body, revision: checkpoint.revision, request: receipt?.request_id })))) return;
+      }
       seen.add(checkpoint.checkpoint_id);
       previous = entry;
     }

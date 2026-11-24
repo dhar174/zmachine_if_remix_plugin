@@ -201,6 +201,9 @@ export function deriveFootprint(snapshot: ResolverSnapshot, entities: Map<string
         ref(operation.from, "topology:exits"), ref(operation.to, "topology:exits")];
       break;
     }
+    case "speech.record":
+    case "observation.record":
+    case "belief.update": throw missing("world_operation", "The operation requires a registered remix world.");
     case "dialogue.change": {
       const character = present(operation.character);
       action = "dialogue.adapt";

@@ -9,6 +9,7 @@ import type { Access } from "./contracts.ts";
 import { recoveryResult, restoreIntent, savedSession } from "../fixture/recovery-contracts.ts";
 import type { RestoreIntent, RestoreResult, SavedSession } from "../fixture/recovery-contracts.ts";
 import { publicHead, sessionRef } from "../fixture/session-contracts.ts";
+import { worldEventsMatch } from "../world/model.ts";
 import { importedSession, portableBytes, portableEntry, portableHistoryLimit } from "../fixture/portable-session.ts";
 import type { PortableEntry, UploadPurpose } from "../fixture/portable-session.ts";
 
@@ -212,7 +213,15 @@ export class SQLiteTurns {
     for (const { receipt } of receipts.iterate(checkpoint.checkpoint_id)) {
       if (typeof receipt !== "string" || !DurableReceipt.safeParse(parseJson(receipt)).success) return false;
     }
-    return true;
+    if (!snapshot.world) return true;
+    const eventRows = this.db.prepare(lineage + `
+      SELECT e.body, l.revision, json_extract(r.receipt, '$.receipt.request_id') AS request
+      FROM ancestry a JOIN checkpoint_links l ON l.id=a.id JOIN requests r ON r.checkpoint=a.id
+      JOIN events e ON e.request=r.id
+      WHERE EXISTS(SELECT 1 FROM json_each(r.receipt, '$.receipt.event_ids') ids WHERE ids.value=e.id)
+    `).all(checkpoint.checkpoint_id);
+    return worldEventsMatch(snapshot.world.events, eventRows.map(({ body, revision, request }) =>
+      ({ body: parseJson(z.string().parse(body)), revision, request })));
   }
 
   savedSession(scope: Access, id: string): SavedSession | undefined {

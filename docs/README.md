@@ -46,6 +46,7 @@ Feasibility-probe evidence (executed experiments, not design documents — each 
 - [evidence/g3-native-turns.md](evidence/g3-native-turns.md) — Issue #20 seeded Z5 native turns, local MCP reproduction, and acceptance evidence.
 - [evidence/g3-combined-restore.md](evidence/g3-combined-restore.md) — Issue #21 combined restore, branch freshness, and crash recovery evidence.
 - [evidence/g3-private-transfers.md](evidence/g3-private-transfers.md) records Issue #22 private transfer evidence and links to the player and operator runbook.
+- [evidence/g4-remix-world.md](evidence/g4-remix-world.md) records Issue #23 ownership, provenance, and deterministic acceptance evidence.
 
 Probe implementation lives outside `docs/`: fixtures under `tests/fixtures/zmachine/`, the G1-A I/O harness under `experiments/vm-io/`, the G1-B checkpoint probe under `experiments/vm-checkpoint/`, and the G1-C host probe under `experiments/chat-host/`. Production adoption requires separate review.
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CandidateHandle, CombinedCheckpoint, HeadExpectation, TurnReceipt } from "../contracts.ts";
+import type { World } from "../world/model.ts";
 import type { Json } from "../contracts.ts";
 import type { EffectPlan, EffectRef, ResolverProposal, ResolverSnapshot } from "../policy/resolver-contracts.ts";
 import { ResolverProposal as ProposalSchema, ResolverSnapshot as SnapshotSchema } from "../policy/resolver-contracts.ts";
@@ -41,6 +42,7 @@ export type Execution = {
   native: Json;
   pending: TurnImage["checkpoint"]["native_state"]["pending_input"];
   entities: ResolverSnapshot["entities"];
+  world?: World;
   effects: readonly EffectRef[];
   time_cost: number;
   outcome: "success" | "failure";

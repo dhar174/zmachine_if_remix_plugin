@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CapabilityManifest, DirectiveBundle, HeadExpectation, PendingInput, RequestIdentity, TurnProposal } from "../contracts.ts";
+import { World } from "../world/model.ts";
 import type { Failure } from "../ports.ts";
 import { CompilationInput, CompilationProposal, ModelInterpretation, PolicyRule, SupportedSubsetSelection } from "./directive-contracts.ts";
 
@@ -16,8 +17,12 @@ const operation = z.discriminatedUnion("kind", [
   ...TurnProposal.shape.operations.element.options,
   z.strictObject({ kind: z.literal("inventory.transfer"), item: entityId, from: entityId, to: entityId }),
   z.strictObject({ kind: z.literal("overlay.create"), entity: entityId, region: id,
-    entity_kind: z.enum(["location", "character", "item", "rule"]), label: z.string().min(1).max(32000) }),
+    entity_kind: z.enum(["location", "character", "item", "rule"]), label: z.string().min(1).max(32000),
+    room: entityId.optional(), holder: entityId.optional(), container: z.boolean().optional() }),
   z.strictObject({ kind: z.literal("overlay.connect"), connection: entityId, from: entityId, to: entityId }),
+  z.strictObject({ kind: z.literal("speech.record"), text: z.string().min(1).max(2048) }),
+  z.strictObject({ kind: z.literal("observation.record"), observer: entityId, subject: entityId, field }),
+  z.strictObject({ kind: z.literal("belief.update"), character: entityId, evidence: id }),
   z.strictObject({ kind: z.literal("dialogue.change"), character: entityId,
     text: z.string().min(1).max(32000), takeover: z.boolean() }),
 ]);
@@ -72,6 +77,7 @@ export const ResolverSnapshot = z.strictObject({
   applicability: z.array(z.strictObject({
     rule_id: id, from_turn: z.int().nonnegative(), until_turn: z.int().positive().nullable(),
   })).max(512),
+  world: World.optional(),
   regions: z.array(id).max(256),
   entities: z.array(entity).max(1024), native: native.nullable(), bridges: z.array(bridge).max(256),
   editor_authority: z.strictObject({ proposal_digest: digest, evidence_id: id }).nullable(),
@@ -110,6 +116,7 @@ export interface EffectPlan {
   readonly proposal_digest: string;
   readonly route: "native" | "remix" | "bridged";
   readonly time: "native" | "overlay" | "none";
+  readonly world_mode?: ResolverSnapshot["mode"];
   readonly operations: readonly {
     operation: ResolverOperation;
     effects: readonly EffectRef[];
