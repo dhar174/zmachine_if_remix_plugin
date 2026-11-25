@@ -4,6 +4,7 @@ import { projectWorld } from "../world/projection.ts";
 import { CandidateHandle, HeadExpectation, TurnEnvelope, TurnProposal, canonicalDigest, canonicalJson } from "../contracts.ts";
 import type { AuthorizationPort, Failure, Result, TrustedApproval, TrustedContext } from "../ports.ts";
 import { previewPolicy, resolvePolicy } from "../policy/policy-resolver.ts";
+import type { TurnBudget } from "../turn/limits.ts";
 import { ResolverProposal, ResolverSnapshot } from "../policy/resolver-contracts.ts";
 
 type Head = z.infer<typeof HeadExpectation>;
@@ -222,13 +223,13 @@ export class Authority implements AuthorizationPort {
   }
 
   /** Resolver entry for ordinary Play and read-only requests. Ignore supplied Editor evidence. */
-  resolveWithoutGrant(owner: Identity, rawSnapshot: unknown, rawProposal: unknown) {
+  resolveWithoutGrant(owner: Identity, rawSnapshot: unknown, rawProposal: unknown, budget?: TurnBudget) {
     const snapshot = ResolverSnapshot.safeParse(rawSnapshot);
     const proposal = ResolverProposal.safeParse(rawProposal);
     if (!snapshot.success || !proposal.success) return deny();
     const actual = this.context(owner, expected(proposal.data), proposal.data.request_id);
     if (!actual.ok) return actual;
-    return resolvePolicy({ ...snapshot.data, mode: actual.value.mode, editor_authority: null }, proposal.data);
+    return resolvePolicy({ ...snapshot.data, mode: actual.value.mode, editor_authority: null }, proposal.data, budget);
   }
 
   prepare(owner: Identity, rawSnapshot: unknown, rawProposal: unknown,
@@ -348,7 +349,7 @@ export class Authority implements AuthorizationPort {
     return result;
   }
 
-  resolveApproved(owner: Identity, rawSnapshot: unknown, rawProposal: unknown, permit: Permit) {
+  resolveApproved(owner: Identity, rawSnapshot: unknown, rawProposal: unknown, permit: Permit, budget?: TurnBudget) {
     const result = this.permit(owner, permit);
     if (!result.ok) return result;
     const candidate = result.value;
@@ -358,13 +359,13 @@ export class Authority implements AuthorizationPort {
       return approvalNeeded("The proposal changed after preview.");
     }
     const consistent = { ...snapshot.data, mode: "EDITOR" as const, editor_authority: null };
-    const preview = previewPolicy(consistent, proposal.data);
+    const preview = previewPolicy(consistent, proposal.data, budget);
     if (!preview.ok) return preview;
     if (digestDiff(displayDiff(snapshot.data, candidate.handle, preview.preview)) !== candidate.diffDigest ||
         (permit.source === "lease" && !same(lowRisk(snapshot.data, preview.preview), candidate.leaseTarget))) return approvalNeeded();
     return resolvePolicy({ ...consistent, editor_authority: {
       proposal_digest: candidate.handle.proposal_digest, evidence_id: permit.reference,
-    } }, proposal.data);
+    } }, proposal.data, budget);
   }
 
   /** #18 must combine this conditional update with head and receipt publication. */

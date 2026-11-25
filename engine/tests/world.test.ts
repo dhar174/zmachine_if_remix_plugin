@@ -9,13 +9,14 @@ import { canonicalDigest, canonicalJson } from "../src/contracts.ts";
 import type { ResolverOperation } from "../src/policy/resolver-contracts.ts";
 import { compileDirective } from "../src/policy/directive-compiler.ts";
 import { decodePortable, encodePortable, relocatePortable } from "../src/fixture/portable-session.ts";
+import type { PortableEntry } from "../src/fixture/portable-session.ts";
 import { publicHead, target as recoveryTarget } from "../src/fixture/session-contracts.ts";
 import { buildImage, executeWorld, validateImage } from "../src/turn/execution.ts";
 import { resolvePolicy } from "../src/policy/policy-resolver.ts";
 import { fixtureTools, scopes } from "../src/mcp/tools.ts";
 import { SQLiteTurns, branchKey } from "../src/turn/sqlite-turns.ts";
 import { TurnService } from "../src/turn/service.ts";
-import { TurnImage } from "../src/turn/contracts.ts";
+import { limits, TurnImage } from "../src/turn/contracts.ts";
 import type { DurableReceipt, FaultPoint } from "../src/turn/contracts.ts";
 import { activeFact, remixStateRef } from "../src/world/model.ts";
 import { fixtureImage } from "../src/fixture/synthetic-world.ts";
@@ -24,12 +25,12 @@ import { storyBytes } from "../src/native/checkpoint.ts";
 import { makeFixture, play, take } from "./turn-fixture.ts";
 
 function setup(fault?: (point: FaultPoint) => void, clock = Date.now,
-  native?: { state: TurnImage; story: Buffer; key: Buffer }, configure?: (image: TurnImage) => void) {
+  native?: { state: TurnImage; story: Buffer; key: Buffer }, configure?: (image: TurnImage) => void, monotonicClock?: () => number) {
   const dir = mkdtempSync(join(tmpdir(), "zirp-world-"));
   const file = join(dir, "state.db");
   let store = new SQLiteTurns(file);
   function open() {
-    return new TurnService(store, makeFixture(), clock, fault, native ? "native-z5" : "synthetic", native);
+    return new TurnService(store, makeFixture(), clock, fault, native ? "native-z5" : "synthetic", native, monotonicClock);
   }
   let service = open();
   const state = native?.state ?? fixtureImage(play().access.owner_id);
@@ -387,27 +388,42 @@ void test("a later rule failure rolls back witnessed speech, belief, and the sta
   assert.equal(activeFact(world, giver, field)?.value, "friend");
 });
 
+function protectVault(image: TurnImage, sources: readonly (readonly [string, string])[]) {
+  const native = image.snapshot.entities.find(({ id }) => id === "native:room")!;
+  native.region_ids = ["region:vault"];
+  const gate = native.surfaces.find(({ field }) => field === "progression:counter")!;
+  const dependency = { entity_id: native.id, field: gate.field, change: "write" as const };
+  image.snapshot.world_dependencies = sources.map(([entity_id, field]) => ({
+    source: { entity_id, field, change: "write" }, dependency,
+  }));
+  const { policy } = image.snapshot;
+  const source = { source_id: policy.sources[0]!.id, start: 0, end: 1 };
+  policy.policy_amendment.invariants.push({
+    id: "rule:vault", source, protected: true, supersedes: [],
+    scope: { origins: ["native"], entity_ids: [native.id], region_ids: ["region:vault"], domains: ["progression"] },
+    guard: { id: "field.unchanged", enforcement: "structural", parameters: { field: gate.field } },
+  });
+}
+
 void test("A07 nested offered inventory checks trusted transitive vault progression before publication", async (t) => {
   const fixture = setup(undefined, Date.now, undefined, (image) => {
-    const key = { entity_id: marketGossip.item, field: "inventory:holder", change: "write" as const };
-    const native = image.snapshot.entities.find(({ id }) => id === "native:room")!;
-    native.region_ids = ["region:vault"];
-    const gate = native.surfaces.find(({ field }) => field === "progression:counter")!;
-    const fromInventory = { ...key, entity_id: marketGossip.giver, field: "inventory:contents" };
-    image.snapshot.world_dependencies = [
-      { source: key, dependency: fromInventory },
-      { source: fromInventory, dependency: { entity_id: native.id, field: gate.field, change: "write" } },
-    ];
-    const { policy } = image.snapshot;
-    const source = { source_id: policy.sources[0]!.id, start: 0, end: 1 };
-    policy.policy_amendment.invariants.push({
-      id: "rule:vault", source, protected: true, supersedes: [],
-      scope: { origins: ["native"], entity_ids: [native.id], region_ids: ["region:vault"], domains: ["progression"] },
-      guard: { id: "field.unchanged", enforcement: "structural", parameters: { field: gate.field } },
+    const intermediate = { entity_id: "remix:room", field: "presentation:label", change: "write" as const };
+    protectVault(image, [[intermediate.entity_id, intermediate.field]]);
+    image.snapshot.world_dependencies!.push({
+      source: { entity_id: marketGossip.giver, field: "inventory:contents", change: "write" },
+      dependency: intermediate,
     });
+    // Start the fixture with the item held, so seeding is outside the protected transition being tested.
+    const world = image.snapshot.world!;
+    const source = world.events[0]!.id;
+    world.entities.push({ kind: "item", id: marketGossip.item, label: "Market token", container: false, source });
+    world.facts.push({ subject: marketGossip.item, field: "inventory:holder", value: marketGossip.giver, from: 0,
+      until: null, source, owner: "remix", visibility: "player", evidence: "fixture" });
   });
   t.after(() => fixture.close());
-  await seedMarketGossip(fixture);
+  fixture.mode("edit");
+  await fixture.commit(fixture.request("handoff-item", [{ kind: "overlay.create", entity_kind: "item",
+    entity: "remix:handoff-item", region: "region:market", label: "Handoff item", holder: marketGossip.recipient }], "EDITOR"));
   await fixture.commit(fixture.request("a07-install", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
   fixture.mode("play");
   await fixture.commit(gossipRequest(fixture, "a07-offer"));
@@ -422,6 +438,104 @@ void test("A07 nested offered inventory checks trusted transitive vault progress
   assert.ok(resolved.trace.rule_ids.includes("rule:vault"));
   assert.equal((await rejectPlay(fixture, attempt)).status, "POLICY_CONFLICT");
   assert.equal(activeFact(fixture.head().snapshot.world!, offer.item, "inventory:holder")?.value, offer.giver);
+  const handoff = fixture.request("ordinary-handoff", [{ kind: "inventory.transfer", item: "remix:handoff-item",
+    from: marketGossip.recipient, to: marketGossip.giver }]);
+  assert.equal((await rejectPlay(fixture, handoff)).status, "POLICY_CONFLICT");
+});
+
+void test("A07 initial speech and rule installation resolve protected dependencies before any write", async (t) => {
+  const speech = setup(undefined, Date.now, undefined, (image) => {
+    protectVault(image, [[marketGossip.giver, "dialogue:speech"]]);
+  });
+  const install = setup(undefined, Date.now, undefined, (image) => {
+    protectVault(image, [[marketGossip.giver, "behavior:rules"]]);
+  });
+  t.after(() => { speech.close(); install.close(); });
+  await seedMarketGossip(speech);
+  await speech.commit(speech.request("protected-speech-rule", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
+  speech.mode("play");
+  const attempt = gossipRequest(speech, "protected-speech");
+  const result = resolvePolicy(speech.head().snapshot, attempt.proposal);
+  assert.ok(!result.ok);
+  assert.equal(result.error.status, "POLICY_CONFLICT");
+  assert.ok(result.trace.rule_ids.includes("rule:vault"));
+  assert.equal((await rejectPlay(speech, attempt)).status, "POLICY_CONFLICT");
+  assert.equal(speech.head().snapshot.world!.beliefs.length, 0);
+  assert.equal(speech.store.fixtureReceipts(speech.head().checkpoint.checkpoint_id, 10)
+    .some(({ receipt }) => receipt.request_id === attempt.envelope.request_id), false);
+
+  await seedMarketGossip(install);
+  const req = install.request("protected-install", [{ kind: "rule.install", rule: marketRule() }], "EDITOR");
+  const before = install.head();
+  const opened = install.service.prepareTurn(install.access, req.envelope, req.proposal);
+  assert.ok(!opened.ok);
+  assert.equal(opened.error.status, "POLICY_CONFLICT");
+  assert.deepEqual(install.head(), before);
+});
+
+void test("rule eligibility reports the container and actor reads and a turn accepts at most one offer", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  const { giver, recipient, item } = marketGossip;
+  await seedMarketGossip(fx);
+  const spare = "remix:spare-container";
+  await fx.commit(fx.request("spare-container", [{ kind: "overlay.create", entity_kind: "item", entity: spare,
+    region: "region:market", label: "Spare container", holder: giver, container: true }], "EDITOR"));
+  await fx.commit(fx.request("eligibility-rule", [{ kind: "rule.install", rule: {
+    ...marketRule(), id: "behavior:eligibility-read", conditions: [{ kind: "offer.eligible", item: spare }],
+    effects: [{ kind: "belief.record", topic: "topic:eligibility" }],
+  } }], "EDITOR"));
+  await fx.commit(fx.request("two-rewards-rule", [{ kind: "rule.install", rule: {
+    ...marketRule(), effects: [{ kind: "offer.create", item }, { kind: "offer.create", item: spare }],
+  } }], "EDITOR"));
+  fx.mode("play");
+  const action = gossipRequest(fx, "rewards");
+  const resolved = resolvePolicy(fx.head().snapshot, action.proposal);
+  assert.ok(resolved.ok);
+  const footprint = resolved.plan.rule_steps?.find(({ effect }) => effect.kind === "belief.record")?.effects;
+  assert.ok(footprint);
+  for (const [entity_id, field] of [[spare, "inventory:contents"], [spare, "inventory:holder"],
+    [giver, "inventory:offers"], [giver, "entity:record"], [recipient, "entity:record"], [giver, "dialogue:speech"]]) {
+    assert.ok(footprint.some((effect) => effect.entity_id === entity_id && effect.field === field && effect.change === "read"), field);
+  }
+  await fx.commit(action);
+  const world = fx.head().snapshot.world;
+  assert.ok(world?.version === "2.0.0");
+  assert.equal(world.offers.length, 2);
+  const requests = world.offers.map(({ id }) => ({ kind: "offer.accept" as const, offer_id: id }));
+  assert.equal((await rejectPlay(fx, fx.request("accept-two", requests))).status, "NEEDS_CLARIFICATION");
+  await fx.commit(fx.request("accept-one", [requests[0]!]));
+  const after = fx.head().snapshot.world;
+  assert.ok(after?.version === "2.0.0");
+  assert.deepEqual(after.offers.map(({ consumed_by }) => consumed_by !== null), [true, false]);
+});
+
+void test("one monotonic turn deadline rolls back a cascade that expires during publication", async (t) => {
+  let elapsed = 0;
+  let expire = false;
+  const fx = setup((point) => {
+    if (!expire) return;
+    if (point === "after_checkpoint") elapsed = limits.turn_ms - 1;
+    if (point === "before_commit") elapsed += 2;
+  }, Date.now, undefined, undefined, () => elapsed);
+  t.after(() => fx.close());
+  await seedMarketGossip(fx);
+  await fx.commit(fx.request("deadline-rule", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
+  fx.mode("play");
+  const action = gossipRequest(fx, "deadline-gossip");
+  const stage = fx.prepare(action);
+  const before = fx.head();
+  const attempt = () => fx.service.commitTurn(fx.access, action.envelope, stage.handle.candidate_id);
+  expire = true;
+  const rejected = await attempt();
+  assert.ok(!rejected.ok);
+  assert.equal(rejected.error.status, "ABORTED");
+  assert.equal(rejected.error.retry, "same_request");
+  assert.deepEqual(fx.head(), before);
+  assert.equal(fx.store.fixtureReceipts(before.checkpoint.checkpoint_id, 10)
+    .some(({ receipt }) => receipt.request_id === action.envelope.request_id), false);
+  expire = false;
+  assert.equal(take(await attempt()).receipt.event_ids.length, 3);
 });
 
 void test("A21 offer cascades fail atomically beyond depth, operations, or evaluation limits", async (t) => {
@@ -532,6 +646,64 @@ void test("behavior outcomes survive reopen, validate signed history, and recove
   const last = reordered.at(-1)!;
   last.events.reverse();
   assert.equal(decodePortable(encodePortable(reordered, key)!, owner_id, key), undefined);
+
+  for (const field of [undefined, "inventory:unexpected"] as const) {
+    const wrongFootprint: PortableEntry[] = structuredClone(history);
+    const last = wrongFootprint.at(-1)!;
+    const world = last.image.snapshot.world;
+    assert.ok(world?.version === "2.0.0");
+    const effect = world.events.at(-1)!;
+    assert.equal(effect.kind, "rule.effect");
+    effect.step.effects = field ? [{ entity_id: marketGossip.giver, field, change: "write" }] : [];
+    last.events[last.events.length - 1] = effect;
+    last.image.checkpoint.remix_state_ref = remixStateRef(last.image.snapshot.entities, world);
+    assert.equal(decodePortable(encodePortable(wrongFootprint, key)!, owner_id, key), undefined);
+  }
+
+  const falseCondition = structuredClone(history);
+  const neverMatched = marketRule();
+  const definition = { ...neverMatched, conditions: neverMatched.conditions.map((condition) =>
+    condition.kind === "topic.unknown" ? { ...condition, kind: "topic.known" as const } : condition) };
+  const installDigest = canonicalDigest(definition);
+  for (const { image, events, receipt } of falseCondition) {
+    const world = image.snapshot.world;
+    if (world?.version !== "2.0.0") continue;
+    world.rules[0]!.definition = definition;
+    const installation = world.events.find((event) => event.kind === "rule.installed");
+    assert.ok(installation);
+    installation.definition_digest = installDigest;
+    if (receipt?.receipt.request_id === "request:persistent-rule") {
+      events[0] = installation;
+      receipt.world_operations = [{ kind: "rule.install", rule: definition }];
+    }
+    image.checkpoint.remix_state_ref = remixStateRef(image.snapshot.entities, world);
+  }
+  assert.equal(decodePortable(encodePortable(falseCondition, key)!, owner_id, key), undefined);
+
+  const missingRuleEffects = structuredClone(history);
+  const speechOnly = missingRuleEffects.at(-1)!;
+  const priorWorld = missingRuleEffects.at(-2)?.image.snapshot.world;
+  assert.ok(priorWorld?.version === "2.0.0");
+  const speech = speechOnly.image.snapshot.world?.events.at(-(speechOnly.events.length));
+  assert.equal(speech?.kind, "speech");
+  speechOnly.events = [speech];
+  assert.ok(speechOnly.receipt);
+  speechOnly.receipt.receipt.event_ids = speechOnly.receipt.receipt.event_ids.slice(0, 1);
+  speechOnly.image.snapshot.world = { ...priorWorld, events: [...priorWorld.events, speech] };
+  speechOnly.image.checkpoint.remix_state_ref = remixStateRef(speechOnly.image.snapshot.entities, speechOnly.image.snapshot.world);
+  assert.equal(decodePortable(encodePortable(missingRuleEffects, key)!, owner_id, key), undefined);
+
+  const pending = fx.head().snapshot.world;
+  assert.ok(pending?.version === "2.0.0");
+  await fx.commit(fx.request("persistent-accept", [{ kind: "offer.accept", offer_id: pending.offers[0]!.id }]));
+  const consumed = fx.head();
+  const portable = fx.store.portableHistory(consumed);
+  assert.ok(portable);
+  const checked = decodePortable(encodePortable(portable, key)!, owner_id, key);
+  assert.ok(checked);
+  const relocated = relocatePortable(checked);
+  assert.deepEqual(relocated.imported.snapshot.world, consumed.snapshot.world);
+  assert.ok(decodePortable(encodePortable(relocated.entries, key)!, owner_id, key));
 });
 
 void test("Play generation reuses the registry for a different observer, fact, topic, and item", async (t) => {

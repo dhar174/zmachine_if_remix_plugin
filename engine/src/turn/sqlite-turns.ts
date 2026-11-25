@@ -9,7 +9,7 @@ import type { Access } from "./contracts.ts";
 import { recoveryResult, restoreIntent, savedSession } from "../fixture/recovery-contracts.ts";
 import type { RestoreIntent, RestoreResult, SavedSession } from "../fixture/recovery-contracts.ts";
 import { publicHead, sessionRef } from "../fixture/session-contracts.ts";
-import { worldTransitionValid } from "../world/history.ts";
+import { receiptWorldTurn, worldTransitionValid } from "../world/history.ts";
 import { importedSession, portableBytes, portableEntry, portableHistoryLimit } from "../fixture/portable-session.ts";
 import type { PortableEntry, UploadPurpose } from "../fixture/portable-session.ts";
 
@@ -186,7 +186,7 @@ export class SQLiteTurns {
       }
 
       const events = this.receiptEventBodies(id, receipt.event_ids);
-      if (!events || !worldTransitionValid(previous, image, events, receipt.request_id)) return;
+      if (!events || !worldTransitionValid(previous, image, events, receipt.request_id, receiptWorldTurn(record))) return;
       const priorWorld = previous?.snapshot.world;
       const worldChanged = priorWorld !== undefined && (image.snapshot.world?.events.length ?? 0) > priorWorld.events.length;
       return { image, previous, worldChanged };
@@ -279,9 +279,10 @@ export class SQLiteTurns {
       for (const row of rows) {
         const current = TurnImage.parse(parseJson(z.string().parse(row.body)));
         if (current.checkpoint.checkpoint_id !== row.id || canonicalDigest(current) !== row.digest) return false;
-        const receipt = row.receipt === null ? undefined : DurableReceipt.parse(parseJson(z.string().parse(row.receipt))).receipt;
+        const record = row.receipt === null ? undefined : DurableReceipt.parse(parseJson(z.string().parse(row.receipt)));
+        const receipt = record?.receipt;
         const bodies = receipt ? this.receiptEventBodies(z.string().parse(row.request), receipt.event_ids) : [];
-        if (!bodies || !worldTransitionValid(previous, current, bodies, receipt?.request_id)) return false;
+        if (!bodies || !worldTransitionValid(previous, current, bodies, receipt?.request_id, receiptWorldTurn(record))) return false;
         previous = current;
       }
       return previous?.checkpoint.checkpoint_id === checkpoint.checkpoint_id &&

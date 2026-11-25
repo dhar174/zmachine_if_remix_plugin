@@ -30,6 +30,7 @@ export const DurableReceipt = z.strictObject({
   receipt: TurnReceipt.options[0],
   rule_ids: z.array(z.string()),
   capability_ids: z.array(z.string()),
+  world_operations: ProposalSchema.shape.operations.optional(),
   recovery: z.strictObject({ retry: z.literal("same_request"), checkpoint: CombinedCheckpoint.shape.checkpoint_id }),
 });
 export type DurableReceipt = z.infer<typeof DurableReceipt>;

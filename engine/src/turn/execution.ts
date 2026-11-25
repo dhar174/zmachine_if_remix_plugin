@@ -8,6 +8,7 @@ import { effectKey } from "../policy/resolver-effects.ts";
 import { TurnImage, failure, limits, ok } from "./contracts.ts";
 import { remixStateRef, validWorld } from "../world/model.ts";
 import { worldTransitionValid } from "../world/history.ts";
+import type { TurnBudget } from "./limits.ts";
 import { runWorldPlan, WorldOperationError } from "../world/operations.ts";
 import type { Execution, TurnExecutor } from "./contracts.ts";
 
@@ -60,9 +61,9 @@ function nextPolicy(before: TurnImage, plan: EffectPlan) {
     history: [...history, ...compiled.lineage.map(({ old_rule }) => ({ id: old_rule.id, supersedes: old_rule.supersedes }))] };
 }
 
-export function executeWorld(before: TurnImage, plan: EffectPlan): Result<Execution> {
+export function executeWorld(before: TurnImage, plan: EffectPlan, budget?: TurnBudget): Result<Execution> {
   try {
-    const result = runWorldPlan(before.snapshot, plan);
+    const result = runWorldPlan(before.snapshot, plan, { budget });
     if (!result || canonicalDigest(result.ruleSteps) !== canonicalDigest([...(plan.rule_steps ?? [])])) return invalidEffect();
     const effects = [...new Map([...plan.operations, ...result.ruleSteps]
       .flatMap(({ effects }) => effects.map((effect) => [effectKey(effect), effect] as const))).values()];
@@ -74,9 +75,10 @@ export function executeWorld(before: TurnImage, plan: EffectPlan): Result<Execut
   }
 }
 
-export function buildImage(before: TurnImage, execution: Execution, plan: EffectPlan, executor: TurnExecutor): Result<TurnImage> {
+export function buildImage(before: TurnImage, execution: Execution, plan: EffectPlan, executor: TurnExecutor,
+  budget?: TurnBudget): Result<TurnImage> {
   if (plan.world_mode) {
-    const verified = executeWorld(before, plan);
+    const verified = executeWorld(before, plan, budget);
     if (!verified.ok) return verified;
     if (canonicalDigest(z.json().parse(execution)) !== canonicalDigest(z.json().parse(verified.value))) return invalidEffect();
   } else if (execution.world !== undefined) return invalidEffect();
@@ -158,7 +160,9 @@ export function buildImage(before: TurnImage, execution: Execution, plan: Effect
       clock: { ...before.snapshot.clock, overlay_turn: checkpoint.clocks.overlay }, editor_authority: null, compiler_context: null },
   });
   const valid = validateImage(candidate, executor);
-  if (valid.ok && !worldTransitionValid(before, candidate, execution.events, plan.request_id)) return invalidEffect();
+  const worldTurn = plan.world_mode && world?.version === "2.0.0" ?
+    { operations: plan.operations.map(({ operation }) => operation), mode: plan.world_mode } : undefined;
+  if (valid.ok && !worldTransitionValid(before, candidate, execution.events, plan.request_id, worldTurn, budget)) return invalidEffect();
   return valid.ok ? ok(candidate) : valid;
 }
 

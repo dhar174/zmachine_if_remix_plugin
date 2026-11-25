@@ -1,7 +1,7 @@
 
-import { performance } from "node:perf_hooks";
 import { canonicalDigest, canonicalJson } from "../contracts.ts";
-import { limits } from "../turn/limits.ts";
+import { limits, turnBudget } from "../turn/limits.ts";
+import type { TurnBudget } from "../turn/limits.ts";
 import { effectKey } from "../policy/resolver-effects.ts";
 import type { Footprint, ResolvedEffect } from "../policy/resolver-effects.ts";
 import { ruleLimits } from "./rule-contracts.ts";
@@ -12,9 +12,12 @@ import { World, activeFact, eligibleFact, isHolder, relationshipTarget, validWor
 import type { BehaviorWorld, WorldEvent } from "./model.ts";
 import { ownedByWorld, projectWorld, visibleWorldNote, worldInspection, worldTargetVisible } from "./projection.ts";
 
-type PlanInput = Pick<EffectPlan, "operations" | "head" | "proposal_digest" | "request_id" | "world_mode">;
+type PlanInput = Pick<EffectPlan, "head" | "proposal_digest" | "request_id" | "world_mode"> & {
+  operations: readonly { operation: ResolverOperation; effects?: readonly EffectRef[] }[];
+};
 type RuleCheck = (snapshot: ResolverSnapshot, operation: Operation, footprint: Footprint) => void;
-type Intent = { request: string; proposal: string; revision: number; index: number; mode: ResolverSnapshot["mode"] };
+type Intent = { request: string; proposal: string; revision: number; index: number; mode: ResolverSnapshot["mode"];
+  recordedId?: string | undefined };
 type Surface = EntityProjection["surfaces"][number];
 
 export class WorldOperationError extends Error {
@@ -69,7 +72,8 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Op
   const base = snapshot.world;
   const next = structuredClone(operation.kind === "rule.install" && base.version === "1.0.0"
     ? { ...base, version: "2.0.0" as const, rules: [], offers: [] } : base) as World;
-  const id = "world-event:" + canonicalDigest([snapshot.head.generation_id, intent.request, intent.revision, intent.index]);
+  const id = intent.recordedId ??
+    "world-event:" + canonicalDigest([snapshot.head.generation_id, intent.request, intent.revision, intent.index]);
   const eventBase = { id, revision: intent.revision, request: intent.request, proposal: intent.proposal };
   const before = projectWorld(base);
   let action: PolicyAction | null = null;
@@ -135,11 +139,10 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Op
       const offer = behavior().offers.find(({ id }) => id === operation.offer_id);
       if (intent.mode !== "PLAY" || !offer || offer.consumed_by !== null || offer.recipient !== base.player ||
           (events.get(offer.id)?.revision ?? Infinity) > snapshot.head.expected_revision ||
-          !offerEligible(base, view, offer.giver, offer.item, intent.revision)) {
+          !offerEligible(base, view, offer.giver, offer.item, intent.revision, read)) {
         throw unclear("The offer is unavailable.");
       }
       read(offer.giver, "inventory:offers");
-      read(offer.item, "inventory:holder");
       event = { ...eventBase, kind: "offer.accepted", offer_id: offer.id };
       break;
     }
@@ -162,13 +165,9 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Op
           break;
         }
         case "offer.create": {
-          read(effect.item);
-          read(effect.item, "inventory:holder");
-          if (isHolder(entities.get(effect.item))) read(effect.item, "inventory:contents");
-          read(base.player);
           read(owner, "inventory:offers");
           const { offers } = behavior();
-          if (!offerEligible(base, view, owner, effect.item, intent.revision) ||
+          if (!offerEligible(base, view, owner, effect.item, intent.revision, read) ||
               offers.some((offer) => offer.giver === owner && offer.recipient === base.player && offer.item === effect.item)) {
             throw invalid("The item is ineligible for an offer.");
           }
@@ -191,14 +190,10 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Op
           const accept = events.get(cause.event_id);
           if (accept?.kind !== "offer.accepted" || accept.offer_id !== effect.offer_id || !offer ||
               offer.giver !== owner || offer.recipient !== base.player || offer.consumed_by !== null ||
-              !offerEligible(base, view, owner, offer.item, intent.revision)) {
+              !offerEligible(base, view, owner, offer.item, intent.revision, read)) {
             throw unclear("The offer is unavailable.");
           }
-          read(offer.item);
-          read(offer.recipient);
-          if (entities.get(offer.item)?.kind === "item" && isHolder(entities.get(offer.item))) {
-            read(offer.item, "inventory:contents");
-          }
+          read(owner, "inventory:offers");
           subject = offer.item;
           assign(offer.item, "inventory:holder", offer.recipient);
           offer.consumed_by = id;
@@ -366,34 +361,46 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Op
   return { next: parsed.data, effects, action, event, policyOperation };
 }
 
-function expandWorldDependencies(snapshot: ResolverSnapshot, effects: ResolvedEffect[]): ResolvedEffect[] {
+export function expandWorldDependencies(snapshot: ResolverSnapshot, effects: ResolvedEffect[]): ResolvedEffect[] {
   const declared = snapshot.world_dependencies ?? [];
-  if (declared.length === 0) return effects;
-  const found = new Map(effects.map((effect) => [effectKey(effect.ref), effect]));
+  if (declared.length === 0 && effects.every(({ surface }) => surface.dependencies.length === 0)) return effects;
+  const found = new Set(effects.map(({ ref }) => effectKey(ref)));
   const entities = new Map([...snapshot.entities, ...(snapshot.world ? projectWorld(snapshot.world) : [])]
     .map((entity) => [entity.id, entity]));
   const pending = [...effects];
-  for (const { ref } of pending) {
+  for (const { ref, surface } of pending) {
     if (ref.change !== "write") continue;
-    for (const { source, dependency } of declared) {
+    const dependencies = [...surface.dependencies, ...declared.flatMap(({ source, dependency }) =>
+      effectKey(source) === effectKey(ref) ? [dependency] : [])];
+    for (const dependency of dependencies) {
       const key = effectKey(dependency);
-      if (effectKey(source) !== effectKey(ref) || found.has(key)) continue;
+      if (found.has(key)) continue;
       const entity = entities.get(dependency.entity_id);
-      const surface = entity?.surfaces.find(({ field }) => field === dependency.field);
-      if (!entity || entity.existence !== "present" || surface?.coverage !== "complete" || surface.fact.state !== "present") {
-        throw missing("A rule dependency lacks complete effect coverage.");
+      const target = entity?.surfaces.find(({ field }) => field === dependency.field);
+      if (pending.length >= 512 || !entity || entity.existence !== "present" ||
+          target?.coverage !== "complete" || target.fact.state !== "present") {
+        throw missing("A world dependency lacks complete effect coverage.");
       }
-      const effect = { ref: dependency, entity, surface };
-      found.set(key, effect);
-      pending.push(effect);
+      found.add(key);
+      pending.push({ ref: dependency, entity, surface: target });
     }
   }
   return pending;
 }
 
-export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput, check?: RuleCheck) {
+export function verifyWorldWrites(direct: ResolvedEffect[], effects: ResolvedEffect[]): void {
+  const supported = new Set(direct.filter(({ surface }) => surface.owner === "remix").map(({ ref }) => effectKey(ref)));
+  if (effects.some(({ ref }) => ref.change === "write" && !supported.has(effectKey(ref)))) {
+    throw missing("A world operation needs a verified capability for an indirect write.");
+  }
+}
+
+export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput,
+  options: { check?: RuleCheck; budget?: TurnBudget | undefined; eventIds?: readonly string[] } = {}) {
   if (!plan.world_mode) return undefined;
-  if (!snapshot.world || plan.operations.length === 0 || !plan.operations.every(({ operation }) => usesWorld(snapshot, operation))) {
+  if (!snapshot.world || plan.operations.length === 0 ||
+      plan.operations.filter(({ operation }) => operation.kind === "offer.accept").length > 1 ||
+      !plan.operations.every(({ operation }) => usesWorld(snapshot, operation))) {
     throw invalid("The validated plan does not belong to this remix world.");
   }
   let current = snapshot.world;
@@ -406,9 +413,9 @@ export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput, check?
   const queue: { event: WorldEvent; depth: number }[] = [];
   const seen = new Set<string>();
   let evaluations = 0;
-  const deadline = performance.now() + limits.turn_ms;
+  const deadline = options.budget ?? turnBudget();
   function budget(condition: boolean) {
-    if (!condition || performance.now() > deadline) {
+    if (!condition || deadline.remaining() <= 0) {
       throw new WorldOperationError("ABORTED", "The isolated rule cascade exceeded its execution budget.");
     }
   }
@@ -417,21 +424,18 @@ export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput, check?
     budget(events.length < limits.operations && events.length < limits.events && depth <= ruleLimits.depth);
     const subject = { ...snapshot, world: current };
     const result = evaluateWorldOperation(subject, operation, { request: plan.request_id,
-      proposal: plan.proposal_digest, revision, mode, index: events.length });
+      proposal: plan.proposal_digest, revision, mode, index: events.length, recordedId: options.eventIds?.[events.length] });
     if (!result.event) throw invalid("Execution did not produce a world event.");
     const { event } = result;
+    const effects = expandWorldDependencies(subject,
+      [...new Map([...reads, ...result.effects].map((effect) => [effectKey(effect.ref), effect])).values()]);
     if (operation.kind === "rule.effect") {
       if (event.kind !== "rule.effect") throw invalid("The consequence lost its causal event.");
-      const effects = expandWorldDependencies(subject,
-        [...new Map([...result.effects, ...reads].map((effect) => [effectKey(effect.ref), effect])).values()]);
       const origin = initial.events.find((entry) => entry.kind === "rule.installed" && entry.rule_id === event.step.rule_id);
       const action = origin?.kind === "rule.installed" && origin.mode === "PLAY" ? "generate.rule" : result.action;
-      check?.(subject, result.policyOperation ?? operation,
+      options.check?.(subject, result.policyOperation ?? operation,
         { effects, action, route: "remix", capability_ids: [] });
-      if (effects.some(({ ref, surface }) => surface.owner !== "remix" && ref.change === "write") ||
-          effects.some(({ ref }) => ref.change === "write" && !result.effects.some(({ ref: direct }) => effectKey(ref) === effectKey(direct)))) {
-        throw missing("The rule needs a verified capability for an indirect write.");
-      }
+      verifyWorldWrites(result.effects, effects);
       event.step.effects = effects.map(({ ref }) => ref);
       const record = result.next.events.at(-1);
       if (record?.kind !== "rule.effect") throw invalid("The rule consequence is missing from the candidate.");
@@ -444,16 +448,18 @@ export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput, check?
         notes.push(canonicalJson({ kind: "offer.created", id, item, giver, recipient }));
       }
       if (result.policyOperation?.kind === "inventory.transfer") notes.push(canonicalJson(result.policyOperation));
+    } else {
+      verifyWorldWrites(result.effects, effects);
     }
     current = result.next;
     events.push(event);
     queue.push({ event, depth });
-    return result;
+    return { ...result, effects };
   }
 
   for (const { operation, effects } of plan.operations) {
     const result = apply(operation, 0);
-    if (canonicalJson(effects.map(effectKey).sort()) !== canonicalJson(result.effects.map(({ ref }) => effectKey(ref)).sort())) {
+    if (effects && canonicalJson(effects.map(effectKey).sort()) !== canonicalJson(result.effects.map(({ ref }) => effectKey(ref)).sort())) {
       throw invalid("Execution differed from the validated remix-world footprint.");
     }
     if (result.event?.kind === "speech") {
@@ -498,12 +504,13 @@ export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput, check?
           if (!entity || !surface) throw invalid("A predicate lacks a matching world surface.");
           predicateReads.push({ ref: { entity_id: id, field, change: "read" }, entity, surface });
         }
+        readPredicate(before.player, "entity:record");
+        readPredicate(rule.owner, "entity:record");
+        readPredicate(rule.owner, event.kind === "speech" ? "dialogue:speech" :
+          event.kind === "observation" ? "dialogue:observation" : "inventory:offers");
         if (!rule.conditions.every((condition) => {
           budget(++evaluations <= ruleLimits.evaluations);
-          if (condition.kind === "speech.equals") {
-            readPredicate(rule.owner, "dialogue:speech");
-            return event.kind === "speech" && event.text === condition.text;
-          }
+          if (condition.kind === "speech.equals") return event.kind === "speech" && event.text === condition.text;
           if ("topic" in condition) {
             readPredicate(rule.owner, "characterization:beliefs");
             const known = before.beliefs.some((belief) => belief.character === rule.owner && belief.topic === condition.topic);
@@ -512,7 +519,7 @@ export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput, check?
           readPredicate(condition.item, "inventory:holder");
           if (condition.kind === "item.held") return view.holderAt(condition.item) === rule.owner;
           readPredicate(rule.owner, "inventory:offers");
-          return offerEligible(before, view, rule.owner, condition.item, revision) &&
+          return offerEligible(before, view, rule.owner, condition.item, revision, readPredicate) &&
             !before.offers.some((offer) => offer.giver === rule.owner && offer.item === condition.item);
         })) continue;
         for (const [effect_index, effect] of rule.effects.entries()) {

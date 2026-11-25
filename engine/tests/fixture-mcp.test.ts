@@ -259,7 +259,13 @@ void test("bounded rules through authenticated MCP launch, approve, gossip, offe
   const preview = await fixture.call("prepare_turn", gossip);
   assert.doesNotMatch(JSON.stringify(preview), /topic:old-friends|behavior:gossip/u);
   const speechArgs = { ...gossip, ...prepared.parse(preview) };
+  const nativeAction = { kind: "play", input: { kind: "line", text } };
+  const spoofedSpeech = { ...speechArgs, action: nativeAction };
+  const conflictResult = z.object({ status: z.literal("VALIDATION_FAILED"), subtype: z.literal("IDEMPOTENCY_CONFLICT") });
+  conflictResult.parse(await fixture.call("commit_turn", spoofedSpeech));
   const speech = receipt.parse(await fixture.call("commit_turn", speechArgs)).receipt;
+  conflictResult.parse(await fixture.call("commit_turn", spoofedSpeech));
+  conflictResult.parse(await fixture.call("prepare_turn", { ...gossip, action: nativeAction }));
   assert.equal(speech.behavior_steps, undefined);
   assert.equal(speech.event_ids.length, 3);
   assert.equal(speech.time_cost, 1);
@@ -283,11 +289,14 @@ void test("bounded rules through authenticated MCP launch, approve, gossip, offe
   const competing = prepareAction("request:competing-accept", { kind: "offer.accept", offer_id: offer.id });
   const acceptArgs = { ...accept, ...await stage(accept) };
   const competingArgs = { ...competing, ...await stage(competing) };
-  const results = await Promise.all([fixture.call("commit_turn", acceptArgs), fixture.call("commit_turn", acceptArgs),
-    fixture.call("commit_turn", competingArgs)]);
-  const winner = results.find((result) => outcome.parse(result).status === "COMMITTED");
-  assert.ok(winner);
-  assert.equal(receipt.parse(winner).receipt.event_ids.length, 2);
+  const offerAlias = { kind: "play", input: { kind: "line",
+    text: "offer.accept:" + canonicalDigest({ kind: "offer.accept", offer_id: offer.id }) } };
+  conflictResult.parse(await fixture.call("commit_turn", { ...acceptArgs, action: offerAlias }));
+  const [first, duplicate] = await Promise.all([fixture.call("commit_turn", acceptArgs), fixture.call("commit_turn", acceptArgs)]);
+  assert.equal(outcome.parse(first).status, "COMMITTED");
+  assert.deepEqual(duplicate, first);
+  assert.equal(receipt.parse(first).receipt.event_ids.length, 2);
+  assert.equal(outcome.parse(await fixture.call("commit_turn", competingArgs)).status, "STALE_REVISION");
   assert.equal((await read()).pending_offers?.length, 0);
   head = (await read()).head;
   const consumedSave = await saveCombined(fixture, head, "request:save-consumed");

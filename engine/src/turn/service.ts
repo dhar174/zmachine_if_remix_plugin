@@ -13,13 +13,15 @@ import { compileDirective, selectDirectiveSubset } from "../policy/directive-com
 import type { CompilationProposal, ModelInterpretation, SupportedSubsetSelection } from "../policy/directive-contracts.ts";
 import { Authority } from "../auth/authority.ts";
 import type { Permit } from "../auth/authority.ts";
-import { CandidateHandle, HeadExpectation, RequestIdentity, TurnEnvelope, canonicalDigest, canonicalJson } from "../contracts.ts";
+import { CandidateHandle, HeadExpectation, RequestIdentity, TurnEnvelope as CoreTurnEnvelope, canonicalDigest, canonicalJson } from "../contracts.ts";
 import type { Result } from "../ports.ts";
 import { CompilationInput } from "../policy/directive-contracts.ts";
 import { ResolverProposal } from "../policy/resolver-contracts.ts";
 import type { EffectPlan, ResolverSnapshot } from "../policy/resolver-contracts.ts";
 import { DurableReceipt, TurnImage, conflict, failure, invalid, limits, ok, stale } from "./contracts.ts";
 import type { Access, FaultPoint, Stage, TurnExecutor } from "./contracts.ts";
+import { turnBudget } from "./limits.ts";
+import type { TurnBudget } from "./limits.ts";
 import { buildImage, executeWorld, jsonEvent, supported, validateImage } from "./execution.ts";
 import { visibleWorldNote, worldInspection } from "../world/projection.ts";
 import { SQLiteTurns, branchKey } from "./sqlite-turns.ts";
@@ -28,6 +30,8 @@ import { FixtureRecovery } from "../fixture/recovery.ts";
 import { decodePortable, encodePortable, relocatePortable } from "../fixture/portable-session.ts";
 import type { UploadPurpose } from "../fixture/portable-session.ts";
 
+const TurnEnvelope = CoreTurnEnvelope.extend({ fixture_action_digest: z.string().regex(/^[0-9a-f]{64}$/u).optional() });
+type TurnEnvelope = z.infer<typeof TurnEnvelope>;
 type Head = ReturnType<typeof expected>;
 type Prepared = { kind: "prepared"; handle: CandidateHandle; diff: string; diff_digest: string };
 type Preparation = Prepared | { kind: "committed"; record: DurableReceipt } |
@@ -79,10 +83,12 @@ readonly fixtureProfile: FixtureProfile;
 
   private readonly executor: TurnExecutor;
   private readonly clock: () => number;
+  private readonly monotonicClock: (() => number) | undefined;
   private readonly fault: (point: FaultPoint) => void;
   constructor(storage: string | TurnStore, executor: TurnExecutor,
     clock: () => number = Date.now, fault: (point: FaultPoint) => void = () => {},
-    fixtureProfile: FixtureProfile = "synthetic", privateFiles?: { key: Buffer; heidiTrial?: boolean }) {
+    fixtureProfile: FixtureProfile = "synthetic", privateFiles?: { key: Buffer; heidiTrial?: boolean },
+    monotonicClock?: () => number) {
     if (privateFiles && (fixtureProfile !== "native-z5" || privateFiles.key.length !== 32)) {
       throw new Error("Private transfers require the native profile and a 32-byte key.");
     }
@@ -91,6 +97,7 @@ readonly fixtureProfile: FixtureProfile;
     this.heidiTrial = privateFiles?.heidiTrial ?? false;
     this.transferKey = privateFiles ? Buffer.from(privateFiles.key) : undefined;
     this.clock = clock;
+    this.monotonicClock = monotonicClock;
     this.fault = fault;
     this.store = typeof storage === "string" ? new SQLiteTurns(storage) : storage;
     this.executor = this.privateStories ? createNativeFixtureExecutor((scope) => this.store.storyFor(scope)) : executor;
@@ -419,8 +426,10 @@ readonly fixtureProfile: FixtureProfile;
     const input = action.kind === "play" ? action.input : { kind: "line",
       text: action.kind === "directive" ? action.source_ref : action.kind === "overlay.speech" ? action.text :
         action.kind + ":" + canonicalDigest(action) };
+    const fixtureAction = action.kind === "play" || action.kind === "directive" ? {} :
+      { fixture_action_digest: canonicalDigest(action) };
     return TurnEnvelope.parse({ ...request, owner_id: access.owner_id, version: "1.0.0",
-      intent: editor ? "editor" : "play", input });
+      intent: editor ? "editor" : "play", input, ...fixtureAction });
   }
 
   private prepareCompiledFixture(access: Access, envelope: TurnEnvelope, context: z.infer<typeof CompilationInput>,
@@ -749,7 +758,7 @@ readonly fixtureProfile: FixtureProfile;
     });
   }
 
-  private plan(access: Access, image: TurnImage, stage: Stage, permit: Permit | undefined): Result<EffectPlan> {
+  private plan(access: Access, image: TurnImage, stage: Stage, permit: Permit | undefined, budget: TurnBudget): Result<EffectPlan> {
     const proposal = stage.proposal;
     if (canonicalDigest(proposal) !== stage.handle.proposal_digest || digest(stage.diff) !== stage.diff_digest) return invalid();
     if (Date.parse(stage.handle.expires_at) <= this.clock()) {
@@ -762,8 +771,9 @@ readonly fixtureProfile: FixtureProfile;
       return failure("NEEDS_APPROVAL", "The exact candidate needs current Editor authority.");
     }
     const result = stage.editor && permit
-      ? this.authority.resolveApproved(owner, snapshot.value, proposal, permit)
-      : this.authority.resolveWithoutGrant(owner, snapshot.value, proposal);
+      ? this.authority.resolveApproved(owner, snapshot.value, proposal, permit, budget)
+      : this.authority.resolveWithoutGrant(owner, snapshot.value, proposal, budget);
+    if (budget.remaining() <= 0) return timedOut();
     if (!result.ok) return result;
     if (!supported(result.plan)) return failure("CAPABILITY_MISSING", "This operation has no complete executor.");
     if (result.plan.time === "native" && image.checkpoint.clocks.policy !== "native_running") {
@@ -784,6 +794,7 @@ readonly fixtureProfile: FixtureProfile;
       return active.candidate === candidateId && (!exact || exact.diff === active.diff)
         ? active.promise : Promise.resolve(invalid());
     }
+    const budget = turnBudget(this.monotonicClock);
     const result = this.atomic<Work | DurableReceipt>(() => {
       const request = this.store.request(id);
       if (request && request.envelope !== hash) return conflict();
@@ -817,7 +828,7 @@ readonly fixtureProfile: FixtureProfile;
         if (!approval.ok) return approval;
         selectedPermit = { candidate_id: candidateId, source: "approval", reference: approval.value.grant_id, diff_digest: exact.diff };
       }
-      const plan = this.plan(access, image, stage, selectedPermit);
+      const plan = this.plan(access, image, stage, selectedPermit, budget);
       if (!plan.ok) return plan;
       const claim = randomUUID();
       this.store.claim(id, claim);
@@ -829,7 +840,7 @@ readonly fixtureProfile: FixtureProfile;
     const work = result.value;
     const boundPermit = work.permit ? structuredClone(work.permit) : undefined;
     const scope = { ...access };
-    const promise = Promise.resolve().then(() => this.execute(scope, envelope, work, boundPermit, abort))
+    const promise = Promise.resolve().then(() => this.execute(scope, envelope, work, boundPermit, abort, budget))
       .then((result) => {
         this.atomic(() => {
           if (this.store.request(id)?.claim === work.claim) {
@@ -846,31 +857,37 @@ readonly fixtureProfile: FixtureProfile;
     return promise;
   }
 
-  private async execute(access: Access, envelope: TurnEnvelope, work: Work, permit: Permit | undefined, abort: AbortController): Promise<Commit> {
+  private async execute(access: Access, envelope: TurnEnvelope, work: Work, permit: Permit | undefined, abort: AbortController,
+    budget: TurnBudget): Promise<Commit> {
     const { image, stage, plan, claim } = work;
     const id = requestKey(envelope);
-    const timeout = setTimeout(() => abort.abort(), limits.turn_ms);
+    const expired = () => abort.signal.aborted || budget.remaining() <= 0;
+    const timeout = setTimeout(() => abort.abort(), budget.remaining());
     const interrupted = new Promise<ReturnType<typeof timedOut>>((resolve) => {
       if (abort.signal.aborted) resolve(timedOut());
       else abort.signal.addEventListener("abort", () => resolve(timedOut()), { once: true });
     });
     try {
-      if (abort.signal.aborted) return timedOut();
+      if (expired()) return timedOut();
       const valid = validateImage(image, this.executor);
+      if (expired()) return timedOut();
       if (!valid.ok) return valid;
       const executed = await Promise.race([
-        plan.world_mode ? executeWorld(image, plan) :
+        plan.world_mode ? executeWorld(image, plan, budget) :
           this.executor.execute(structuredClone(image), structuredClone(plan), limits, abort.signal),
         interrupted,
       ]);
+      if (expired()) return timedOut();
       if (!executed.ok) return executed;
-      if (abort.signal.aborted) return timedOut();
-      const next = buildImage(image, executed.value, plan, this.executor);
+      const next = buildImage(image, executed.value, plan, this.executor, budget);
+      if (expired()) return timedOut();
       if (!next.ok) return next;
       const candidate = next.value;
       const events = executed.value.events.map((event) => jsonEvent.parse(event));
       const receipt = DurableReceipt.parse({
         version: "1.0.0", rule_ids: plan.trace.rule_ids, capability_ids: plan.trace.capability_ids,
+        ...(plan.world_mode && candidate.snapshot.world?.version === "2.0.0" ?
+          { world_operations: plan.operations.map(({ operation }) => operation) } : {}),
         recovery: { retry: "same_request", checkpoint: candidate.checkpoint.checkpoint_id },
         receipt: {
           ...RequestIdentity.parse(JSON.parse(id) as unknown), version: "1.0.0", status: "COMMITTED",
@@ -884,7 +901,7 @@ readonly fixtureProfile: FixtureProfile;
       });
       this.fault("before_checkpoint");
       const staged = this.atomic(() => {
-        if (abort.signal.aborted) return timedOut();
+        if (expired()) return timedOut();
         if (this.store.request(id)?.claim !== claim) return timedOut();
         this.store.insertCheckpoint(candidate, claim);
         return ok(undefined);
@@ -892,15 +909,16 @@ readonly fixtureProfile: FixtureProfile;
       if (!staged.ok) return staged;
       this.fault("after_checkpoint");
       const committed = this.atomic(() => {
-        if (abort.signal.aborted) return timedOut();
+        if (expired()) return timedOut();
         const request = this.store.request(id);
         if (request?.claim !== claim || request.stage?.handle.candidate_id !== stage.handle.candidate_id) return timedOut();
         const live = this.store.head(access);
         const current = work.draft && !live ? this.store.draft(access) : live;
         if (!current || current.checkpoint.checkpoint_id !== image.checkpoint.checkpoint_id) return stale();
-        const fresh = this.plan(access, current, request.stage, permit);
+        const fresh = this.plan(access, current, request.stage, permit, budget);
         if (!fresh.ok) return fresh;
         if (canonicalDigest(jsonEvent.parse(fresh.value)) !== canonicalDigest(jsonEvent.parse(plan))) return invalid();
+        if (expired()) return timedOut();
         if (permit && stage.editor) {
           const consumed = this.authority.consume(access.owner_id, image.snapshot.head, permit, envelope.request_id);
           if (!consumed.ok) return consumed;
@@ -909,6 +927,7 @@ readonly fixtureProfile: FixtureProfile;
         if (!updated.ok) throw new RejectPublication(updated);
         this.store.publish(id, claim, current, candidate, receipt, events, stage, work.draft);
         this.fault("before_commit");
+        if (expired()) throw new RejectPublication(timedOut());
         return ok(receipt);
       });
       if (committed.ok) this.fault("after_commit");

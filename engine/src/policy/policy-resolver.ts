@@ -5,8 +5,10 @@ import type { ActiveRule, DecisionTrace, EffectPlan, PolicyResolverPort, Resolut
 import { deriveFootprint, effectKey, ResolutionProblem } from "./resolver-effects.ts";
 import type { Footprint, ResolvedEffect } from "./resolver-effects.ts";
 import { validWorld } from "../world/model.ts";
-import { evaluateWorldOperation, runWorldPlan, usesWorld, WorldOperationError } from "../world/operations.ts";
+import { evaluateWorldOperation, expandWorldDependencies, runWorldPlan, usesWorld, verifyWorldWrites,
+  WorldOperationError } from "../world/operations.ts";
 import type { Operation as WorldOperation } from "../world/operations.ts";
+import type { TurnBudget } from "../turn/limits.ts";
 
 const ordered = (ids: Iterable<string>) => [...new Set(ids)].sort();
 const same = (left: Parameters<typeof canonicalJson>[0], right: Parameters<typeof canonicalJson>[0]) =>
@@ -201,7 +203,7 @@ function checkPolicy(snapshot: ResolverSnapshot, operation: WorldOperation, foot
   }
 }
 
-function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean): Resolution {
+function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, budget?: TurnBudget): Resolution {
   const ruleIds = new Set<string>();
   const capabilityIds = new Set<string>();
   const evidenceIds = new Set<string>();
@@ -255,12 +257,19 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean):
     if (worldOperations > 0 && worldOperations !== amendment.operations.length) {
       throw new ResolutionProblem("NEEDS_CLARIFICATION", "world_subturn", "Resolve world operations separately from legacy or native operations.");
     }
+    if (amendment.operations.filter(({ kind }) => kind === "offer.accept").length > 1) {
+      throw new ResolutionProblem("NEEDS_CLARIFICATION", "single_offer", "Accept at most one offer per Play turn.");
+    }
     for (const [index, operation] of amendment.operations.entries()) {
       let footprint: Footprint;
+      let directWorldEffects: ResolvedEffect[] | undefined;
       if (worldOperations > 0) {
-        const { effects, action } = evaluateWorldOperation(snapshot, operation, {
+        const result = evaluateWorldOperation(snapshot, operation, {
           request: proposal.request_id, proposal: digest, revision: head.expected_revision + 1, index, mode: snapshot.mode,
         });
+        directWorldEffects = result.effects;
+        const effects = expandWorldDependencies(snapshot, directWorldEffects);
+        const { action } = result;
         effects.forEach(({ surface }) => evidenceIds.add(surface.fact.evidence_id));
         footprint = { effects, action, route: "remix", capability_ids: [] };
       } else {
@@ -269,6 +278,7 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean):
       routes.add(footprint.route);
       checkPolicy(snapshot, operation, footprint, amendment.rules,
         [...snapshot.applicability, ...(amendment.candidate?.applicability ?? [])], digest, ruleIds, evidenceIds, semantic);
+      if (directWorldEffects) verifyWorldWrites(directWorldEffects, footprint.effects);
       for (const { ref } of footprint.effects) {
         const key = canonicalJson([ref.entity_id, ref.field]);
         if (accumulated.has(key) && (ref.change === "write" || accumulated.get(key) === "write")) {
@@ -295,10 +305,13 @@ operation.kind === "inspect.entity" || operation.kind === "observation.record" |
     const plan: EffectPlan = { version: "1.0.0", head, request_id: proposal.request_id, proposal_digest: digest,
       route, time, operations, amendment: amendment.candidate, trace: trace(),
       ...(worldOperations > 0 ? { world_mode: snapshot.mode } : {}) };
-    const expanded = plan.world_mode && inspections === 0 ? runWorldPlan(snapshot, plan, (current, operation, footprint) => {
-      footprint.effects.forEach(({ surface }) => evidenceIds.add(surface.fact.evidence_id));
-      checkPolicy(current, operation, footprint, amendment.rules,
-        [...snapshot.applicability, ...(amendment.candidate?.applicability ?? [])], digest, ruleIds, evidenceIds, semantic);
+    const expanded = plan.world_mode && inspections === 0 ? runWorldPlan(snapshot, plan, {
+      budget,
+      check(current, operation, footprint) {
+        footprint.effects.forEach(({ surface }) => evidenceIds.add(surface.fact.evidence_id));
+        checkPolicy(current, operation, footprint, amendment.rules,
+          [...snapshot.applicability, ...(amendment.candidate?.applicability ?? [])], digest, ruleIds, evidenceIds, semantic);
+      },
     }) : undefined;
     const ruleSteps = expanded?.ruleSteps ?? [];
     const derived = ordered([...operations, ...ruleSteps].flatMap(({ effects }) => effects.map(effectKey)));
@@ -317,14 +330,14 @@ operation.kind === "inspect.entity" || operation.kind === "observation.record" |
   }
 }
 
-export function resolvePolicy(snapshot: unknown, proposal: unknown): Resolution {
-  return evaluate(snapshot, proposal, false);
+export function resolvePolicy(snapshot: unknown, proposal: unknown, budget?: TurnBudget): Resolution {
+  return evaluate(snapshot, proposal, false, budget);
 }
 
 /** Server-side preview only. Its result carries neither a plan nor authority. */
-export function previewPolicy(snapshot: unknown, proposal: unknown):
+export function previewPolicy(snapshot: unknown, proposal: unknown, budget?: TurnBudget):
   { ok: true; preview: Omit<EffectPlan, "version"> } | Extract<Resolution, { ok: false }> {
-  const result = evaluate(snapshot, proposal, true);
+  const result = evaluate(snapshot, proposal, true, budget);
   if (!result.ok) return result;
   const { version: schemaVersion, ...preview } = result.plan;
   void schemaVersion;

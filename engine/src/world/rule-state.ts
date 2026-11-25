@@ -68,10 +68,18 @@ export function observedBy(rule: RuleDefinition, event: WorldEvent): boolean {
     event.step.effect.item === rule.when.item && event.subject === rule.owner;
 }
 
-export function offerEligible(world: World, view: ReturnType<typeof worldView>, giver: string, item: string, at: number) {
+export function offerEligible(world: World, view: ReturnType<typeof worldView>, giver: string, item: string, at: number,
+  read?: (id: string, field: string) => void) {
+  const entity = view.entities.get(item);
+  if (entity?.kind !== "item") return false;
+  read?.(world.player, "entity:record");
+  read?.(giver, "entity:record");
+  read?.(item, "entity:record");
+  read?.(item, "inventory:holder");
+  if (entity.container) read?.(item, "inventory:contents");
   return view.holderAt(item, at) === giver && view.observationRoom(giver, at) !== undefined &&
-    !world.facts.some((fact) => fact.field === "inventory:holder" && fact.value === item &&
-      fact.from <= at && (fact.until === null || at < fact.until));
+    (!entity.container || !world.facts.some((fact) => fact.field === "inventory:holder" && fact.value === item &&
+      fact.from <= at && (fact.until === null || at < fact.until)));
 }
 
 export function validBehaviorState(world: BehaviorWorld, view: ReturnType<typeof worldView>): boolean {
