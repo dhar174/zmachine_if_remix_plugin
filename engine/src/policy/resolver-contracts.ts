@@ -100,6 +100,11 @@ export const ResolverProposal = HeadExpectation.extend({
 export type ResolverSnapshot = z.infer<typeof ResolverSnapshot>;
 export type ResolverProposal = z.infer<typeof ResolverProposal>;
 export type ResolverOperation = z.infer<typeof operation>;
+
+export function proposalOperations(proposal: ResolverProposal): ResolverOperation[] {
+  return proposal.amendment ? proposal.amendment.compiled.bundle.world_patch.map(({ entity_id, field, value }) =>
+    ({ kind: "remix.assign", entity_id, field, value })) : proposal.operations;
+}
 export type EffectRef = z.infer<typeof effect>;
 export type EntityProjection = z.infer<typeof entity>;
 export type ActiveRule = z.infer<typeof PolicyRule>;

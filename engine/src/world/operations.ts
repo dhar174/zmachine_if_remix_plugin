@@ -16,8 +16,7 @@ type PlanInput = Pick<EffectPlan, "head" | "proposal_digest" | "request_id" | "w
   operations: readonly { operation: ResolverOperation; effects?: readonly EffectRef[] }[];
 };
 type RuleCheck = (snapshot: ResolverSnapshot, operation: Operation, footprint: Footprint) => void;
-type Intent = { request: string; proposal: string; revision: number; index: number; mode: ResolverSnapshot["mode"];
-  recordedId?: string | undefined };
+type Intent = { request: string; proposal: string; revision: number; index: number; mode: ResolverSnapshot["mode"] };
 type Surface = EntityProjection["surfaces"][number];
 
 export class WorldOperationError extends Error {
@@ -72,8 +71,7 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Op
   const base = snapshot.world;
   const next = structuredClone(operation.kind === "rule.install" && base.version === "1.0.0"
     ? { ...base, version: "2.0.0" as const, rules: [], offers: [] } : base) as World;
-  const id = intent.recordedId ??
-    "world-event:" + canonicalDigest([snapshot.head.generation_id, intent.request, intent.revision, intent.index]);
+  const id = "world-event:" + canonicalDigest([snapshot.head.generation_id, intent.request, intent.revision, intent.index]);
   const eventBase = { id, revision: intent.revision, request: intent.request, proposal: intent.proposal };
   const before = projectWorld(base);
   let action: PolicyAction | null = null;
@@ -396,7 +394,7 @@ export function verifyWorldWrites(direct: ResolvedEffect[], effects: ResolvedEff
 }
 
 export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput,
-  options: { check?: RuleCheck; budget?: TurnBudget | undefined; eventIds?: readonly string[] } = {}) {
+  options: { check?: RuleCheck; budget?: TurnBudget | undefined } = {}) {
   if (!plan.world_mode) return undefined;
   if (!snapshot.world || plan.operations.length === 0 ||
       plan.operations.filter(({ operation }) => operation.kind === "offer.accept").length > 1 ||
@@ -424,7 +422,7 @@ export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput,
     budget(events.length < limits.operations && events.length < limits.events && depth <= ruleLimits.depth);
     const subject = { ...snapshot, world: current };
     const result = evaluateWorldOperation(subject, operation, { request: plan.request_id,
-      proposal: plan.proposal_digest, revision, mode, index: events.length, recordedId: options.eventIds?.[events.length] });
+      proposal: plan.proposal_digest, revision, mode, index: events.length });
     if (!result.event) throw invalid("Execution did not produce a world event.");
     const { event } = result;
     const effects = expandWorldDependencies(subject,

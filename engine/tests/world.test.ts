@@ -17,6 +17,7 @@ import { fixtureTools, scopes } from "../src/mcp/tools.ts";
 import { SQLiteTurns, branchKey } from "../src/turn/sqlite-turns.ts";
 import { TurnService } from "../src/turn/service.ts";
 import { limits, TurnImage } from "../src/turn/contracts.ts";
+import { turnBudget } from "../src/turn/limits.ts";
 import type { DurableReceipt, FaultPoint } from "../src/turn/contracts.ts";
 import { activeFact, remixStateRef } from "../src/world/model.ts";
 import { fixtureImage } from "../src/fixture/synthetic-world.ts";
@@ -510,14 +511,36 @@ void test("rule eligibility reports the container and actor reads and a turn acc
   assert.deepEqual(after.offers.map(({ consumed_by }) => consumed_by !== null), [true, false]);
 });
 
+void test("policy planning stops before evaluating the next root once its turn deadline expires", (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  const req = fx.request("planning-deadline", [
+    { kind: "overlay.create", entity_kind: "location", entity: "remix:timed", region: "region:market", label: "Timed" },
+    { kind: "overlay.connect", connection: "remix:bad", from: "remix:missing-room", to: "remix:market" },
+  ]);
+  const before = fx.head();
+  let reads = 0;
+  const budget = turnBudget(() => ++reads < 3 ? 0 : limits.turn_ms);
+  const result = resolvePolicy(before.snapshot, req.proposal, budget);
+  assert.ok(!result.ok);
+  assert.equal(result.error.status, "ABORTED");
+  assert.match(result.error.message, /policy planning/u);
+  assert.deepEqual(fx.head(), before);
+});
+
 void test("one monotonic turn deadline rolls back a cascade that expires during publication", async (t) => {
   let elapsed = 0;
+  let clockReads = 0;
   let expire = false;
   const fx = setup((point) => {
     if (!expire) return;
     if (point === "after_checkpoint") elapsed = limits.turn_ms - 1;
     if (point === "before_commit") elapsed += 2;
-  }, Date.now, undefined, undefined, () => elapsed);
+  }, Date.now, undefined, undefined, () => {
+    // Spend part of the budget before execution starts.
+    if (expire && ++clockReads === 2) elapsed = 1000;
+    return elapsed;
+  });
   t.after(() => fx.close());
   await seedMarketGossip(fx);
   await fx.commit(fx.request("deadline-rule", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
@@ -624,6 +647,21 @@ void test("behavior outcomes survive reopen, validate signed history, and recove
   const recovered = take(await attempt());
   assert.equal(recovered.receipt.event_ids.length, 3);
   assert.deepEqual(fx.head(), committed);
+  assert.ok(recovered.world_proposal);
+  const { generation_id, request_id } = recovered.receipt;
+  const requestKey = canonicalJson({ ...fx.access, generation_id, request_id });
+  const db = new DatabaseSync(fx.file);
+  try {
+    assert.ok(fx.store.receiptTransition(requestKey, recovered));
+    const update = db.prepare("UPDATE requests SET proposal=? WHERE id=?");
+    assert.equal(update.run("0".repeat(64), requestKey).changes, 1);
+    assert.equal(fx.store.receiptTransition(requestKey, recovered), undefined);
+    assert.equal(fx.store.checkpointHistoryValid(committed), false);
+    assert.equal(update.run(canonicalDigest(recovered.world_proposal), requestKey).changes, 1);
+    assert.ok(fx.store.receiptTransition(requestKey, recovered));
+  } finally {
+    db.close();
+  }
   const { owner_id } = fx.access;
   const history = fx.store.portableHistory(committed);
   assert.ok(history);
@@ -665,6 +703,11 @@ void test("behavior outcomes survive reopen, validate signed history, and recove
   const definition = { ...neverMatched, conditions: neverMatched.conditions.map((condition) =>
     condition.kind === "topic.unknown" ? { ...condition, kind: "topic.known" as const } : condition) };
   const installDigest = canonicalDigest(definition);
+  const originalInstallation = falseCondition.find(({ receipt }) => receipt?.receipt.request_id === "request:persistent-rule");
+  assert.ok(originalInstallation?.receipt?.world_proposal);
+  const changedProposal = originalInstallation.receipt.world_proposal;
+  changedProposal.operations = [{ kind: "rule.install", rule: definition }];
+  const proposalDigest = canonicalDigest(changedProposal);
   for (const { image, events, receipt } of falseCondition) {
     const world = image.snapshot.world;
     if (world?.version !== "2.0.0") continue;
@@ -672,10 +715,8 @@ void test("behavior outcomes survive reopen, validate signed history, and recove
     const installation = world.events.find((event) => event.kind === "rule.installed");
     assert.ok(installation);
     installation.definition_digest = installDigest;
-    if (receipt?.receipt.request_id === "request:persistent-rule") {
-      events[0] = installation;
-      receipt.world_operations = [{ kind: "rule.install", rule: definition }];
-    }
+    installation.proposal = proposalDigest;
+    if (receipt?.receipt.request_id === "request:persistent-rule") events[0] = installation;
     image.checkpoint.remix_state_ref = remixStateRef(image.snapshot.entities, world);
   }
   assert.equal(decodePortable(encodePortable(falseCondition, key)!, owner_id, key), undefined);
@@ -690,6 +731,14 @@ void test("behavior outcomes survive reopen, validate signed history, and recove
   assert.ok(speechOnly.receipt);
   speechOnly.receipt.receipt.event_ids = speechOnly.receipt.receipt.event_ids.slice(0, 1);
   speechOnly.image.snapshot.world = { ...priorWorld, events: [...priorWorld.events, speech] };
+  speechOnly.image.checkpoint.remix_state_ref = remixStateRef(speechOnly.image.snapshot.entities, speechOnly.image.snapshot.world);
+  assert.equal(decodePortable(encodePortable(missingRuleEffects, key)!, owner_id, key), undefined);
+
+  // The edited action and resulting state agree, while the producing digest still binds the original speech.
+  const nonTrigger = "The lantern is still lit.";
+  assert.ok(speechOnly.receipt.world_proposal);
+  speechOnly.receipt.world_proposal.operations = [{ kind: "speech.record", text: nonTrigger }];
+  speech.text = nonTrigger;
   speechOnly.image.checkpoint.remix_state_ref = remixStateRef(speechOnly.image.snapshot.entities, speechOnly.image.snapshot.world);
   assert.equal(decodePortable(encodePortable(missingRuleEffects, key)!, owner_id, key), undefined);
 
@@ -743,6 +792,26 @@ void test("Play generation reuses the registry for a different observer, fact, t
   assert.equal(world.offers[0]?.giver, observer);
   assert.equal(world.offers[0]?.item, item);
   assert.equal(activeFact(world, item, "inventory:holder")?.value, observer);
+
+  const playHistory = fx.store.portableHistory(fx.head());
+  assert.ok(playHistory);
+  const key = Buffer.alloc(32, 19);
+  assert.ok(decodePortable(encodePortable(playHistory, key)!, fx.access.owner_id, key));
+  for (const { image, events, receipt } of playHistory) {
+    const world = image.snapshot.world;
+    if (world?.version !== "2.0.0") continue;
+    const installation = world.events.find((e) => e.kind === "rule.installed");
+    assert.ok(installation);
+    installation.mode = "EDITOR";
+    if (receipt?.receipt.request_id === "request:play-observer-rule") {
+      assert.ok(receipt.world_proposal);
+      receipt.receipt.visibility = "owner";
+      receipt.world_proposal.mode = "EDITOR";
+      events[0] = installation;
+    }
+    image.checkpoint.remix_state_ref = remixStateRef(image.snapshot.entities, image.snapshot.world);
+  }
+  assert.equal(decodePortable(encodePortable(playHistory, key)!, fx.access.owner_id, key), undefined);
 
   fx.mode("edit");
   await fx.commit(fx.request("move-eligible-item", [{ kind: "inventory.transfer", item, from: observer, to: "remix:market" }], "EDITOR"));

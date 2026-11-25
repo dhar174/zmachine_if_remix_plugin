@@ -292,11 +292,15 @@ void test("bounded rules through authenticated MCP launch, approve, gossip, offe
   const offerAlias = { kind: "play", input: { kind: "line",
     text: "offer.accept:" + canonicalDigest({ kind: "offer.accept", offer_id: offer.id }) } };
   conflictResult.parse(await fixture.call("commit_turn", { ...acceptArgs, action: offerAlias }));
-  const [first, duplicate] = await Promise.all([fixture.call("commit_turn", acceptArgs), fixture.call("commit_turn", acceptArgs)]);
-  assert.equal(outcome.parse(first).status, "COMMITTED");
+  const [first, duplicate, competitor] = await Promise.all([fixture.call("commit_turn", acceptArgs),
+    fixture.call("commit_turn", acceptArgs), fixture.call("commit_turn", competingArgs)]);
   assert.deepEqual(duplicate, first);
-  assert.equal(receipt.parse(first).receipt.event_ids.length, 2);
-  assert.equal(outcome.parse(await fixture.call("commit_turn", competingArgs)).status, "STALE_REVISION");
+  const statuses = [outcome.parse(first).status, outcome.parse(competitor).status].sort();
+  assert.deepEqual(statuses, ["COMMITTED", "STALE_REVISION"]);
+  const firstWon = outcome.parse(first).status === "COMMITTED";
+  const winner = firstWon ? first : competitor;
+  assert.equal(receipt.parse(winner).receipt.event_ids.length, 2);
+  assert.deepEqual(await fixture.call("commit_turn", firstWon ? acceptArgs : competingArgs), winner);
   assert.equal((await read()).pending_offers?.length, 0);
   head = (await read()).head;
   const consumedSave = await saveCombined(fixture, head, "request:save-consumed");

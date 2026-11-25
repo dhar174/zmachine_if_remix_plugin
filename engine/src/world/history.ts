@@ -1,10 +1,11 @@
 
 import { z } from "zod";
-import { canonicalJson } from "../contracts.ts";
+import { canonicalDigest, canonicalJson } from "../contracts.ts";
 import type { CanonicalValue, Json } from "../contracts.ts";
 import type { DurableReceipt, TurnImage } from "../turn/contracts.ts";
 import type { TurnBudget } from "../turn/limits.ts";
-import type { ResolverOperation } from "../policy/resolver-contracts.ts";
+import { proposalOperations } from "../policy/resolver-contracts.ts";
+import type { ResolverProposal } from "../policy/resolver-contracts.ts";
 import { remixStateRef, validWorld } from "./model.ts";
 import { runWorldPlan, WorldOperationError } from "./operations.ts";
 
@@ -21,11 +22,11 @@ const legacyEvent = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("native_ending"), outcome: z.literal("won") }),
 ]);
 
-type WorldTurn = { operations: readonly ResolverOperation[]; mode: "PLAY" | "EDITOR" };
+type WorldTurn = { proposal: ResolverProposal; mode: "PLAY" | "EDITOR"; durableDigest?: string | undefined };
 
-export function receiptWorldTurn(record: DurableReceipt | null | undefined): WorldTurn | undefined {
-  if (record?.world_operations) {
-    return { operations: record.world_operations, mode: record.receipt.visibility === "owner" ? "EDITOR" : "PLAY" };
+export function receiptWorldTurn(record: DurableReceipt | null | undefined, durableDigest?: string): WorldTurn | undefined {
+  if (record?.world_proposal) {
+    return { proposal: record.world_proposal, mode: record.receipt.visibility === "owner" ? "EDITOR" : "PLAY", durableDigest };
   }
 }
 
@@ -52,12 +53,21 @@ export function worldTransitionValid(previous: TurnImage | undefined, image: Tur
   if (world.version === "2.0.0") {
     const first = delta[0];
     if (!turn || !previous || !first || first.kind === "seed" || previous.checkpoint.revision + 1 !== revision) return false;
-    // Portable import renames storage identities. Fictional event IDs remain bound to the recorded transition.
+    const { proposal, mode, durableDigest } = turn;
+    const { head } = previous.snapshot;
+    const digest = canonicalDigest(proposal);
+    if (proposal.owner_id !== head.owner_id || proposal.mode !== mode || proposal.request_id !== request ||
+        proposal.expected_revision !== head.expected_revision || proposal.expected_policy_revision !== head.expected_policy_revision ||
+        !same(proposal.amendment?.compiled ?? null, image.amendment) || digest !== first.proposal) return false;
+    if (durableDigest !== undefined && (digest !== durableDigest || proposal.session_id !== head.session_id ||
+        proposal.branch_id !== head.branch_id || proposal.generation_id !== head.generation_id)) return false;
+    // Portable relocation changes storage scope. Recompute fictional event IDs using the original producing generation.
+    const originalHead = { ...head, generation_id: proposal.generation_id };
     try {
-      const replay = runWorldPlan(previous.snapshot, {
-        head: previous.snapshot.head, world_mode: turn.mode, request_id: request, proposal_digest: first.proposal,
-        operations: turn.operations.map((operation) => ({ operation })),
-      }, { budget, eventIds: delta.map(({ id }) => id) });
+      const replay = runWorldPlan({ ...previous.snapshot, head: originalHead }, {
+        head: originalHead, world_mode: mode, request_id: request, proposal_digest: digest,
+        operations: proposalOperations(proposal).map((operation) => ({ operation })),
+      }, { budget });
       return replay !== undefined && same(replay.events, delta) && same(replay.world, world);
     } catch (error) {
       if (error instanceof WorldOperationError) return false;

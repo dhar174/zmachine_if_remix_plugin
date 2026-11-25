@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CombinedCheckpoint, DirectiveBundle, HeadExpectation, Revision, canonicalDigest, canonicalJson } from "../contracts.ts";
 import type { Json } from "../contracts.ts";
 import type { Result } from "../ports.ts";
-import type { EffectPlan, ResolverSnapshot } from "../policy/resolver-contracts.ts";
+import type { EffectPlan, ResolverProposal, ResolverSnapshot } from "../policy/resolver-contracts.ts";
 import { effectKey } from "../policy/resolver-effects.ts";
 import { TurnImage, failure, limits, ok } from "./contracts.ts";
 import { remixStateRef, validWorld } from "../world/model.ts";
@@ -76,7 +76,7 @@ export function executeWorld(before: TurnImage, plan: EffectPlan, budget?: TurnB
 }
 
 export function buildImage(before: TurnImage, execution: Execution, plan: EffectPlan, executor: TurnExecutor,
-  budget?: TurnBudget): Result<TurnImage> {
+  budget?: TurnBudget, proposal?: ResolverProposal): Result<TurnImage> {
   if (plan.world_mode) {
     const verified = executeWorld(before, plan, budget);
     if (!verified.ok) return verified;
@@ -160,8 +160,8 @@ export function buildImage(before: TurnImage, execution: Execution, plan: Effect
       clock: { ...before.snapshot.clock, overlay_turn: checkpoint.clocks.overlay }, editor_authority: null, compiler_context: null },
   });
   const valid = validateImage(candidate, executor);
-  const worldTurn = plan.world_mode && world?.version === "2.0.0" ?
-    { operations: plan.operations.map(({ operation }) => operation), mode: plan.world_mode } : undefined;
+  const worldTurn = plan.world_mode && world?.version === "2.0.0" && proposal ?
+    { proposal, mode: plan.world_mode, durableDigest: plan.proposal_digest } : undefined;
   if (valid.ok && !worldTransitionValid(before, candidate, execution.events, plan.request_id, worldTurn, budget)) return invalidEffect();
   return valid.ok ? ok(candidate) : valid;
 }

@@ -1,6 +1,6 @@
 import { canonicalDigest, canonicalJson } from "../contracts.ts";
 import { compileDirective, selectDirectiveSubset } from "./directive-compiler.ts";
-import { ResolverProposal, ResolverSnapshot } from "./resolver-contracts.ts";
+import { proposalOperations, ResolverProposal, ResolverSnapshot } from "./resolver-contracts.ts";
 import type { ActiveRule, DecisionTrace, EffectPlan, PolicyResolverPort, Resolution, ResolverOperation } from "./resolver-contracts.ts";
 import { deriveFootprint, effectKey, ResolutionProblem } from "./resolver-effects.ts";
 import type { Footprint, ResolvedEffect } from "./resolver-effects.ts";
@@ -8,6 +8,7 @@ import { validWorld } from "../world/model.ts";
 import { evaluateWorldOperation, expandWorldDependencies, runWorldPlan, usesWorld, verifyWorldWrites,
   WorldOperationError } from "../world/operations.ts";
 import type { Operation as WorldOperation } from "../world/operations.ts";
+import { turnBudget } from "../turn/limits.ts";
 import type { TurnBudget } from "../turn/limits.ts";
 
 const ordered = (ids: Iterable<string>) => [...new Set(ids)].sort();
@@ -74,7 +75,7 @@ function assertSnapshot(snapshot: ResolverSnapshot, rules: ActiveRule[]) {
 function prepareAmendment(snapshot: ResolverSnapshot, proposal: ResolverProposal, rules: ActiveRule[]):
 { operations: ResolverOperation[]; candidate: EffectPlan["amendment"]; rules: ActiveRule[] } {
   const amendment = proposal.amendment;
-  if (!amendment) return { operations: proposal.operations, candidate: null, rules };
+  if (!amendment) return { operations: proposalOperations(proposal), candidate: null, rules };
   if (snapshot.mode !== "EDITOR") {
     throw new ResolutionProblem("NEEDS_APPROVAL", "editor_mode", "An amendment requires trusted Editor mode.");
   }
@@ -114,7 +115,7 @@ function prepareAmendment(snapshot: ResolverSnapshot, proposal: ResolverProposal
     candidate: { compiled, active_rules: candidateRules,
       applicability, preferences: [...snapshot.policy.preferences, ...compiled.bundle.preferences] },
     rules: evaluationRules,
-    operations: compiled.bundle.world_patch.map(({ entity_id, field, value }) => ({ kind: "remix.assign", entity_id, field, value })),
+    operations: proposalOperations(proposal),
   };
 }
 
@@ -203,7 +204,7 @@ function checkPolicy(snapshot: ResolverSnapshot, operation: WorldOperation, foot
   }
 }
 
-function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, budget?: TurnBudget): Resolution {
+function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, budget = turnBudget()): Resolution {
   const ruleIds = new Set<string>();
   const capabilityIds = new Set<string>();
   const evidenceIds = new Set<string>();
@@ -261,6 +262,7 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, 
       throw new ResolutionProblem("NEEDS_CLARIFICATION", "single_offer", "Accept at most one offer per Play turn.");
     }
     for (const [index, operation] of amendment.operations.entries()) {
+      if (budget.remaining() <= 0) throw new WorldOperationError("ABORTED", "The turn deadline expired during policy planning.");
       let footprint: Footprint;
       let directWorldEffects: ResolvedEffect[] | undefined;
       if (worldOperations > 0) {

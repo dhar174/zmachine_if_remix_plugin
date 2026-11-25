@@ -879,7 +879,7 @@ readonly fixtureProfile: FixtureProfile;
       ]);
       if (expired()) return timedOut();
       if (!executed.ok) return executed;
-      const next = buildImage(image, executed.value, plan, this.executor, budget);
+      const next = buildImage(image, executed.value, plan, this.executor, budget, stage.proposal);
       if (expired()) return timedOut();
       if (!next.ok) return next;
       const candidate = next.value;
@@ -887,7 +887,7 @@ readonly fixtureProfile: FixtureProfile;
       const receipt = DurableReceipt.parse({
         version: "1.0.0", rule_ids: plan.trace.rule_ids, capability_ids: plan.trace.capability_ids,
         ...(plan.world_mode && candidate.snapshot.world?.version === "2.0.0" ?
-          { world_operations: plan.operations.map(({ operation }) => operation) } : {}),
+          { world_proposal: stage.proposal } : {}),
         recovery: { retry: "same_request", checkpoint: candidate.checkpoint.checkpoint_id },
         receipt: {
           ...RequestIdentity.parse(JSON.parse(id) as unknown), version: "1.0.0", status: "COMMITTED",
