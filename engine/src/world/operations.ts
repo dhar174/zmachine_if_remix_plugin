@@ -61,7 +61,7 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Re
   let action: PolicyAction | null = null;
   let event: WorldEvent | undefined;
   const reads: { id: string; field: string }[] = [];
-  const { entities, events, listenersAt, observable, roomOf, rootHolder } = worldView(base);
+  const { entities, events, listenersAt, observable, observationRoom, roomOf, rootHolder } = worldView(base);
   const playerRoom = roomOf(base.player, intent.revision);
   function read(id: string, field = "entity:record") {
     reads.push({ id, field });
@@ -191,18 +191,19 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Re
     }
     case "observation.record": {
       const { observer, subject, field } = operation;
-      const witness = lookup(observer);
+      lookup(observer);
       lookup(subject);
+      const room = observationRoom(observer, intent.revision);
       const fact = activeFact(base, subject, field);
-      if (intent.mode !== "PLAY" || witness.kind !== "character" || !playerRoom || witness.room !== playerRoom ||
-          !fact || !observable(fact, playerRoom, intent.revision)) {
+      if (intent.mode !== "PLAY" || !room || !fact || !observable(fact, room, intent.revision)) {
         throw unclear("The requested fact is not observable by that character in the active scene.");
       }
+      read(base.player);
       read(subject, field);
       readPlacement(subject);
       const target = relationshipTarget(field);
       if (target) readPlacement(target);
-      event = { ...eventBase, kind: "observation", observer, room: witness.room, subject, field, fact_source: fact.source };
+      event = { ...eventBase, kind: "observation", observer, room, subject, field, fact_source: fact.source };
       break;
     }
     case "belief.update": {

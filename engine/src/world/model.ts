@@ -107,16 +107,22 @@ export function worldView(world: World) {
     return world.entities.filter((entity) => entity.kind === "character" && entity.id !== speaker && entity.room === room &&
       presentAt(entity, at)).map(({ id }) => id).sort();
   }
+  function observationRoom(observer: string, at: number): string | undefined {
+    const player = entities.get(world.player);
+    const witness = entities.get(observer);
+    if (player?.kind === "character" && witness?.kind === "character" && player.room === witness.room &&
+        presentAt(player, at) && presentAt(witness, at)) return player.room;
+  }
   function observable(fact: WorldFact, room: string, at: number): boolean {
     const target = relationshipTarget(fact.field);
     return fact.visibility === "player" && roomOf(fact.subject, at) === room &&
       (target === undefined || roomOf(target, at) === room);
   }
-  return { entities, events, presentAt, rootHolder, roomOf, listenersAt, observable };
+  return { entities, events, presentAt, rootHolder, roomOf, listenersAt, observable, observationRoom };
 }
 
 export function validWorld(world: World, revision: number, regions: readonly string[], otherIds: readonly string[]): boolean {
-  const { entities, events, presentAt, roomOf, listenersAt, observable } = worldView(world);
+  const { entities, events, presentAt, roomOf, listenersAt, observable, observationRoom } = worldView(world);
   const ids = [...otherIds, ...world.entities.map(({ id }) => id), ...world.exits.map(({ id }) => id)];
   const seed = world.events[0];
   if (new Set(ids).size !== ids.length || events.size !== world.events.length || entities.get(world.player)?.kind !== "character" ||
@@ -179,8 +185,8 @@ export function validWorld(world: World, revision: number, regions: readonly str
     if (record.kind === "observation") {
       const evidence = world.facts.find((fact) => fact.subject === record.subject && fact.field === record.field &&
         fact.source === record.fact_source && containsRevision(fact, record.revision));
-      if (!evidence || !atEntity(record.observer, record.revision, "character") ||
-          roomOf(record.observer, record.revision) !== record.room || !observable(evidence, record.room, record.revision)) return false;
+      if (!evidence || observationRoom(record.observer, record.revision) !== record.room ||
+          !observable(evidence, record.room, record.revision)) return false;
     }
   }
   const distinctBeliefs = new Set<string>();

@@ -44,6 +44,7 @@ export function decodePortable(bytes: Buffer, owner: Access["owner_id"], key: Bu
     const { contents: payload } = transfer.parse(outer);
     if (canonicalDigest(payload) !== outer.digest) return;
     const seen = new Set<string>();
+    const seenReceiptEvents = new Set<string>();
     const root = payload.history[0]?.image.snapshot.head;
     const story = payload.history[0]?.image.checkpoint.story_sha256;
     let previous: PortableEntry | undefined;
@@ -64,8 +65,11 @@ export function decodePortable(bytes: Buffer, owner: Access["owner_id"], key: Bu
             receipt.generation_id !== head.generation_id || receipt.revision !== checkpoint.revision ||
             receipt.policy_revision !== checkpoint.policy_revision ||
             entry.receipt?.recovery.checkpoint !== checkpoint.checkpoint_id ||
-            new Set(receipt.event_ids).size !== entry.events.length ||
             receipt.event_ids.length !== entry.events.length) return;
+        for (const id of receipt.event_ids) {
+          if (seenReceiptEvents.has(id)) return;
+          seenReceiptEvents.add(id);
+        }
       } else if (entry.events.length || (previous && !entry.origin)) return;
       if (!worldTransitionValid(previous?.image, entry.image, entry.events, receipt?.request_id)) return;
       seen.add(checkpoint.checkpoint_id);

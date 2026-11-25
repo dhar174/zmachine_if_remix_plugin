@@ -12,6 +12,7 @@ import { decodePortable, encodePortable, relocatePortable } from "../src/fixture
 import { target as recoveryTarget } from "../src/fixture/session-contracts.ts";
 import { buildImage, executeWorld, validateImage } from "../src/turn/execution.ts";
 import { resolvePolicy } from "../src/policy/policy-resolver.ts";
+import { fixtureTools, scopes } from "../src/mcp/tools.ts";
 import { SQLiteTurns, branchKey } from "../src/turn/sqlite-turns.ts";
 import { TurnService } from "../src/turn/service.ts";
 import { TurnImage } from "../src/turn/contracts.ts";
@@ -785,4 +786,130 @@ void test("stored observation and belief evidence must be the specific eligible 
   ], "PLAY", "Same turn");
   assert.equal(fx.service.prepareTurn(fx.access, sameTurn.envelope, sameTurn.proposal).ok, false);
   assert.deepEqual(fx.head(), state);
+});
+
+
+void test("#87 stored observations require the player and observer in the same historical room", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  const remote = "remix:distant-guard";
+  const local = "remix:guard";
+  const field = "world:description";
+  fx.mode("edit");
+  await fx.commit(fx.request("vault-fact", [
+    { kind: "remix.assign", entity_id: remote, field, value: "A guard staffs the vault." },
+  ], "EDITOR"));
+  fx.mode("play");
+  const observe = (character: string): ResolverOperation =>
+    ({ kind: "observation.record", observer: character, subject: character, field });
+  const tooFar = fx.request("observe-vault", [observe(remote)]);
+  const rejected = fx.service.prepareTurn(fx.access, tooFar.envelope, tooFar.proposal);
+  assert.ok(!rejected.ok);
+  assert.equal(rejected.error.status, "NEEDS_CLARIFICATION");
+
+  const result = await fx.commit(fx.request("observe-market", [observe(local)]));
+  const history = fx.store.portableHistory(fx.head());
+  assert.ok(history);
+  const entry = history.at(-1)!;
+  const world = entry.image.snapshot.world!;
+  const observed = world.events.at(-1);
+  assert.equal(observed?.kind, "observation");
+  await fx.commit(fx.request("learn-market", [{ kind: "belief.update", character: local, evidence: observed.id }]));
+  assert.deepEqual(fx.head().snapshot.world?.beliefs.map(({ character, evidence }) => ({ character, evidence })),
+    [{ character: local, evidence: observed.id }]);
+
+  const fact = world.facts.find((candidate) => candidate.subject === remote && candidate.field === field);
+  assert.ok(fact);
+  Object.assign(observed, { observer: remote, subject: remote, room: "remix:vault", fact_source: fact.source });
+  entry.events[0] = observed;
+  entry.image.checkpoint.remix_state_ref = remixStateRef(entry.image.snapshot.entities, world);
+  const key = Buffer.alloc(32, 7);
+  const bytes = encodePortable(history, key);
+  assert.ok(bytes);
+
+  const externalId = result.receipt.event_ids[0];
+  assert.ok(externalId);
+  const db = new DatabaseSync(fx.file);
+  try {
+    assert.equal(db.prepare("UPDATE checkpoints SET body=?,digest=? WHERE id=?")
+      .run(canonicalJson(entry.image), canonicalDigest(entry.image), result.receipt.post_checkpoint).changes, 1);
+    assert.equal(db.prepare("UPDATE events SET body=? WHERE id=?").run(canonicalJson(observed), externalId).changes, 1);
+    assert.deepEqual({
+      image: validateImage(entry.image, makeFixture()).ok,
+      sqlite: fx.store.checkpointHistoryValid(entry.image),
+      portable: decodePortable(bytes, fx.access.owner_id, key) !== undefined,
+    }, { image: false, sqlite: false, portable: false });
+  } finally { db.close(); }
+});
+
+void test("#88 Play narration uses the committed turn for history, exact lookup, and MCP replay", async (t) => {
+  const fx = setup();
+  const db = new DatabaseSync(fx.file);
+  t.after(() => { db.close(); fx.close(); });
+  const tools = fixtureTools(fx.service, "http://localhost", false);
+  const owner = { owner: fx.access.owner_id, scopes: new Set(Object.values(scopes)) };
+  const { session_id, branch_id } = fx.access;
+  const ref = { version: "1.0.0", session_id, branch_id };
+  const hidden = "An unseen guard is guarding the vault.";
+  const observedNotes: { expected: string[]; history: string[] | undefined; exact: string[] | undefined; prepare: string[]; commit: string[] }[] = [];
+  const overwrite = db.prepare("UPDATE requests SET receipt=json_set(receipt, '$.receipt.narration_facts', json(?)) " +
+    "WHERE json_extract(receipt, '$.receipt.request_id')=?");
+  for (const variant of ["plain", "mixed", "missing-event"] as const) {
+    const text = "Hello " + variant;
+    const req = fx.request(variant, [{ kind: "speech.record", text }], "PLAY", text);
+    const prepared = fx.prepare(req);
+    const { candidate_id } = prepared.handle;
+    const { diff_digest } = prepared;
+    const committed = take(await fx.service.commitTurn(fx.access, req.envelope, candidate_id));
+    const { request_id, generation_id, narration_facts } = committed.receipt;
+    assert.equal(narration_facts.length, 1);
+    assert.equal(overwrite.run(JSON.stringify(variant === "plain" ? [hidden] : [hidden, ...narration_facts]), request_id).changes, 1);
+    if (variant === "missing-event") {
+      const eventId = committed.receipt.event_ids[0];
+      assert.ok(eventId);
+      assert.equal(db.prepare("DELETE FROM events WHERE id=?").run(eventId).changes, 1);
+    }
+
+    const history = take(await tools.inspect_session.run(owner, { ...ref, query: { kind: "history" } }));
+    const exact = take(await tools.inspect_session.run(owner, { ...ref, query: { kind: "receipt", generation_id, request_id } }));
+    const request = { version: "1.0.0", target: recoveryTarget.strip().parse(req.envelope),
+      action: { kind: "play", input: { kind: "line", text } } };
+    const again = take(await tools.prepare_turn.run(owner, request));
+    const replay = take(await tools.commit_turn.run(owner, { ...request, candidate_id, diff_digest }));
+    assert.equal(again.status, "COMMITTED");
+    assert.deepEqual(replay.receipt.request_id, request_id);
+    assert.deepEqual(exact.receipts.map((receipt) => receipt.request_id), [request_id]);
+    observedNotes.push({ expected: variant === "mixed" ? narration_facts : [],
+      history: history.receipts.find((receipt) => receipt.request_id === request_id)?.narration_facts,
+      exact: exact.receipts[0]?.narration_facts, prepare: again.receipt.narration_facts, commit: replay.receipt.narration_facts });
+  }
+
+  const native = play("request:verified-native-prose", fx.head(), "look");
+  const stage = fx.prepare(native);
+  const result = take(await fx.service.commitTurn(fx.access, native.envelope, stage.handle.candidate_id));
+  assert.ok(fx.head().snapshot.world);
+  assert.deepEqual(result.receipt.narration_facts, ["The room was observed."]);
+  assert.deepEqual(fx.service.viewFixtureReceipt(result).narration_facts, ["The room was observed."]);
+  for (const { expected, history, exact, prepare, commit } of observedNotes) {
+    assert.deepEqual({ history, exact, prepare, commit }, { history: expected, exact: expected, prepare: expected, commit: expected });
+  }
+});
+
+void test("#89 portable decode rejects one external receipt event ID reused by separate turns", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  for (const text of ["First", "Second"]) await fx.commit(fx.request(text, [{ kind: "speech.record", text }]));
+  const history = fx.store.portableHistory(fx.head());
+  assert.ok(history);
+  const turns = history.filter(({ receipt }) => receipt !== null);
+  assert.equal(turns.length, 2);
+  const first = turns[0]!;
+  const second = turns[1]!;
+  assert.notEqual(first.image.snapshot.world?.events.at(-1)?.id, second.image.snapshot.world?.events.at(-1)?.id);
+  const key = Buffer.alloc(32, 8);
+  assert.ok(decodePortable(encodePortable(history, key)!, fx.access.owner_id, key));
+  const reused = first.receipt?.receipt.event_ids[0];
+  assert.ok(reused && second.receipt);
+  second.receipt.receipt.event_ids = [reused];
+  assert.ok(!decodePortable(encodePortable(history, key)!, fx.access.owner_id, key), "reused external ID must invalidate the signed history");
 });
