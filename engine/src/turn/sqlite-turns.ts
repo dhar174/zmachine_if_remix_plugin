@@ -147,7 +147,7 @@ export class SQLiteTurns {
     return image;
   }
 
-  publishedImage(scope: Access, checkpointId: string): TurnImage | undefined {
+  private publishedImage(scope: Access, checkpointId: string): TurnImage | undefined {
     const row = this.db.prepare("SELECT body,digest FROM checkpoints WHERE id=? AND published=1").get(checkpointId);
     if (typeof row?.body !== "string") return;
     try {
@@ -155,6 +155,49 @@ export class SQLiteTurns {
       if (image.checkpoint.checkpoint_id === checkpointId && branchKey(image.snapshot.head) === branchKey(scope) &&
           canonicalDigest(image) === row.digest) return image;
     } catch { return; }
+  }
+
+  /** Resolve a receipt's producing transition without walking the active lineage. */
+  receiptTransition(id: string, record: DurableReceipt) {
+    const receipt = record.receipt;
+    const branch = branchKey(receipt);
+    const row = this.db.prepare(`
+      SELECT r.receipt, l.parent, p.id AS pre_published
+      FROM requests r JOIN checkpoint_links l ON l.id=r.checkpoint
+      LEFT JOIN checkpoints p ON p.id=? AND p.published=1
+      WHERE r.id=? AND l.id=? AND l.branch=? AND l.generation=? AND l.revision=? AND l.origin IS NULL
+    `).get(receipt.pre_checkpoint, id, receipt.post_checkpoint, branch, receipt.generation_id, receipt.revision);
+    if (typeof row?.receipt !== "string" || record.recovery.checkpoint !== receipt.post_checkpoint) return;
+    try {
+      if (canonicalJson(DurableReceipt.parse(parseJson(row.receipt))) !== canonicalJson(record)) return;
+      const image = this.publishedImage(receipt, receipt.post_checkpoint);
+      if (!image || image.checkpoint.generation_id !== receipt.generation_id || image.checkpoint.revision !== receipt.revision ||
+          image.checkpoint.policy_revision !== receipt.policy_revision) return;
+
+      let previous: TurnImage | undefined;
+      if (row.parent === null) {
+        // Initial publication replaces a private draft, so it has no published parent.
+        if (receipt.revision !== 1 || row.pre_published !== null) return;
+      } else {
+        if (row.parent !== receipt.pre_checkpoint) return;
+        previous = this.publishedImage(receipt, receipt.pre_checkpoint);
+        if (!previous || previous.checkpoint.generation_id !== receipt.generation_id ||
+            previous.checkpoint.revision !== receipt.revision - 1) return;
+      }
+
+      const events = this.receiptEventBodies(id, receipt.event_ids);
+      if (!events || !worldTransitionValid(previous, image, events, receipt.request_id)) return;
+      const priorWorld = previous?.snapshot.world;
+      const worldChanged = priorWorld !== undefined && (image.snapshot.world?.events.length ?? 0) > priorWorld.events.length;
+      return { image, previous, worldChanged };
+    } catch { return; }
+  }
+
+  private receiptEventBodies(request: string, ids: readonly string[]) {
+    const rows = this.db.prepare("SELECT id,body FROM events WHERE request=? LIMIT ?").all(request, ids.length + 1);
+    const stored = new Map(rows.map(({ id, body }) => [id, body]));
+    if (stored.size !== ids.length || new Set(ids).size !== ids.length) return;
+    return ids.map((id) => z.json().parse(parseJson(z.string().parse(stored.get(id)))));
   }
 
   draft(scope: Access): TurnImage | undefined {
@@ -231,18 +274,14 @@ export class SQLiteTurns {
       FROM ancestry a JOIN checkpoint_links l ON l.id=a.id JOIN checkpoints c ON c.id=a.id
       LEFT JOIN requests r ON r.checkpoint=a.id ORDER BY l.revision
     `).iterate(checkpoint.checkpoint_id);
-    const events = this.db.prepare("SELECT id,body FROM events WHERE request=?");
     try {
       let previous: TurnImage | undefined;
       for (const row of rows) {
         const current = TurnImage.parse(parseJson(z.string().parse(row.body)));
         if (current.checkpoint.checkpoint_id !== row.id || canonicalDigest(current) !== row.digest) return false;
         const receipt = row.receipt === null ? undefined : DurableReceipt.parse(parseJson(z.string().parse(row.receipt))).receipt;
-        const stored = new Map(receipt ? events.all(row.request ?? null).map(({ id, body }) => [id, body]) : []);
-        const ids = receipt?.event_ids ?? [];
-        if (stored.size !== ids.length || new Set(ids).size !== ids.length) return false;
-        const bodies = ids.map((id) => z.json().parse(parseJson(z.string().parse(stored.get(id)))));
-        if (!worldTransitionValid(previous, current, bodies, receipt?.request_id)) return false;
+        const bodies = receipt ? this.receiptEventBodies(z.string().parse(row.request), receipt.event_ids) : [];
+        if (!bodies || !worldTransitionValid(previous, current, bodies, receipt?.request_id)) return false;
         previous = current;
       }
       return previous?.checkpoint.checkpoint_id === checkpoint.checkpoint_id &&
@@ -558,7 +597,7 @@ export class SQLiteTurns {
 
 /** Synchronous atomic storage boundary for one active coordinator per database. */
 export type TurnStore = Pick<SQLiteTurns, "transaction" | "close" | "authority" | "head" | "initialize" |
-  "publishedImage" | "draft" | "initializeDraft" | "fixtureRecord" | "saveFixtureRecord" | "fixtureReceipts" | "hasCheckpoint" | "request" | "bind" | "claim" |
+  "receiptTransition" | "draft" | "initializeDraft" | "fixtureRecord" | "saveFixtureRecord" | "fixtureReceipts" | "hasCheckpoint" | "request" | "bind" | "claim" |
   "cancel" | "insertCheckpoint" | "publish" | "collect" | "isAncestor" | "restoreOrigin" | "checkpointHistoryValid" |
   "savedSession" | "savedImage" | "insertSave" | "recoveryRequest" | "restoreKey" | "bindRecovery" | "approveRestore" |
   "claimRestore" | "completeRecovery" | "publishRestore" | "stageStory" | "pendingStory" | "removeUpload" | "retainStory" | "storyFor" |

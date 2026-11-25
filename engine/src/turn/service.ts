@@ -569,15 +569,20 @@ export class TurnService {
       }
     }
     let facts = narration_facts;
-    if (record.receipt.visibility === "player" && narration_facts.some((note) => note.trimStart().startsWith("{"))) {
-      const image = this.store.publishedImage(record.receipt, record.receipt.post_checkpoint);
-      const world = image?.checkpoint.revision === revision && image.checkpoint.generation_id === generation_id &&
-        validateImage(image, this.executor).ok ? image.snapshot.world : undefined;
-      facts = narration_facts.flatMap((note) => {
-        if (!note.trimStart().startsWith("{")) return [note];
-        const visible = visibleWorldNote(note, world, revision);
-        return visible === undefined ? [] : [visible];
-      });
+    if (record.receipt.visibility === "player" && narration_facts.length > 0) {
+      const transition = this.store.receiptTransition(requestKey(record.receipt), record);
+      if (!transition || !validateImage(transition.image, this.executor).ok ||
+          (transition.previous && !validateImage(transition.previous, this.executor).ok)) {
+        facts = [];
+      } else if (transition.worldChanged) {
+        facts = narration_facts.flatMap((note) => {
+          const visible = visibleWorldNote(note, transition.image.snapshot.world, revision);
+          return visible === undefined ? [] : [visible];
+        });
+      } else {
+        // Preserve legacy prose and its existing exclusion of structured world notes.
+        facts = narration_facts.filter((note) => !note.trimStart().startsWith("{"));
+      }
     }
     return receiptView.parse({ ...base, native_output, event_ids, narration_facts: facts, warnings,
       rule_ids: record.rule_ids, capability_ids: record.capability_ids });
