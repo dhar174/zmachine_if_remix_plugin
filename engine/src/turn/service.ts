@@ -579,6 +579,9 @@ export class TurnService {
           const visible = visibleWorldNote(note, transition.image.snapshot.world, revision);
           return visible === undefined ? [] : [visible];
         });
+      } else {
+        // Preserve legacy prose and its existing exclusion of structured world notes.
+        facts = narration_facts.filter((note) => !note.trimStart().startsWith("{"));
       }
     }
     return receiptView.parse({ ...base, native_output, event_ids, narration_facts: facts, warnings,

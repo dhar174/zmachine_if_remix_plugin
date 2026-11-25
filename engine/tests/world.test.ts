@@ -9,14 +9,14 @@ import { canonicalDigest, canonicalJson } from "../src/contracts.ts";
 import type { ResolverOperation } from "../src/policy/resolver-contracts.ts";
 import { compileDirective } from "../src/policy/directive-compiler.ts";
 import { decodePortable, encodePortable, relocatePortable } from "../src/fixture/portable-session.ts";
-import { target as recoveryTarget } from "../src/fixture/session-contracts.ts";
+import { publicHead, target as recoveryTarget } from "../src/fixture/session-contracts.ts";
 import { buildImage, executeWorld, validateImage } from "../src/turn/execution.ts";
 import { resolvePolicy } from "../src/policy/policy-resolver.ts";
 import { fixtureTools, scopes } from "../src/mcp/tools.ts";
 import { SQLiteTurns, branchKey } from "../src/turn/sqlite-turns.ts";
 import { TurnService } from "../src/turn/service.ts";
 import { TurnImage } from "../src/turn/contracts.ts";
-import type { FaultPoint } from "../src/turn/contracts.ts";
+import type { DurableReceipt, FaultPoint } from "../src/turn/contracts.ts";
 import { remixStateRef } from "../src/world/model.ts";
 import { fixtureImage } from "../src/fixture/synthetic-world.ts";
 import { openNativeFixture } from "../src/native/executor.ts";
@@ -354,7 +354,7 @@ void test("existing combined restore, SQLite reopen, and signed portable history
   await fx.commit(fx.request("created-room", [{ kind: "overlay.create", entity_kind: "location", entity: "remix:stall",
     region: "region:market", label: "Stall" }]));
   const text = "Hello";
-  await fx.commit(fx.request("said", [{ kind: "speech.record", text }], "PLAY", text));
+  const original = (await fx.commit(fx.request("said", [{ kind: "speech.record", text }], "PLAY", text))).receipt;
   const snapshot = fx.head();
   const { owner_id } = fx.access;
   const target = (request_id: string) => recoveryTarget.strip().parse({ ...fx.head().snapshot.head, request_id });
@@ -420,6 +420,14 @@ void test("existing combined restore, SQLite reopen, and signed portable history
   assert.equal(decodePortable(encodePortable(extra, key)!, owner_id, key), undefined);
   const repeated = await fx.commit(fx.request("said", [{ kind: "speech.record", text }], "PLAY", text));
   assert.notEqual(repeated.receipt.generation_id, snapshot.checkpoint.generation_id);
+  const receipts = take(fx.service.inspectFixture(fx.access, { kind: "history" })).receipts;
+  for (const { generation_id, request_id, narration_facts } of [original, repeated.receipt]) {
+    const exact = take(fx.service.inspectFixture(fx.access, { kind: "receipt", generation_id, request_id }));
+    assert.equal(narration_facts.length, 1);
+    assert.deepEqual(exact.receipts[0]?.narration_facts, narration_facts);
+    assert.deepEqual(receipts.find((receipt) => receipt.generation_id === generation_id &&
+      receipt.request_id === request_id)?.narration_facts, narration_facts);
+  }
   const speeches = fx.head().snapshot.world!.events.filter(({ kind }) => kind === "speech");
   assert.equal(speeches.length, 2);
   assert.notEqual(speeches[0]?.id, speeches[1]?.id);
@@ -708,7 +716,7 @@ void test("world-bearing seeded Z5 imports into fresh SQLite and continues nativ
   const key = Buffer.alloc(32, 2);
   const source = setup(undefined, Date.now, { state: take(await openNativeFixture(owner, story)), story, key });
   t.after(() => source.close());
-  await source.commit(source.request("said", [{ kind: "speech.record", text: "said" }]));
+  const original = (await source.commit(source.request("said", [{ kind: "speech.record", text: "said" }]))).receipt;
   const speech = source.head().snapshot.world!.events.find(({ kind }) => kind === "speech")!;
   await source.commit(source.request("believed", [{ kind: "belief.update", character: "remix:guard", evidence: speech.id }]));
   const image = source.head();
@@ -728,6 +736,16 @@ void test("world-bearing seeded Z5 imports into fresh SQLite and continues nativ
   assert.deepEqual(imported.snapshot.world, image.snapshot.world);
   assert.notEqual(imported.checkpoint.generation_id, image.checkpoint.generation_id);
   assert.equal(store.checkpointHistoryValid(imported), true);
+  const importedReceipts = take(service.inspectFixture(access, { kind: "history" })).receipts;
+  const relocated = importedReceipts.find(({ request_id }) => request_id === original.request_id);
+  assert.ok(relocated);
+  assert.notEqual(relocated.generation_id, original.generation_id);
+  assert.notDeepEqual(relocated.event_ids, original.event_ids);
+  assert.equal(original.narration_facts.length, 1);
+  assert.deepEqual(relocated.narration_facts, original.narration_facts);
+  const exact = take(service.inspectFixture(access, { kind: "receipt", generation_id: relocated.generation_id,
+    request_id: relocated.request_id }));
+  assert.deepEqual(exact.receipts, [relocated]);
   const target = { ...received.head, request_id: recoveryTarget.shape.request_id.parse("request:native-after-import") };
   const action = { kind: "play", input: { kind: "line", text: "look" } } as const;
   const prepared = take(service.prepareFixture(access, target, action, false));
@@ -742,7 +760,10 @@ void test("world-bearing seeded Z5 imports into fresh SQLite and continues nativ
   const overlay = take(service.prepareTurn(access, { ...head, input: { kind: "line", text }, intent: "play" },
     { ...head, mode: "PLAY", operations: [{ kind: "speech.record", text }], declared_effects: [], amendment: null }));
   assert.equal(overlay.kind, "prepared");
-  take(await service.commitTurn(access, { ...head, input: { kind: "line", text }, intent: "play" }, overlay.handle.candidate_id));
+  const record = take(await service.commitTurn(access, { ...head, input: { kind: "line", text }, intent: "play" },
+    overlay.handle.candidate_id));
+  assert.equal(record.receipt.narration_facts.length, 1);
+  assert.deepEqual(service.viewFixtureReceipt(record).narration_facts, record.receipt.narration_facts);
   const continued = store.head(access)!;
   assert.equal(continued.snapshot.world!.events.at(-1)?.kind, "speech");
   assert.equal(store.checkpointHistoryValid(continued), true);
@@ -821,6 +842,9 @@ void test("#87 stored observations require the player and observer in the same h
   const fact = world.facts.find((candidate) => candidate.subject === remote && candidate.field === field);
   assert.ok(fact);
   Object.assign(observed, { observer: remote, subject: remote, room: "remix:vault", fact_source: fact.source });
+  const player = world.entities.find(({ id }) => id === world.player);
+  assert.equal(player?.kind, "character");
+  assert.notEqual(player.room, observed.room);
   entry.events[0] = observed;
   entry.image.checkpoint.remix_state_ref = remixStateRef(entry.image.snapshot.entities, world);
   const key = Buffer.alloc(32, 7);
@@ -851,48 +875,64 @@ void test("#88 Play narration uses the committed turn for history, exact lookup,
   const { session_id, branch_id } = fx.access;
   const ref = { version: "1.0.0", session_id, branch_id };
   const hidden = "An unseen guard is guarding the vault.";
-  const observedNotes: { expected: string[]; history: string[] | undefined; exact: string[] | undefined; prepare: string[]; commit: string[] }[] = [];
   const overwrite = db.prepare("UPDATE requests SET receipt=json_set(receipt, '$.receipt.narration_facts', json(?)) " +
     "WHERE json_extract(receipt, '$.receipt.request_id')=?");
-  for (const variant of ["plain", "mixed", "missing-event"] as const) {
+
+  async function assertNarration(envelope: unknown, stage: ReturnType<typeof fx.prepare>, receipt: DurableReceipt["receipt"],
+    text: string, expected: string[]) {
+    const { generation_id, request_id } = receipt;
+    const history = take(await tools.inspect_session.run(owner, { ...ref, query: { kind: "history" } }));
+    const exact = take(await tools.inspect_session.run(owner, { ...ref, query: { kind: "receipt", generation_id, request_id } }));
+    const request = { version: "1.0.0", target: recoveryTarget.strip().parse(envelope),
+      action: { kind: "play", input: { kind: "line", text } } };
+    const again = take(await tools.prepare_turn.run(owner, request));
+    const replay = take(await tools.commit_turn.run(owner, { ...request, candidate_id: stage.handle.candidate_id,
+      diff_digest: stage.diff_digest }));
+    assert.equal(again.status, "COMMITTED");
+    const found = history.receipts.find((view) => view.request_id === request_id);
+    for (const view of [found, exact.receipts[0], again.receipt, replay.receipt]) {
+      assert.equal(view?.request_id, request_id);
+      assert.equal(view.revision, receipt.revision);
+      assert.deepEqual(view.event_ids, receipt.event_ids);
+      assert.deepEqual(view.narration_facts, expected, request_id);
+    }
+  }
+
+  for (const variant of ["plain", "mixed", "missing-event", "wrong-parent", "restore-origin"] as const) {
     const text = "Hello " + variant;
     const req = fx.request(variant, [{ kind: "speech.record", text }], "PLAY", text);
     const prepared = fx.prepare(req);
-    const { candidate_id } = prepared.handle;
-    const { diff_digest } = prepared;
-    const committed = take(await fx.service.commitTurn(fx.access, req.envelope, candidate_id));
-    const { request_id, generation_id, narration_facts } = committed.receipt;
+    const { receipt } = take(await fx.service.commitTurn(fx.access, req.envelope, prepared.handle.candidate_id));
+    const { request_id, narration_facts, post_checkpoint } = receipt;
     assert.equal(narration_facts.length, 1);
     assert.equal(overwrite.run(JSON.stringify(variant === "plain" ? [hidden] : [hidden, ...narration_facts]), request_id).changes, 1);
     if (variant === "missing-event") {
-      const eventId = committed.receipt.event_ids[0];
+      const eventId = receipt.event_ids[0];
       assert.ok(eventId);
       assert.equal(db.prepare("DELETE FROM events WHERE id=?").run(eventId).changes, 1);
     }
-
-    const history = take(await tools.inspect_session.run(owner, { ...ref, query: { kind: "history" } }));
-    const exact = take(await tools.inspect_session.run(owner, { ...ref, query: { kind: "receipt", generation_id, request_id } }));
-    const request = { version: "1.0.0", target: recoveryTarget.strip().parse(req.envelope),
-      action: { kind: "play", input: { kind: "line", text } } };
-    const again = take(await tools.prepare_turn.run(owner, request));
-    const replay = take(await tools.commit_turn.run(owner, { ...request, candidate_id, diff_digest }));
-    assert.equal(again.status, "COMMITTED");
-    assert.deepEqual(replay.receipt.request_id, request_id);
-    assert.deepEqual(exact.receipts.map((receipt) => receipt.request_id), [request_id]);
-    observedNotes.push({ expected: variant === "mixed" ? narration_facts : [],
-      history: history.receipts.find((receipt) => receipt.request_id === request_id)?.narration_facts,
-      exact: exact.receipts[0]?.narration_facts, prepare: again.receipt.narration_facts, commit: replay.receipt.narration_facts });
+    if (variant === "wrong-parent") {
+      assert.equal(db.prepare("UPDATE checkpoint_links SET parent=? WHERE id=?")
+        .run(fx.image.checkpoint.checkpoint_id, post_checkpoint).changes, 1);
+    }
+    if (variant === "restore-origin") {
+      const origin = publicHead.strip().parse(req.envelope);
+      assert.equal(db.prepare("UPDATE checkpoint_links SET origin=? WHERE id=?")
+        .run(canonicalJson(origin), post_checkpoint).changes, 1);
+    }
+    await assertNarration(req.envelope, prepared, receipt, text, variant === "mixed" ? narration_facts : []);
   }
 
   const native = play("request:verified-native-prose", fx.head(), "look");
   const stage = fx.prepare(native);
-  const result = take(await fx.service.commitTurn(fx.access, native.envelope, stage.handle.candidate_id));
+  const { receipt } = take(await fx.service.commitTurn(fx.access, native.envelope, stage.handle.candidate_id));
+  const expected = ["The room was observed."];
   assert.ok(fx.head().snapshot.world);
-  assert.deepEqual(result.receipt.narration_facts, ["The room was observed."]);
-  assert.deepEqual(fx.service.viewFixtureReceipt(result).narration_facts, ["The room was observed."]);
-  for (const { expected, history, exact, prepare, commit } of observedNotes) {
-    assert.deepEqual({ history, exact, prepare, commit }, { history: expected, exact: expected, prepare: expected, commit: expected });
-  }
+  assert.deepEqual(receipt.narration_facts, expected);
+  const injected = canonicalJson({ kind: "overlay.create", entity: "remix:distant-guard", entity_kind: "character",
+    label: "Unseen guard", room: "remix:vault" });
+  assert.equal(overwrite.run(JSON.stringify([...expected, injected]), receipt.request_id).changes, 1);
+  await assertNarration(native.envelope, stage, receipt, "look", expected);
 });
 
 void test("#89 portable decode rejects one external receipt event ID reused by separate turns", async (t) => {
