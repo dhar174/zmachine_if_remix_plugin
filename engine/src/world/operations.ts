@@ -3,7 +3,7 @@ import { canonicalDigest, canonicalJson } from "../contracts.ts";
 import type { EffectPlan, EffectRef, EntityProjection, PolicyAction, ResolverOperation, ResolverSnapshot } from "../policy/resolver-contracts.ts";
 import { World, activeFact, eligibleFact, isHolder, relationshipTarget, validWorld, worldView } from "./model.ts";
 import type { WorldEvent } from "./model.ts";
-import { ownedByWorld, projectWorld } from "./projection.ts";
+import { ownedByWorld, projectWorld, visibleWorldNote, worldInspection, worldTargetVisible } from "./projection.ts";
 
 type PlanInput = Pick<EffectPlan, "operations" | "head" | "proposal_digest" | "request_id" | "world_mode">;
 type Intent = { request: string; proposal: string; revision: number; index: number; mode: ResolverSnapshot["mode"] };
@@ -62,9 +62,17 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Re
   let event: WorldEvent | undefined;
   const reads: { id: string; field: string }[] = [];
   const { entities, events, listenersAt, observable, roomOf, rootHolder } = worldView(base);
-  const playerRoom = roomOf(base.player);
+  const playerRoom = roomOf(base.player, intent.revision);
   function read(id: string, field = "entity:record") {
     reads.push({ id, field });
+  }
+  function readPlacement(id: string) {
+    let entity = entities.get(id);
+    for (let depth = 0; entity?.kind === "item"; depth++) {
+      if (depth >= 16) throw invalid("The containment path cannot be verified.");
+      read(entity.id, "inventory:holder");
+      entity = entities.get(activeFact(base, entity.id, "inventory:holder")?.value ?? "");
+    }
   }
   function lookup(id: string) {
     if (id.startsWith("native:")) throw missing("The requested operation needs a verified native or cross-owner capability.");
@@ -91,11 +99,12 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Re
   switch (operation.kind) {
     case "inspect.entity": {
       const entity = before.find(({ id }) => id === operation.entity_id);
-      const exit = base.exits.find(({ id }) => id === operation.entity_id);
-      const inScene = exit ? exit.from === playerRoom : roomOf(operation.entity_id) === playerRoom;
-      if (!entity || intent.mode === "PLAY" && !inScene) throw unclear("The target is not available for inspection.");
-      const effects = entity.surfaces.filter(({ field }) => intent.mode === "EDITOR" ||
-        (field !== "world:private_note" && field !== "characterization:beliefs" && !field.startsWith("dialogue:")))
+      const editor = intent.mode === "EDITOR";
+      if (!entity || !editor && !worldTargetVisible(base, operation.entity_id, intent.revision)) {
+        throw unclear("The target is not available for inspection.");
+      }
+      const visible = new Set(worldInspection(base, entity.id, editor, intent.revision).map(({ field }) => field));
+      const effects = entity.surfaces.filter(({ field }) => visible.has(field))
         .map((surface) => ({ ref: { entity_id: entity.id, field: surface.field, change: "read" as const }, entity, surface }));
       return { next: base, effects, action, event };
     }
@@ -113,6 +122,7 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Re
         next.entities.push({ ...common, kind, room });
       } else if (kind === "item" && holder && room === undefined) {
         if (!isHolder(lookup(holder))) throw invalid("The initial item holder is ineligible.");
+        readPlacement(holder);
         const location = entities.get(roomOf(holder) ?? "");
         if (location?.kind !== "location" || location.region !== region) throw invalid("The initial holder is outside the declared region.");
         next.entities.push({ ...common, kind, container: container ?? false });
@@ -152,6 +162,8 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Re
         throw invalid("Inventory transfer requires a distinct eligible item and two eligible holders.");
       }
       if (activeFact(base, item.id, "inventory:holder")?.value !== from.id) throw unclear("The item is no longer held by the source.");
+      readPlacement(from.id);
+      readPlacement(to.id);
       if (roomOf(from.id) !== roomOf(to.id)) throw missing("Transfer between scenes is unsupported.");
       if (intent.mode === "PLAY") {
         const source = rootHolder(from.id);
@@ -160,6 +172,7 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Re
           throw missing("Play transfers require the player to take, drop, or hand off the item.");
         }
       }
+      if (item.container) read(item.id, "inventory:contents");
       if (base.facts.some(({ field, value, until }) => field === "inventory:holder" && value === item.id && until === null)) {
         throw missing("Moving a nonempty container is unsupported.");
       }
@@ -169,7 +182,7 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Re
     }
     case "speech.record": {
       if (intent.mode !== "PLAY" || !playerRoom) throw missing("Speech requires a player in an eligible overlay scene.");
-      const listeners = listenersAt(base.player, playerRoom, snapshot.head.expected_revision);
+      const listeners = listenersAt(base.player, playerRoom, intent.revision);
       read(base.player);
       read(playerRoom, "identity:occupants");
       listeners.forEach((listener) => read(listener));
@@ -182,10 +195,13 @@ export function evaluateWorldOperation(snapshot: ResolverSnapshot, operation: Re
       lookup(subject);
       const fact = activeFact(base, subject, field);
       if (intent.mode !== "PLAY" || witness.kind !== "character" || !playerRoom || witness.room !== playerRoom ||
-          !fact || !observable(fact, playerRoom, snapshot.head.expected_revision)) {
+          !fact || !observable(fact, playerRoom, intent.revision)) {
         throw unclear("The requested fact is not observable by that character in the active scene.");
       }
       read(subject, field);
+      readPlacement(subject);
+      const target = relationshipTarget(field);
+      if (target) readPlacement(target);
       event = { ...eventBase, kind: "observation", observer, room: witness.room, subject, field, fact_source: fact.source };
       break;
     }
@@ -258,5 +274,9 @@ export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput) {
       notes.push(canonicalJson(operation));
     }
   }
-  return { world: current, events, facts: notes };
+  const facts = plan.world_mode === "EDITOR" ? notes : notes.flatMap((note) => {
+    const visible = visibleWorldNote(note, current, plan.head.expected_revision + 1);
+    return visible === undefined ? [] : [visible];
+  });
+  return { world: current, events, facts };
 }

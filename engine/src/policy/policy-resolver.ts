@@ -5,7 +5,7 @@ import type { ActiveRule, DecisionTrace, EffectPlan, PolicyResolverPort, Resolut
 import { deriveFootprint, effectKey, ResolutionProblem } from "./resolver-effects.ts";
 import type { Footprint, ResolvedEffect } from "./resolver-effects.ts";
 import { validWorld } from "../world/model.ts";
-import { evaluateWorldOperation, usesWorld, WorldOperationError } from "../world/operations.ts";
+import { evaluateWorldOperation, runWorldPlan, usesWorld, WorldOperationError } from "../world/operations.ts";
 
 const ordered = (ids: Iterable<string>) => [...new Set(ids)].sort();
 const same = (left: Parameters<typeof canonicalJson>[0], right: Parameters<typeof canonicalJson>[0]) =>
@@ -294,9 +294,11 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean):
       operation.kind === "inspect.entity" || operation.kind === "observation.record" || operation.kind === "belief.update")
       ? "none" : operations.some(({ operation }) => operation.kind === "native.line" || operation.kind === "native.character")
         ? "native" : "overlay";
-    return { ok: true, plan: { version: "1.0.0", head, request_id: proposal.request_id, proposal_digest: digest,
+    const plan: EffectPlan = { version: "1.0.0", head, request_id: proposal.request_id, proposal_digest: digest,
       route, time, operations, amendment: amendment.candidate, trace: trace(),
-      ...(worldOperations > 0 ? { world_mode: snapshot.mode } : {}) } };
+      ...(worldOperations > 0 ? { world_mode: snapshot.mode } : {}) };
+    if (plan.world_mode && inspections === 0) runWorldPlan(snapshot, plan);
+    return { ok: true, plan };
   } catch (error) {
     if (error instanceof WorldOperationError) {
       return { ok: false, error: { status: error.status, reason: "remix_world", message: error.message, retry: "none" }, trace: trace() };

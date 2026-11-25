@@ -1,6 +1,6 @@
 
 import { z } from "zod";
-import { canonicalDigest, canonicalJson } from "../contracts.ts";
+import { canonicalDigest } from "../contracts.ts";
 import type { CanonicalValue } from "../contracts.ts";
 
 const remixId = z.string().regex(/^remix:[A-Za-z0-9._:-]+$/).max(200);
@@ -61,7 +61,9 @@ export const relationshipTarget = (field: string): string | undefined =>
 export function eligibleFact(world: World, subject: string, field: string, value: string): boolean {
   if (field === "world:description" || field === "world:private_note") return true;
   const target = relationshipTarget(field);
-  return target !== undefined && target !== subject && world.entities.some(({ id }) => id === target) &&
+  return target !== undefined && target !== subject &&
+    world.entities.some(({ id, kind }) => id === subject && kind === "character") &&
+    world.entities.some(({ id, kind }) => id === target && kind === "character") &&
     (value === "friend" || value === "acquaintance");
 }
 
@@ -172,13 +174,13 @@ export function validWorld(world: World, revision: number, regions: readonly str
   for (const record of world.events) {
     if (record.revision > revision || record.kind === "change" && !changeSources.has(record.id)) return false;
     if (record.kind === "speech" && (record.speaker !== world.player ||
-        !atEntity(record.speaker, record.revision, "character") || roomOf(record.speaker) !== record.room ||
+        !atEntity(record.speaker, record.revision, "character") || roomOf(record.speaker, record.revision) !== record.room ||
         record.listeners.join("/") !== listenersAt(record.speaker, record.room, record.revision).join("/"))) return false;
     if (record.kind === "observation") {
       const evidence = world.facts.find((fact) => fact.subject === record.subject && fact.field === record.field &&
         fact.source === record.fact_source && containsRevision(fact, record.revision));
       if (!evidence || !atEntity(record.observer, record.revision, "character") ||
-          roomOf(record.observer) !== record.room || !observable(evidence, record.room, record.revision)) return false;
+          roomOf(record.observer, record.revision) !== record.room || !observable(evidence, record.room, record.revision)) return false;
     }
   }
   const distinctBeliefs = new Set<string>();
@@ -193,23 +195,4 @@ export function validWorld(world: World, revision: number, regions: readonly str
     distinctBeliefs.add(key);
   }
   return true;
-}
-
-
-/** A world event has its own stable identity inside a relocatable receipt row. */
-export function worldEventsMatch(
-  expected: Iterable<WorldEvent>,
-  rows: Iterable<{ body: unknown; revision: unknown; request: unknown }>,
-): boolean {
-  const pending = new Map(Array.from(expected).filter((record) => record.kind !== "seed").map((record) => [record.id, record]));
-  for (const { body, revision, request } of rows) {
-    if (typeof body !== "object" || body === null || !("id" in body) ||
-        typeof body.id !== "string" || !body.id.startsWith("world-event:")) continue;
-    const record = pending.get(body.id);
-    const stored = event.safeParse(body);
-    if (!stored.success || !record || record.revision !== revision || record.request !== request ||
-        canonicalJson(record) !== canonicalJson(stored.data)) return false;
-    pending.delete(body.id);
-  }
-  return pending.size === 0;
 }

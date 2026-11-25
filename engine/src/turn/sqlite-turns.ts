@@ -9,7 +9,7 @@ import type { Access } from "./contracts.ts";
 import { recoveryResult, restoreIntent, savedSession } from "../fixture/recovery-contracts.ts";
 import type { RestoreIntent, RestoreResult, SavedSession } from "../fixture/recovery-contracts.ts";
 import { publicHead, sessionRef } from "../fixture/session-contracts.ts";
-import { worldEventsMatch } from "../world/model.ts";
+import { worldTransitionValid } from "../world/history.ts";
 import { importedSession, portableBytes, portableEntry, portableHistoryLimit } from "../fixture/portable-session.ts";
 import type { PortableEntry, UploadPurpose } from "../fixture/portable-session.ts";
 
@@ -94,7 +94,7 @@ export class SQLiteTurns {
         // Keep branch freshness and one-turn tombstones. Restart never resurrects Editor mode or permits.
         this.db.exec("UPDATE authority SET value=json_set(value,'$.mode','PLAY','$.epoch',json_extract(value,'$.epoch')+1) WHERE area='states'");
         this.db.exec("DELETE FROM authority WHERE area IN ('leases','candidates','requestCandidates')");
-        this.db.exec("UPDATE requests SET stage=NULL WHERE receipt IS NULL AND json_extract(stage,'$.editor')=1");
+        this.db.exec("UPDATE requests SET stage=NULL,cancelled=2 WHERE receipt IS NULL AND cancelled=0 AND json_extract(stage,'$.editor')=1");
       }, true);
     } catch (error) {
       this.db.close();
@@ -147,6 +147,16 @@ export class SQLiteTurns {
     return image;
   }
 
+  publishedImage(scope: Access, checkpointId: string): TurnImage | undefined {
+    const row = this.db.prepare("SELECT body,digest FROM checkpoints WHERE id=? AND published=1").get(checkpointId);
+    if (typeof row?.body !== "string") return;
+    try {
+      const image = TurnImage.parse(parseJson(row.body));
+      if (image.checkpoint.checkpoint_id === checkpointId && branchKey(image.snapshot.head) === branchKey(scope) &&
+          canonicalDigest(image) === row.digest) return image;
+    } catch { return; }
+  }
+
   draft(scope: Access): TurnImage | undefined {
     const row = this.db.prepare("SELECT body,digest FROM fixture_drafts WHERE branch=?").get(branchKey(scope));
     if (!row) return undefined;
@@ -194,9 +204,11 @@ export class SQLiteTurns {
       LEFT JOIN checkpoint_links l ON l.id=a.id
       LEFT JOIN checkpoints c ON c.id=a.id AND c.published=1
       LEFT JOIN checkpoint_links p ON p.id=l.parent
+      LEFT JOIN checkpoints prior ON prior.id=l.parent
       LEFT JOIN requests r ON r.checkpoint=a.id
       WHERE l.id IS NULL OR c.id IS NULL OR l.branch IS NOT ?
-        OR (l.parent IS NOT NULL AND (p.id IS NULL OR p.revision >= l.revision))
+        OR (l.parent IS NOT NULL AND (p.id IS NULL OR p.revision >= l.revision
+          OR json_type(c.body, '$.snapshot.world') IS NOT json_type(prior.body, '$.snapshot.world')))
         OR (r.id IS NULL AND l.parent IS NOT NULL AND l.origin IS NULL)
         OR (r.id IS NOT NULL AND (r.receipt IS NULL OR
           json_extract(r.receipt,'$.receipt.post_checkpoint') IS NOT a.id OR
@@ -214,14 +226,28 @@ export class SQLiteTurns {
       if (typeof receipt !== "string" || !DurableReceipt.safeParse(parseJson(receipt)).success) return false;
     }
     if (!snapshot.world) return true;
-    const eventRows = this.db.prepare(lineage + `
-      SELECT e.body, l.revision, json_extract(r.receipt, '$.receipt.request_id') AS request
-      FROM ancestry a JOIN checkpoint_links l ON l.id=a.id JOIN requests r ON r.checkpoint=a.id
-      JOIN events e ON e.request=r.id
-      WHERE EXISTS(SELECT 1 FROM json_each(r.receipt, '$.receipt.event_ids') ids WHERE ids.value=e.id)
-    `).all(checkpoint.checkpoint_id);
-    return worldEventsMatch(snapshot.world.events, eventRows.map(({ body, revision, request }) =>
-      ({ body: parseJson(z.string().parse(body)), revision, request })));
+    const rows = this.db.prepare(lineage + `
+      SELECT c.id,c.body,c.digest,r.id AS request,r.receipt
+      FROM ancestry a JOIN checkpoint_links l ON l.id=a.id JOIN checkpoints c ON c.id=a.id
+      LEFT JOIN requests r ON r.checkpoint=a.id ORDER BY l.revision
+    `).iterate(checkpoint.checkpoint_id);
+    const events = this.db.prepare("SELECT id,body FROM events WHERE request=?");
+    try {
+      let previous: TurnImage | undefined;
+      for (const row of rows) {
+        const current = TurnImage.parse(parseJson(z.string().parse(row.body)));
+        if (current.checkpoint.checkpoint_id !== row.id || canonicalDigest(current) !== row.digest) return false;
+        const receipt = row.receipt === null ? undefined : DurableReceipt.parse(parseJson(z.string().parse(row.receipt))).receipt;
+        const stored = new Map(receipt ? events.all(row.request ?? null).map(({ id, body }) => [id, body]) : []);
+        const ids = receipt?.event_ids ?? [];
+        if (stored.size !== ids.length || new Set(ids).size !== ids.length) return false;
+        const bodies = ids.map((id) => z.json().parse(parseJson(z.string().parse(stored.get(id)))));
+        if (!worldTransitionValid(previous, current, bodies, receipt?.request_id)) return false;
+        previous = current;
+      }
+      return previous?.checkpoint.checkpoint_id === checkpoint.checkpoint_id &&
+        canonicalDigest(previous) === canonicalDigest(image);
+    } catch { return false; }
   }
 
   savedSession(scope: Access, id: string): SavedSession | undefined {
@@ -532,7 +558,7 @@ export class SQLiteTurns {
 
 /** Synchronous atomic storage boundary for one active coordinator per database. */
 export type TurnStore = Pick<SQLiteTurns, "transaction" | "close" | "authority" | "head" | "initialize" |
-  "draft" | "initializeDraft" | "fixtureRecord" | "saveFixtureRecord" | "fixtureReceipts" | "hasCheckpoint" | "request" | "bind" | "claim" |
+  "publishedImage" | "draft" | "initializeDraft" | "fixtureRecord" | "saveFixtureRecord" | "fixtureReceipts" | "hasCheckpoint" | "request" | "bind" | "claim" |
   "cancel" | "insertCheckpoint" | "publish" | "collect" | "isAncestor" | "restoreOrigin" | "checkpointHistoryValid" |
   "savedSession" | "savedImage" | "insertSave" | "recoveryRequest" | "restoreKey" | "bindRecovery" | "approveRestore" |
   "claimRestore" | "completeRecovery" | "publishRestore" | "stageStory" | "pendingStory" | "removeUpload" | "retainStory" | "storyFor" |

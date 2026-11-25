@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { canonicalJson } from "../contracts.ts";
 
 import type { Json } from "../contracts.ts";
 import type { EntityProjection } from "../policy/resolver-contracts.ts";
@@ -59,9 +61,19 @@ export function projectWorld(world: World): EntityProjection[] {
 }
 
 /** Current explicit inspection. Historical and model-context selection are separate. */
-export function worldInspection(world: World, target: string, editor: boolean): { field: string; value: Json }[] {
-  const facts: { field: string; value: Json }[] = world.facts.filter(({ subject, until, visibility }) => subject === target && until === null &&
-    (visibility === "player" || editor)).map((fact) => ({ field: fact.field, value: fact }));
+export function worldTargetVisible(world: World, target: string, revision: number): boolean {
+  const { roomOf } = worldView(world);
+  const scene = roomOf(world.player, revision);
+  const exit = world.exits.find(({ id }) => id === target);
+  return scene !== undefined && (exit ? exit.from === scene : roomOf(target, revision) === scene);
+}
+
+export function worldInspection(world: World, target: string, editor: boolean, revision: number): { field: string; value: Json }[] {
+  const { roomOf, observable } = worldView(world);
+  const scene = roomOf(world.player, revision);
+  if (!editor && !worldTargetVisible(world, target, revision)) return [];
+  const facts: { field: string; value: Json }[] = world.facts.filter((fact) => fact.subject === target && fact.until === null &&
+    (editor || scene !== undefined && observable(fact, scene, revision))).map((fact) => ({ field: fact.field, value: fact }));
   const row = projectWorld(world).find(({ id }) => id === target);
   if (!row) return [];
   if (editor) {
@@ -82,4 +94,54 @@ export function worldInspection(world: World, target: string, editor: boolean): 
 
 export function ownedByWorld(world: World, id: string): boolean {
   return world.entities.some((record) => record.id === id) || world.exits.some((record) => record.id === id);
+}
+
+
+const worldNote = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("speech"), speaker: z.string(), text: z.string() }),
+  z.strictObject({ kind: z.literal("overlay.create"), entity: z.string(), entity_kind: z.enum(["location", "character", "item"]),
+    label: z.string(), room: z.string().optional(), holder: z.string().optional() }),
+  z.strictObject({ kind: z.literal("overlay.connect"), connection: z.string(), from: z.string(), to: z.string() }),
+  z.strictObject({ kind: z.literal("inventory.transfer"), item: z.string(), from: z.string(), to: z.string() }),
+]);
+
+/** Revalidate structured narration against the revision that produced it. */
+export function visibleWorldNote(text: string, world: World | undefined, revision: number): string | undefined {
+  if (!world) return;
+  let raw: unknown;
+  try { raw = JSON.parse(text); } catch { return; }
+  const parsed = worldNote.safeParse(raw);
+  if (!parsed.success) return;
+  const note = parsed.data;
+  const { entities, events, roomOf } = worldView(world);
+  const scene = roomOf(world.player, revision);
+  if (!scene) return;
+  const createdAt = (source: string) => events.get(source)?.revision === revision;
+  switch (note.kind) {
+    case "speech":
+      if (!world.events.some((event) => event.kind === "speech" && event.revision === revision && event.room === scene &&
+          event.speaker === note.speaker && event.text === note.text)) return;
+      break;
+    case "overlay.create": {
+      const entity = entities.get(note.entity);
+      if (!entity || entity.kind === "location" || entity.kind !== note.entity_kind || entity.label !== note.label ||
+          !createdAt(entity.source) || roomOf(entity.id, revision) !== scene ||
+          (entity.kind === "character" ? note.room !== entity.room || note.holder !== undefined :
+            note.room !== undefined || !world.facts.some((fact) => fact.subject === entity.id &&
+              fact.field === "inventory:holder" && fact.from === revision && fact.value === note.holder))) return;
+      break;
+    }
+    case "overlay.connect":
+      if (!world.exits.some((exit) => exit.id === note.connection && exit.from === scene && exit.from === note.from &&
+          exit.to === note.to && createdAt(exit.source))) return;
+      break;
+    case "inventory.transfer": {
+      if ([note.item, note.from, note.to].some((id) => roomOf(id, revision) !== scene)) return;
+      const placements = world.facts.filter((fact) => fact.subject === note.item && fact.field === "inventory:holder");
+      if (!placements.some((fact) => fact.until === revision && fact.value === note.from) ||
+          !placements.some((fact) => fact.from === revision && fact.value === note.to)) return;
+      break;
+    }
+  }
+  return canonicalJson(note);
 }
