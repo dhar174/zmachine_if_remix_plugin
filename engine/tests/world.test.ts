@@ -120,6 +120,29 @@ void test("A01/A36 speech and belief require real participation and preserve obj
   assert.equal(canonicalJson(TurnImage.parse(JSON.parse(canonicalJson(fx.head())))), canonicalJson(fx.head()));
 });
 
+void test("arrival and speech require separate turns, and the newcomer hears the later speech", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  const newcomer = { kind: "overlay.create", entity_kind: "character", entity: "remix:newcomer",
+    room: "remix:market", region: "region:market", label: "Newcomer" } as const;
+  const speech = { kind: "speech.record", text: "Welcome" } as const;
+  const before = fx.head();
+  const combined = fx.request("arrive-and-hear", [newcomer, speech], "PLAY", speech.text);
+  const rejected = fx.service.prepareTurn(fx.access, combined.envelope, combined.proposal);
+  assert.ok(!rejected.ok);
+  assert.equal(rejected.error.status, "NEEDS_CLARIFICATION");
+  assert.deepEqual(fx.head(), before);
+
+  const arrival = await fx.commit(fx.request("arrive", [newcomer]));
+  const welcome = await fx.commit(fx.request("welcome", [speech], "PLAY", speech.text));
+  assert.equal(welcome.receipt.revision, arrival.receipt.revision + 1);
+  const event = fx.head().snapshot.world!.events.at(-1);
+  assert.equal(event?.kind, "speech");
+  assert.equal(event.revision, welcome.receipt.revision);
+  assert.equal(event.text, speech.text);
+  assert.deepEqual(event.listeners, ["remix:guard", newcomer.entity]);
+});
+
 void test("A19/A30 generated identities and topology remain atomic through faults and concurrent retries", async (t) => {
   let fail = true;
   const fx = setup((point) => { if (fail && point === "before_commit") throw new Error("injected publication fault"); });
