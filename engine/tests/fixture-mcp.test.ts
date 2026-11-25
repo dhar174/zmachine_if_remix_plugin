@@ -331,7 +331,10 @@ void test("combined restore through MCP creates a fresh Play generation and reta
     const committed = take(await fixture.service.commitTurn(head, envelope, candidate_id, { ...permit, reference: renewed }));
     assert.equal(committed.receipt.status, "COMMITTED");
     const laterHistory = inspection.parse(await fixture.call("inspect_session", { ...ref, query: { kind: "history" } }));
-    assert.deepEqual(laterHistory.receipts, [fixture.service.viewFixtureReceipt(committed), ...history.receipts]);
+    assert.deepEqual(laterHistory.receipts.map(({ request_id }) => request_id), ["request:fresh-editor", "request:initial"]);
+    assert.deepEqual(laterHistory.receipts[0], fixture.service.viewFixtureReceipt(committed));
+    assert.deepEqual(history.receipts[0]?.event_ids, []);
+    assert.ok(laterHistory.receipts[1]?.event_ids.length);
   } finally {
     await fixture.close();
     rmSync(directory, { recursive: true, force: true });
@@ -1318,7 +1321,7 @@ void test("all eight MCP tools use scoped loopback access, exact browser approva
       const interpretation = { version, context_digest: stored.compiler.context_digest,
         clauses: [clause(text, stored.compiler.source_id, "edit", text, entries)] };
       const result = await call("prepare_turn", { version, target: stored.target, action: { ...stored.action, interpretation } });
-      return { result, request: { version, target: stored.target, action: stored.action } };
+      return { result, interpretation, request: { version, target: stored.target, action: stored.action } };
     }
     const label = await edit(active, "request:assignment", "assignment", "Rename the room Lamplit Room.",
       [assignment("presentation:label", "Lamplit Room")]);
@@ -1328,7 +1331,14 @@ void test("all eight MCP tools use scoped loopback access, exact browser approva
     const labelRequest = { ...label.request, ...labelStage };
     const [labelReceipt, duplicateReceipt] = await Promise.all([call("commit_turn", labelRequest), call("commit_turn", labelRequest)]);
     assert.deepEqual(labelReceipt, duplicateReceipt);
-    assert.equal(receipt.parse(labelReceipt).receipt.policy_revision, 1);
+    const publicEdit = receipt.parse(labelReceipt).receipt;
+    assert.equal(publicEdit.policy_revision, 1);
+    assert.deepEqual(publicEdit.event_ids, []);
+    assert.deepEqual(publicEdit.narration_facts, []);
+    assert.deepEqual(firstReceipt.rule_ids, []);
+    assert.deepEqual(await call("prepare_turn", { ...label.request, action: {
+      ...label.request.action, interpretation: label.interpretation,
+    } }), labelReceipt);
     const edited = context.parse(await call("get_turn_context", ref)).context;
     assert.equal(edited.mode, "PLAY");
     assert.deepEqual(edited.clocks, active.clocks);

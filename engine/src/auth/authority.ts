@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
+import { projectWorld } from "../world/projection.ts";
 import { CandidateHandle, HeadExpectation, TurnEnvelope, TurnProposal, canonicalDigest, canonicalJson } from "../contracts.ts";
 import type { AuthorizationPort, Failure, Result, TrustedApproval, TrustedContext } from "../ports.ts";
 import { previewPolicy, resolvePolicy } from "../policy/policy-resolver.ts";
@@ -56,8 +57,9 @@ function lowRisk(snapshot: ResolverSnapshot, preview: Preview): Endpoint | null 
     ? { entity_id, field } : null;
 }
 function displayDiff(snapshot: ResolverSnapshot, handle: Handle, preview: Preview): Candidate["diff"] {
+  const entities = snapshot.world ? [...snapshot.entities, ...projectWorld(snapshot.world)] : snapshot.entities;
   const before = preview.operations.flatMap(({ effects }) => effects.filter(({ change }) => change === "write")
-    .map(({ entity_id, field }) => ({ entity_id, field, fact: snapshot.entities.find(({ id }) => id === entity_id)
+    .map(({ entity_id, field }) => ({ entity_id, field, fact: entities.find(({ id }) => id === entity_id)
       ?.surfaces.find((surface) => surface.field === field)?.fact ?? null })));
   return { handle, preview, before };
 }

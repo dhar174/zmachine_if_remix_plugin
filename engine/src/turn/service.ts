@@ -17,7 +17,8 @@ import { ResolverProposal } from "../policy/resolver-contracts.ts";
 import type { EffectPlan, ResolverSnapshot } from "../policy/resolver-contracts.ts";
 import { DurableReceipt, TurnImage, conflict, failure, invalid, limits, ok, stale } from "./contracts.ts";
 import type { Access, FaultPoint, Stage, TurnExecutor } from "./contracts.ts";
-import { buildImage, jsonEvent, supported, validateImage } from "./execution.ts";
+import { buildImage, executeWorld, jsonEvent, supported, validateImage } from "./execution.ts";
+import { visibleWorldNote, worldInspection } from "../world/projection.ts";
 import { SQLiteTurns, branchKey } from "./sqlite-turns.ts";
 import type { TurnStore } from "./sqlite-turns.ts";
 import { FixtureRecovery } from "../fixture/recovery.ts";
@@ -55,7 +56,8 @@ class RejectPublication extends Error {
 }
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
 const timedOut = () => failure("ABORTED", "The candidate was cancelled or exceeded its deadline.", "same_request");
-const expiredEditor = () => failure("NEEDS_APPROVAL", "The Editor candidate expired. Prepare a fresh request.");
+const expiredEditor = () => failure("NEEDS_APPROVAL", "The Editor candidate expired or was invalidated. Prepare a fresh request.");
+const restagePlay = () => failure("ABORTED", "The Play candidate is no longer available. Prepare the identical request again.", "refresh");
 const cancelled = () => failure("ABORTED", "The candidate was cancelled. Prepare a fresh request.");
 const unavailable =() => failure("ABORTED", "Turn storage or execution is unavailable. Retry the same request to check its receipt.", "same_request");
 
@@ -558,8 +560,26 @@ export class TurnService {
       version, session_id, branch_id, generation_id, request_id, status, revision, policy_revision,
       native_output, event_ids, narration_facts, time_cost, in_fiction_result, warnings,
     } = record.receipt;
-    return receiptView.parse({ version, session_id, branch_id, generation_id, request_id, status, revision, policy_revision,
-      native_output, event_ids, narration_facts, time_cost, in_fiction_result, warnings,
+    const base = { version, session_id, branch_id, generation_id, request_id, status, revision, policy_revision,
+      time_cost, in_fiction_result };
+    if (record.receipt.visibility === "owner") {
+      const view = this.readFixture(record.receipt);
+      if (!view.ok || view.value.mode !== "EDITOR") {
+        return receiptView.parse({ ...base, native_output: [], event_ids: [], narration_facts: [], warnings: [], rule_ids: [], capability_ids: [] });
+      }
+    }
+    let facts = narration_facts;
+    if (record.receipt.visibility === "player" && narration_facts.some((note) => note.trimStart().startsWith("{"))) {
+      const image = this.store.publishedImage(record.receipt, record.receipt.post_checkpoint);
+      const world = image?.checkpoint.revision === revision && image.checkpoint.generation_id === generation_id &&
+        validateImage(image, this.executor).ok ? image.snapshot.world : undefined;
+      facts = narration_facts.flatMap((note) => {
+        if (!note.trimStart().startsWith("{")) return [note];
+        const visible = visibleWorldNote(note, world, revision);
+        return visible === undefined ? [] : [visible];
+      });
+    }
+    return receiptView.parse({ ...base, native_output, event_ids, narration_facts: facts, warnings,
       rule_ids: record.rule_ids, capability_ids: record.capability_ids });
   }
 
@@ -589,12 +609,12 @@ export class TurnService {
       const envelopeHash = canonicalDigest(envelope);
       const prior = this.store.request(id);
       if (prior && prior.envelope !== envelopeHash) return conflict();
-      if (prior?.receipt) return ok({ kind: "committed", record: prior.receipt });
       const parsed = ResolverProposal.safeParse(rawProposal);
       const compiler = CompilationInput.nullable().safeParse(trustedCompiler);
       if (prior?.proposal && (!parsed.success || !compiler.success ||
           prior.proposal !== canonicalDigest(parsed.data) ||
           (prior.stage && canonicalDigest(prior.stage.compiler) !== canonicalDigest(compiler.data)))) return conflict();
+      if (prior?.receipt) return ok({ kind: "committed", record: prior.receipt });
       const live = this.store.head(access);
       const image = live ?? this.store.draft(access);
       const wanted = expected(envelope);
@@ -619,6 +639,10 @@ export class TurnService {
           (nativeInput?.kind === "native.character" &&
             (envelope.input.kind !== "character" || envelope.input.value !== nativeInput.value))) {
         return reject(failure("VALIDATION_FAILED", "The proposal does not match the request input boundary."));
+      }
+      if (proposal.operations.some((operation) => operation.kind === "speech.record" &&
+          (envelope.input.kind !== "line" || envelope.input.text !== operation.text))) {
+        return reject(failure("VALIDATION_FAILED", "Recorded player speech must match the request text."));
       }
       const proposalHash = canonicalDigest(proposal);
 
@@ -651,11 +675,18 @@ export class TurnService {
       } else {
         const resolved = this.authority.resolveWithoutGrant(owner, snapshot.value, proposal);
         if (!resolved.ok) return reject(resolved);
-        if (!supported(resolved.plan.operations)) return reject(failure("CAPABILITY_MISSING", "This operation has no complete executor."));
+        if (!supported(resolved.plan)) return reject(failure("CAPABILITY_MISSING", "This operation has no complete executor."));
         if (inspect) {
           const readable = new Set(resolved.plan.operations.flatMap(({ effects }) => effects.filter(({ change }) => change === "read")
             .map(({ entity_id, field }) => canonicalJson([entity_id, field]))));
-          const facts = image.snapshot.entities.flatMap(({ id: entity, surfaces }) => surfaces.flatMap(({ field, domain, coverage, fact }) =>
+          const world = image.snapshot.world;
+          const facts = resolved.plan.world_mode && world
+            ? proposal.operations.flatMap((operation) => operation.kind === "inspect.entity"
+              ? worldInspection(world, operation.entity_id, resolved.plan.world_mode === "EDITOR", wanted.expected_revision)
+                .filter(({ field }) => readable.has(canonicalJson([operation.entity_id, field])))
+                .map(({ field, value }) => canonicalJson({ entity: operation.entity_id, field, value }))
+              : [])
+            : image.snapshot.entities.flatMap(({ id: entity, surfaces }) => surfaces.flatMap(({ field, domain, coverage, fact }) =>
             domain === "presentation" && coverage === "complete" && fact.state === "present" && readable.has(canonicalJson([entity, field])) ?
               [canonicalJson({ entity, field, value: fact.value })] : []));
           this.authority.finish(wanted, envelope.request_id);
@@ -676,7 +707,7 @@ export class TurnService {
     const proposal = stage.proposal;
     if (canonicalDigest(proposal) !== stage.handle.proposal_digest || digest(stage.diff) !== stage.diff_digest) return invalid();
     if (Date.parse(stage.handle.expires_at) <= this.clock()) {
-      return stage.editor ? failure("NEEDS_APPROVAL", "The Editor candidate expired.") : timedOut();
+      return stage.editor ? expiredEditor() : restagePlay();
     }
     const snapshot = this.snapshot(image, proposal, stage.compiler);
     if (!snapshot.ok) return snapshot;
@@ -688,7 +719,7 @@ export class TurnService {
       ? this.authority.resolveApproved(owner, snapshot.value, proposal, permit)
       : this.authority.resolveWithoutGrant(owner, snapshot.value, proposal);
     if (!result.ok) return result;
-    if (!supported(result.plan.operations)) return failure("CAPABILITY_MISSING", "This operation has no complete executor.");
+    if (!supported(result.plan)) return failure("CAPABILITY_MISSING", "This operation has no complete executor.");
     if (result.plan.time === "native" && image.checkpoint.clocks.policy !== "native_running") {
       return failure("CAPABILITY_MISSING", "The native clock is paused.");
     }
@@ -723,10 +754,16 @@ export class TurnService {
       if (request?.disposition === "expired") return expiredEditor();
       if (request?.disposition === "cancelled") return cancelled();
       const stage = request?.stage;
+      if (!stage && request?.proposal && envelope.intent !== "editor") return restagePlay();
       if (!stage || stage.handle.candidate_id !== candidateId || request?.claim ||
           request?.proposal !== stage.handle.proposal_digest || stage.handle.request_id !== envelope.request_id) return invalid();
       if (exact && stage.diff_digest !== exact.diff) return invalid();
       if (!live && !stage.proposal.amendment?.selection) return invalid();
+      if (stage.editor && Date.parse(stage.handle.expires_at) <= this.clock()) {
+        this.authority.finish(wanted, envelope.request_id);
+        this.store.cancel(id, "expired");
+        return expiredEditor();
+      }
       let selectedPermit = permit;
       if (exact && stage.editor) {
         if (!exact.browserAvailable) return failure("NEEDS_APPROVAL", "Authenticated browser control is unavailable.");
@@ -776,7 +813,9 @@ export class TurnService {
       const valid = validateImage(image, this.executor);
       if (!valid.ok) return valid;
       const executed = await Promise.race([
-        this.executor.execute(structuredClone(image), structuredClone(plan), limits, abort.signal), interrupted,
+        plan.world_mode ? executeWorld(image, plan) :
+          this.executor.execute(structuredClone(image), structuredClone(plan), limits, abort.signal),
+        interrupted,
       ]);
       if (!executed.ok) return executed;
       if (abort.signal.aborted) return timedOut();

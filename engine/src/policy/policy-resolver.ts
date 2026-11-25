@@ -4,6 +4,8 @@ import { ResolverProposal, ResolverSnapshot } from "./resolver-contracts.ts";
 import type { ActiveRule, DecisionTrace, EffectPlan, PolicyResolverPort, Resolution, ResolverOperation } from "./resolver-contracts.ts";
 import { deriveFootprint, effectKey, ResolutionProblem } from "./resolver-effects.ts";
 import type { Footprint, ResolvedEffect } from "./resolver-effects.ts";
+import { validWorld } from "../world/model.ts";
+import { evaluateWorldOperation, runWorldPlan, usesWorld, WorldOperationError } from "../world/operations.ts";
 
 const ordered = (ids: Iterable<string>) => [...new Set(ids)].sort();
 const same = (left: Parameters<typeof canonicalJson>[0], right: Parameters<typeof canonicalJson>[0]) =>
@@ -37,6 +39,9 @@ function assertSnapshot(snapshot: ResolverSnapshot, rules: ActiveRule[]) {
         !unique(entity.surfaces, (surface) => surface.field) ||
         entity.region_ids?.some((region) => !snapshot.regions.includes(region)))) {
     throw invalid("projection_identity", "The projection has inconsistent identities or region membership.");
+  }
+  if (snapshot.world && !validWorld(snapshot.world, head.expected_revision, snapshot.regions, snapshot.entities.map(({ id }) => id))) {
+    throw invalid("remix_world", "The remix world has inconsistent records or provenance.");
   }
   const history = new Map([...snapshot.history, ...rules].map((rule) => [rule.id, rule.supersedes]));
   const active = new Set(rules.map((rule) => rule.id));
@@ -116,7 +121,9 @@ function structuralGuard(rule: Extract<ActiveRule, { kind: "invariant" }>,
   if (rule.guard.id === "inventory.possession" && typeof parameters.holder === "string" &&
       typeof parameters.item === "string" && Object.keys(parameters).length === 2) {
     if (effect.ref.field !== "inventory:holder" || effect.entity.id !== parameters.item) return true;
-    return operation.kind === "inventory.transfer" && operation.item === parameters.item && operation.to === parameters.holder;
+    return operation.kind === "inventory.transfer" && operation.item === parameters.item && operation.to === parameters.holder ||
+      operation.kind === "overlay.create" && operation.entity_kind === "item" && operation.entity === parameters.item &&
+      operation.holder === parameters.holder;
   }
   if (rule.guard.id === "field.unchanged" && typeof parameters.field === "string" && Object.keys(parameters).length === 1) {
     if (effect.ref.field !== parameters.field) return true;
@@ -243,8 +250,21 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean):
     const accumulated = new Map<string, "read" | "write">();
     const operations: EffectPlan["operations"][number][] = [];
     const routes = new Set<EffectPlan["route"]>();
-    for (const operation of amendment.operations) {
-      const footprint = deriveFootprint(snapshot, entities, operation, { capabilityIds, evidenceIds });
+    const worldOperations = amendment.operations.filter((operation) => usesWorld(snapshot, operation)).length;
+    if (worldOperations > 0 && worldOperations !== amendment.operations.length) {
+      throw new ResolutionProblem("NEEDS_CLARIFICATION", "world_subturn", "Resolve world operations separately from legacy or native operations.");
+    }
+    for (const [index, operation] of amendment.operations.entries()) {
+      let footprint: Footprint;
+      if (worldOperations > 0) {
+        const { effects, action } = evaluateWorldOperation(snapshot, operation, {
+          request: proposal.request_id, proposal: digest, revision: head.expected_revision + 1, index, mode: snapshot.mode,
+        });
+        effects.forEach(({ surface }) => evidenceIds.add(surface.fact.evidence_id));
+        footprint = { effects, action, route: "remix", capability_ids: [] };
+      } else {
+        footprint = deriveFootprint(snapshot, entities, operation, { capabilityIds, evidenceIds });
+      }
       routes.add(footprint.route);
       checkPolicy(snapshot, operation, footprint, amendment.rules,
         [...snapshot.applicability, ...(amendment.candidate?.applicability ?? [])], digest, ruleIds, evidenceIds, semantic);
@@ -265,16 +285,24 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean):
       throw new ResolutionProblem("CAPABILITY_MISSING", "unregistered_combination", "Independent native and remix operations lack a registered bridge.");
     }
     const declared = proposal.declared_effects.map(effectKey).sort();
-    if (!same(declared, ordered(operations.flatMap(({ effects }) => effects.map(effectKey))))) {
+    const derived = ordered(operations.flatMap(({ effects }) => effects.map(effectKey)));
+    if (derived.length > 512 || !(worldOperations > 0 && declared.length === 0) && !same(declared, derived)) {
       throw invalid("declared_footprint", "The declared effects do not match the complete derived footprint.");
     }
     const route = routes.has("bridged") ? "bridged" : routes.has("native") ? "native" : "remix";
-    const time = snapshot.mode === "EDITOR" || operations.every(({ operation }) => operation.kind === "inspect.entity")
+    const time = snapshot.mode === "EDITOR" || operations.every(({ operation }) =>
+      operation.kind === "inspect.entity" || operation.kind === "observation.record" || operation.kind === "belief.update")
       ? "none" : operations.some(({ operation }) => operation.kind === "native.line" || operation.kind === "native.character")
         ? "native" : "overlay";
-    return { ok: true, plan: { version: "1.0.0", head, request_id: proposal.request_id, proposal_digest: digest,
-      route, time, operations, amendment: amendment.candidate, trace: trace() } };
+    const plan: EffectPlan = { version: "1.0.0", head, request_id: proposal.request_id, proposal_digest: digest,
+      route, time, operations, amendment: amendment.candidate, trace: trace(),
+      ...(worldOperations > 0 ? { world_mode: snapshot.mode } : {}) };
+    if (plan.world_mode && inspections === 0) runWorldPlan(snapshot, plan);
+    return { ok: true, plan };
   } catch (error) {
+    if (error instanceof WorldOperationError) {
+      return { ok: false, error: { status: error.status, reason: "remix_world", message: error.message, retry: "none" }, trace: trace() };
+    }
     if (!(error instanceof ResolutionProblem)) throw error;
     error.evidence_ids.forEach((id) => evidenceIds.add(id));
     return { ok: false, error: { status: error.status, reason: error.reason, message: error.message,

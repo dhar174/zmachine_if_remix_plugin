@@ -6,9 +6,13 @@ import type { Result } from "../ports.ts";
 import type { EffectPlan, ResolverSnapshot } from "../policy/resolver-contracts.ts";
 import { effectKey } from "../policy/resolver-effects.ts";
 import { TurnImage, failure, limits, ok } from "./contracts.ts";
+import { remixStateRef, validWorld } from "../world/model.ts";
+import { runWorldPlan, WorldOperationError } from "../world/operations.ts";
 import type { Execution, TurnExecutor } from "./contracts.ts";
 
-export function supported(operations: EffectPlan["operations"]): boolean {
+export function supported(plan: EffectPlan): boolean {
+  const { operations } = plan;
+  if (plan.world_mode) return plan.route === "remix" && operations.length <= limits.operations;
   return operations.length <= limits.operations && operations.every(({ operation, effects }) => {
     if (operation.kind === "inventory.transfer") {
       const { item, from, to } = operation;
@@ -55,7 +59,25 @@ function nextPolicy(before: TurnImage, plan: EffectPlan) {
     history: [...history, ...compiled.lineage.map(({ old_rule }) => ({ id: old_rule.id, supersedes: old_rule.supersedes }))] };
 }
 
+export function executeWorld(before: TurnImage, plan: EffectPlan): Result<Execution> {
+  try {
+    const result = runWorldPlan(before.snapshot, plan);
+    if (!result) return invalidEffect();
+    const effects = [...new Map(plan.operations.flatMap(({ effects }) => effects.map((effect) => [effectKey(effect), effect] as const))).values()];
+    return ok({ ...result, effects, entities: before.snapshot.entities, native: before.native,
+      pending: before.checkpoint.native_state.pending_input, time_cost: 0, outcome: "success", output: [] });
+  } catch (error) {
+    if (error instanceof WorldOperationError) return failure(error.status, error.message);
+    throw error;
+  }
+}
+
 export function buildImage(before: TurnImage, execution: Execution, plan: EffectPlan, executor: TurnExecutor): Result<TurnImage> {
+  if (plan.world_mode) {
+    const verified = executeWorld(before, plan);
+    if (!verified.ok) return verified;
+    if (canonicalDigest(z.json().parse(execution)) !== canonicalDigest(z.json().parse(verified.value))) return invalidEffect();
+  } else if (execution.world !== undefined) return invalidEffect();
   const runNative = plan.time === "native";
   if (!Number.isSafeInteger(execution.time_cost) || execution.time_cost < 0 ||
       (!runNative && execution.time_cost !== 0) || execution.events.length > limits.events ||
@@ -77,7 +99,7 @@ export function buildImage(before: TurnImage, execution: Execution, plan: Effect
   if (indexed.size !== execution.entities.length || indexed.size !== before.snapshot.entities.length) return invalidEffect();
   const assignments = new Map<string, Json>();
   const state = new Map(before.snapshot.entities.map((entity) => [entity.id, entity]));
-  for (const { operation } of plan.operations) {
+  for (const { operation } of plan.world_mode ? [] : plan.operations) {
     if (operation.kind === "remix.assign") assignments.set(canonicalJson([operation.entity_id, operation.field]), operation.value);
     if (operation.kind === "inventory.transfer") {
       const { item, from, to } = operation;
@@ -119,16 +141,18 @@ export function buildImage(before: TurnImage, execution: Execution, plan: Effect
   const head = HeadExpectation.parse({ ...before.snapshot.head, expected_revision: revision,
     expected_policy_revision: rules.policy.revision });
   const nativeDigest = canonicalDigest(execution.native);
+  const world = execution.world ?? before.snapshot.world;
   const checkpoint = CombinedCheckpoint.parse({
     ...before.checkpoint, revision, policy_revision: rules.policy.revision, checkpoint_id: "checkpoint:" + randomUUID(),
     native_state: { pending_input: execution.pending, payload_ref: "blob:" + nativeDigest, payload_sha256: nativeDigest },
-    remix_state_ref: "blob:" + canonicalDigest(execution.entities),
+    remix_state_ref: remixStateRef(execution.entities, world),
     policy_ref: "blob:" + canonicalDigest(rules), history_ref: "history:" + randomUUID(),
     clocks: { ...before.checkpoint.clocks, native: before.checkpoint.clocks.native + (runNative ? execution.time_cost : 0),
       overlay: before.checkpoint.clocks.overlay + (plan.time === "overlay" ? 1 : 0) },
   });
   const candidate = TurnImage.parse({ checkpoint, native: execution.native, amendment: plan.amendment?.compiled ?? null,
     snapshot: { ...before.snapshot, ...rules, head, entities: execution.entities, native: null, guard_evidence: [],
+      ...(world ? { world } : {}),
       clock: { ...before.snapshot.clock, overlay_turn: checkpoint.clocks.overlay }, editor_authority: null, compiler_context: null },
   });
   const valid = validateImage(candidate, executor);
@@ -145,7 +169,8 @@ export function validateImage(image: TurnImage, executor: TurnExecutor): Result<
       checkpoint.policy_revision !== snapshot.policy.revision || checkpoint.owner_id !== snapshot.head.owner_id ||
       checkpoint.session_id !== snapshot.head.session_id || checkpoint.branch_id !== snapshot.head.branch_id ||
       checkpoint.generation_id !== snapshot.head.generation_id || checkpoint.native_state.payload_sha256 !== digest ||
-      checkpoint.native_state.payload_ref !== "blob:" + digest || checkpoint.remix_state_ref !== "blob:" + canonicalDigest(snapshot.entities) ||
+      checkpoint.native_state.payload_ref !== "blob:" + digest || checkpoint.remix_state_ref !== remixStateRef(snapshot.entities, snapshot.world) ||
+      (snapshot.world && !validWorld(snapshot.world, checkpoint.revision, snapshot.regions, snapshot.entities.map(({ id }) => id))) ||
       checkpoint.policy_ref !== "blob:" + canonicalDigest(rules) ||
       snapshot.clock.overlay_turn !== checkpoint.clocks.overlay ||
       snapshot.clock.native_running !== (checkpoint.clocks.policy === "native_running") ||
