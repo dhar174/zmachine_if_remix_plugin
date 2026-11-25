@@ -2,6 +2,8 @@
 import { z } from "zod";
 import { canonicalDigest } from "../contracts.ts";
 import type { CanonicalValue } from "../contracts.ts";
+import { Offer, RuleDefinition, RuleStep, ruleLimits } from "./rule-contracts.ts";
+import { validBehaviorState } from "./rule-state.ts";
 
 const remixId = z.string().regex(/^remix:[A-Za-z0-9._:-]+$/).max(200);
 const regionId = z.string().regex(/^region:[A-Za-z0-9._:-]+$/).max(256);
@@ -31,17 +33,33 @@ const event = z.discriminatedUnion("kind", [
     subject: remixId, field: fieldName, fact_source: eventId }),
 ]);
 
-export const World = z.strictObject({
-  version: z.literal("1.0.0"),
+const worldFields = {
   player: remixId,
   entities: z.array(entity).max(512),
   exits: z.array(exit).max(512),
   facts: z.array(fact).max(2048),
-  beliefs: z.array(belief).max(1024),
-  events: z.array(event).max(2048),
-});
+};
+const behaviorEvent = z.discriminatedUnion("kind", [
+  ...event.options,
+z.strictObject({ ...request, kind: z.literal("rule.installed"), rule_id: RuleDefinition.shape.id,
+    definition_digest: z.string().regex(/^[0-9a-f]{64}$/u), mode: z.enum(["PLAY", "EDITOR"]) }),
+  z.strictObject({ ...request, kind: z.literal("offer.accepted"), offer_id: eventId }),
+  z.strictObject({ ...request, kind: z.literal("rule.effect"), subject: remixId, step: RuleStep }),
+]);
+
+export const World = z.discriminatedUnion("version", [
+  z.strictObject({ ...worldFields, version: z.literal("1.0.0"), beliefs: z.array(belief).max(1024),
+    events: z.array(event).max(2048) }),
+  z.strictObject({ ...worldFields, version: z.literal("2.0.0"),
+    beliefs: z.array(belief.extend({ topic: z.string().regex(/^topic:[A-Za-z0-9._:-]+$/u).max(200).optional() })).max(1024),
+    events: z.array(behaviorEvent).max(2048),
+    rules: z.array(z.strictObject({ definition: RuleDefinition, source: eventId })).max(ruleLimits.rules),
+    offers: z.array(Offer).max(512),
+  }),
+]);
 
 export type World = z.infer<typeof World>;
+export type BehaviorWorld = Extract<World, { version: "2.0.0" }>;
 export type WorldEntity = World["entities"][number];
 export type WorldEvent = World["events"][number];
 export type WorldFact = World["facts"][number];
@@ -118,7 +136,7 @@ export function worldView(world: World) {
     return fact.visibility === "player" && roomOf(fact.subject, at) === room &&
       (target === undefined || roomOf(target, at) === room);
   }
-  return { entities, events, presentAt, rootHolder, roomOf, listenersAt, observable, observationRoom };
+return { entities, events, presentAt, holderAt, rootHolder, roomOf, listenersAt, observable, observationRoom };
 }
 
 export function validWorld(world: World, revision: number, regions: readonly string[], otherIds: readonly string[]): boolean {
@@ -130,7 +148,7 @@ export function validWorld(world: World, revision: number, regions: readonly str
         record.revision < (world.events[i]?.revision ?? Infinity))) return false;
   const bySource = (id: string, subject: string) => {
     const source = events.get(id);
-    if (source?.kind === "seed" || (source?.kind === "change" && source.subject === subject)) return source;
+    if (source?.kind === "seed" || ((source?.kind === "change" || source?.kind === "rule.effect") && source.subject === subject)) return source;
   };
   const atEntity = (id: string, at: number, kind?: WorldEntity["kind"]) => {
     const item = entities.get(id);
@@ -138,14 +156,14 @@ export function validWorld(world: World, revision: number, regions: readonly str
   };
   for (const item of world.entities) {
     const source = bySource(item.source, item.id);
-    if (!source || source.revision > revision ||
+    if (!source || source.kind === "rule.effect" || source.revision > revision ||
         (item.kind === "location" && !regions.includes(item.region)) ||
         (item.kind === "character" && !atEntity(item.room, source.revision, "location"))) return false;
   }
   const pairs = world.exits.map(({ from, to }) => from + "/" + to);
   if (new Set(pairs).size !== pairs.length || world.exits.some((exit) => {
     const source = bySource(exit.source, exit.id);
-    return !source || source.revision > revision || exit.from === exit.to ||
+    return !source || source.kind === "rule.effect" || source.revision > revision || exit.from === exit.to ||
       !atEntity(exit.from, source.revision, "location") || !atEntity(exit.to, source.revision, "location");
   })) return false;
 
@@ -154,7 +172,7 @@ export function validWorld(world: World, revision: number, regions: readonly str
     const source = bySource(fact.source, fact.subject);
     const target = relationshipTarget(fact.field);
     if (!source || source.revision !== fact.from || fact.from > revision ||
-        fact.evidence !== (source.kind === "seed" ? "fixture" : source.mode === "EDITOR" ? "editor_committed" : "play_committed") ||
+    fact.evidence !== (source.kind === "seed" ? "fixture" : source.kind === "change" && source.mode === "EDITOR" ? "editor_committed" : "play_committed") ||
         (fact.until !== null && (fact.until <= fact.from || fact.until > revision)) ||
         fact.visibility !== (fact.field === "world:private_note" ? "owner" : "player") ||
         !atEntity(fact.subject, fact.from) || (target !== undefined && !atEntity(target, fact.from))) return false;
@@ -193,12 +211,17 @@ export function validWorld(world: World, revision: number, regions: readonly str
   for (const entry of world.beliefs) {
     const proof = events.get(entry.evidence);
     const source = bySource(entry.source, entry.character);
-    const key = entry.character + "/" + entry.evidence;
-    if (distinctBeliefs.has(key) || !proof || proof.revision >= entry.from || !source || source.kind !== "change" ||
-        source.mode !== "PLAY" || source.revision !== entry.from || entry.until !== null ||
+    const topic = "topic" in entry ? entry.topic : undefined;
+    const key = entry.character + "/" + entry.evidence + "/" + (topic ?? "");
+    const attributed = source?.kind === "rule.effect" && source.step.effect.kind === "belief.record" &&
+      source.step.effect.topic === topic && source.step.event_id === entry.evidence;
+    const priorEvidence = source?.kind === "change" && source.mode === "PLAY" && topic === undefined &&
+      proof !== undefined && proof.revision < entry.from;
+    if (distinctBeliefs.has(key) || !proof || (!attributed && !priorEvidence) ||
+        source?.revision !== entry.from || entry.until !== null ||
         (proof.kind !== "speech" || !proof.listeners.includes(entry.character)) &&
         (proof.kind !== "observation" || proof.observer !== entry.character)) return false;
     distinctBeliefs.add(key);
   }
-  return true;
+  return world.version === "1.0.0" || validBehaviorState(world, worldView(world));
 }

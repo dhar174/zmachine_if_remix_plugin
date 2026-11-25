@@ -36,7 +36,8 @@ export type DurableReceipt = z.infer<typeof DurableReceipt>;
 
 export type Access = Pick<z.infer<typeof HeadExpectation>, "owner_id" | "session_id" | "branch_id">;
 
-export const limits = Object.freeze({ operations: 32, events: 32, output_bytes: 65_536, checkpoint_bytes: 1_048_576, turn_ms: 5_000 });
+import { limits } from "./limits.ts";
+export { limits };
 export type FaultPoint = "before_checkpoint" | "after_checkpoint" | "before_commit" | "after_commit";
 export type Execution = {
   native: Json;

@@ -2,7 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { capture, compilationRecord, compilerView, fixtureContext, launchRecord, preparedAction, publicHead,
   receiptView, requestAction, sessionRef, sourceRecord, subset, target } from "../fixture/session-contracts.ts";
-import { fixtureGuards, fixtureImage, fixtureNativeWrite, fixtureRoom, fixtureStory } from "../fixture/synthetic-world.ts";
+import { fixtureGuards, fixtureImage, fixtureNativeWrite, fixtureRoom, fixtureStory, rulesFixtureImage } from "../fixture/synthetic-world.ts";
+import type { FixtureProfile } from "../fixture/synthetic-world.ts";
+import { worldView } from "../world/model.ts";
+import { offerEligible } from "../world/rule-state.ts";
 import { heidiStory, isNativeStory, nativePayload, validateStoryBytes } from "../native/checkpoint.ts";
 import { createNativeFixtureExecutor, nativeContext, openNativeFixture } from "../native/executor.ts";
 import { coveredInput } from "../native/profiles.ts";
@@ -68,7 +71,7 @@ export class TurnService {
   private readonly inFlight = new Map<string, { digest: string; candidate: string; diff: string; promise: Promise<Commit>; abort: AbortController }>();
   private inTransaction = false;
   readonly browser: BrowserOperations;
-  readonly fixtureProfile: "synthetic" | "native-z5";
+readonly fixtureProfile: FixtureProfile;
   readonly recovery: FixtureRecovery;
   readonly privateStories: boolean;
   readonly heidiTrial: boolean;
@@ -79,7 +82,7 @@ export class TurnService {
   private readonly fault: (point: FaultPoint) => void;
   constructor(storage: string | TurnStore, executor: TurnExecutor,
     clock: () => number = Date.now, fault: (point: FaultPoint) => void = () => {},
-    fixtureProfile: "synthetic" | "native-z5" = "synthetic", privateFiles?: { key: Buffer; heidiTrial?: boolean }) {
+    fixtureProfile: FixtureProfile = "synthetic", privateFiles?: { key: Buffer; heidiTrial?: boolean }) {
     if (privateFiles && (fixtureProfile !== "native-z5" || privateFiles.key.length !== 32)) {
       throw new Error("Private transfers require the native profile and a 32-byte key.");
     }
@@ -139,7 +142,7 @@ export class TurnService {
     return this.atomic(() => {
       const handle = "launch:" + randomUUID();
       this.store.saveFixtureRecord("launch", handle, { owner, session: null, expires: this.clock() + 300_000,
-        ...(this.fixtureProfile === "native-z5" ? { profile: this.fixtureProfile } : {}),
+        ...(this.fixtureProfile !== "synthetic" ? { profile: this.fixtureProfile } : {}),
       });
       return ok(handle);
     });
@@ -277,7 +280,8 @@ export class TurnService {
     const launch = this.atomic(lookup);
     if (!launch.ok) return launch;
     if (launch.value.session) return this.readFixture({ owner_id: owner, ...launch.value.session });
-    const created = this.fixtureProfile === "native-z5" ? await openNativeFixture(owner) : ok(fixtureImage(owner));
+    const created = this.fixtureProfile === "native-z5" ? await openNativeFixture(owner) :
+      ok(this.fixtureProfile === "synthetic-rules" ? rulesFixtureImage(owner) : fixtureImage(owner));
     if (!created.ok) return created;
     return this.atomic(() => {
       const current = lookup();
@@ -328,11 +332,26 @@ export class TurnService {
           coverage === "complete" && domain === "presentation" && fact.state === "present" && typeof fact.value === "string"
             ? [{ entity_id, field, value: fact.value, evidence_id: fact.evidence_id }] : []));
       const restored_from = draft ? undefined : this.store.restoreOrigin(image.snapshot.head);
+      const world = !draft && image.snapshot.world;
+      const projection = world ? worldView(world) : undefined;
+      const revision = image.checkpoint.revision;
+      const editor = mode.value.mode === "EDITOR";
+      const scene = world && projection?.roomOf(world.player, revision);
+      const visible = world && world.entities.filter(({ id }) => editor || projection?.roomOf(id, revision) === scene)
+        .slice(0, 64).map(({ id, label, kind }) => ({ id, label, kind }));
+      const behavior = world && world.version === "2.0.0" && projection ? {
+        ...(editor ? { behavior_rules: world.rules.map(({ definition }) => definition) } : {}),
+        pending_offers: world.offers.filter(({ consumed_by, recipient, giver, item }) => consumed_by === null &&
+          recipient === world.player && offerEligible(world, projection, giver, item, revision)).slice(0, 32)
+          .map(({ id, giver, recipient, item }) => ({ id, giver, recipient, item })),
+      } : {};
       return ok(fixtureContext.parse({
         ...(restored_from ? { restored_from } : {}),
         head, state: draft ? "draft" : "active", mode: mode.value.mode, story_sha256: story,
         pending_input: draft ? null : image.checkpoint.native_state.pending_input.kind,
-        operations: draft ? ["initial_directive"] : ["play", "editor_assignment", "policy_amendment", "inspect"],
+        operations: draft ? ["initial_directive"] : ["play", "editor_assignment", "policy_amendment", "inspect",
+          ...(world ? ["rule.install", "overlay.speech", "offer.accept"] : [])],
+        ...(visible ? { overlay_entities: visible } : {}), ...behavior,
         clocks: draft ? null : { native: image.checkpoint.clocks.native, overlay: image.checkpoint.clocks.overlay },
         facts: draft ? [] : facts,
         ...(isNativeStory(story) ? { native: nativeContext(image, draft) } : {}),
@@ -396,8 +415,12 @@ export class TurnService {
   }
 
   private fixtureEnvelope(access: Access, request: z.infer<typeof target>, action: z.infer<typeof requestAction>) {
-    return TurnEnvelope.parse({ ...request, owner_id: access.owner_id, version: "1.0.0", intent: action.kind === "play" ? "play" : "editor",
-      input: action.kind === "play" ? action.input : { kind: "line", text: action.source_ref } });
+    const editor = action.kind === "directive" || action.kind === "rule.install" && action.mode === "EDITOR";
+    const input = action.kind === "play" ? action.input : { kind: "line",
+      text: action.kind === "directive" ? action.source_ref : action.kind === "overlay.speech" ? action.text :
+        action.kind + ":" + canonicalDigest(action) };
+    return TurnEnvelope.parse({ ...request, owner_id: access.owner_id, version: "1.0.0",
+      intent: editor ? "editor" : "play", input });
   }
 
   private prepareCompiledFixture(access: Access, envelope: TurnEnvelope, context: z.infer<typeof CompilationInput>,
@@ -449,6 +472,18 @@ export class TurnService {
         if (!declared.ok) return declared;
         return this.prepareTurn(access, envelope, { ...expected(envelope), version: "1.0.0", request_id: envelope.request_id,
           mode: "PLAY", operations: [operation], declared_effects: declared.value, amendment: null });
+      }
+      if (action.kind !== "directive") {
+        if (base.draft) return failure("NEEDS_APPROVAL", "Approve the initial directive before using overlay behavior.");
+        if (!base.image.snapshot.world) return failure("CAPABILITY_MISSING", "The session has no registered remix world.");
+        const authoring = action.kind === "rule.install" && action.mode === "EDITOR";
+        if (authoring && !browserAvailable && !prior?.receipt) {
+          return failure("NEEDS_APPROVAL", "Authenticated browser control is unavailable.");
+        }
+        const operation = action.kind === "overlay.speech" ? { kind: "speech.record", text: action.text } :
+          action.kind === "rule.install" ? { kind: action.kind, rule: action.rule } : action;
+        return this.prepareTurn(access, envelope, { ...expected(envelope), version: "1.0.0", request_id: envelope.request_id,
+          mode: authoring ? "EDITOR" : "PLAY", operations: [operation], declared_effects: [], amendment: null });
       }
       const existing = compilationRecord.safeParse(this.store.fixtureRecord("compilation", action.source_ref));
       if (existing.success && (branchKey(existing.data.proposal.head) !== branchKey(access) ||
@@ -533,7 +568,7 @@ export class TurnService {
   }
 
   inspectFixture(access: Access, query:
-    { kind: "facts" | "rules" } | { kind: "history"; limit?: number | undefined } |
+    { kind: "facts" | "rules" | "offers" } | { kind: "history"; limit?: number | undefined } |
     ({ kind: "receipt" } & Pick<z.infer<typeof target>, "generation_id" | "request_id">)) {
     return this.atomic((): Result<{ context: z.infer<typeof fixtureContext>; receipts: z.infer<typeof receiptView>[];
       receipt_on_active_lineage?: boolean }> => {
@@ -541,6 +576,8 @@ export class TurnService {
       if (!view.ok) return view;
       const context = { ...view.value, facts: query.kind === "facts" ? view.value.facts : [],
         rules: query.kind === "rules" ? view.value.rules : [] };
+      if (query.kind !== "rules") delete context.behavior_rules;
+      if (query.kind !== "offers") delete context.pending_offers;
       const base = this.store.head(access);
       if (query.kind === "receipt") {
         const receipt = this.store.request(requestKey({ ...access, generation_id: query.generation_id,
@@ -562,21 +599,22 @@ export class TurnService {
     } = record.receipt;
     const base = { version, session_id, branch_id, generation_id, request_id, status, revision, policy_revision,
       time_cost, in_fiction_result };
-    if (record.receipt.visibility === "owner") {
-      const view = this.readFixture(record.receipt);
-      if (!view.ok || view.value.mode !== "EDITOR") {
-        return receiptView.parse({ ...base, native_output: [], event_ids: [], narration_facts: [], warnings: [], rule_ids: [], capability_ids: [] });
-      }
+    const view = this.readFixture(record.receipt);
+    const editor = view.ok && view.value.mode === "EDITOR";
+    if (record.receipt.visibility === "owner" && !editor) {
+      return receiptView.parse({ ...base, native_output: [], event_ids: [], narration_facts: [], warnings: [], rule_ids: [], capability_ids: [] });
     }
     let facts = narration_facts;
+    const transition = editor || (record.receipt.visibility === "player" && narration_facts.length > 0)
+      ? this.store.receiptTransition(requestKey(record.receipt), record) : undefined;
+    const validTransition = transition && validateImage(transition.image, this.executor).ok &&
+      (!transition.previous || validateImage(transition.previous, this.executor).ok) ? transition : undefined;
     if (record.receipt.visibility === "player" && narration_facts.length > 0) {
-      const transition = this.store.receiptTransition(requestKey(record.receipt), record);
-      if (!transition || !validateImage(transition.image, this.executor).ok ||
-          (transition.previous && !validateImage(transition.previous, this.executor).ok)) {
+      if (!validTransition) {
         facts = [];
-      } else if (transition.worldChanged) {
+      } else if (validTransition.worldChanged) {
         facts = narration_facts.flatMap((note) => {
-          const visible = visibleWorldNote(note, transition.image.snapshot.world, revision);
+          const visible = visibleWorldNote(note, validTransition.image.snapshot.world, revision);
           return visible === undefined ? [] : [visible];
         });
       } else {
@@ -584,8 +622,11 @@ export class TurnService {
         facts = narration_facts.filter((note) => !note.trimStart().startsWith("{"));
       }
     }
+    const steps = editor && validTransition?.image.snapshot.world?.events
+      .flatMap((event) => event.kind === "rule.effect" && event.revision === revision ? [event.step] : []);
     return receiptView.parse({ ...base, native_output, event_ids, narration_facts: facts, warnings,
-      rule_ids: record.rule_ids, capability_ids: record.capability_ids });
+      rule_ids: record.rule_ids, capability_ids: record.capability_ids,
+      ...(steps && steps.length > 0 ? { behavior_steps: steps } : {}) });
   }
 
   lookupApproval(access: Access, head: Head, candidate: CandidateHandle["candidate_id"]) {

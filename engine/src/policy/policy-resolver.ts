@@ -6,6 +6,7 @@ import { deriveFootprint, effectKey, ResolutionProblem } from "./resolver-effect
 import type { Footprint, ResolvedEffect } from "./resolver-effects.ts";
 import { validWorld } from "../world/model.ts";
 import { evaluateWorldOperation, runWorldPlan, usesWorld, WorldOperationError } from "../world/operations.ts";
+import type { Operation as WorldOperation } from "../world/operations.ts";
 
 const ordered = (ids: Iterable<string>) => [...new Set(ids)].sort();
 const same = (left: Parameters<typeof canonicalJson>[0], right: Parameters<typeof canonicalJson>[0]) =>
@@ -116,7 +117,7 @@ function prepareAmendment(snapshot: ResolverSnapshot, proposal: ResolverProposal
 }
 
 function structuralGuard(rule: Extract<ActiveRule, { kind: "invariant" }>,
-  effect: ResolvedEffect, operation: ResolverOperation): boolean {
+  effect: ResolvedEffect, operation: WorldOperation): boolean {
   const parameters = rule.guard.parameters;
   if (rule.guard.id === "inventory.possession" && typeof parameters.holder === "string" &&
       typeof parameters.item === "string" && Object.keys(parameters).length === 2) {
@@ -134,7 +135,7 @@ function structuralGuard(rule: Extract<ActiveRule, { kind: "invariant" }>,
   throw new ResolutionProblem("CAPABILITY_MISSING", "structural_guard", "The structural guard or its parameters are unsupported.");
 }
 
-function checkPolicy(snapshot: ResolverSnapshot, operation: ResolverOperation, footprint: Footprint,
+function checkPolicy(snapshot: ResolverSnapshot, operation: WorldOperation, footprint: Footprint,
   rules: ActiveRule[], windows: ResolverSnapshot["applicability"], digest: string,
   ruleIds: Set<string>, evidenceIds: Set<string>, semantic: DecisionTrace["semantic"][number][]) {
   const active = rules.filter(({ id }) => {
@@ -285,20 +286,26 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean):
       throw new ResolutionProblem("CAPABILITY_MISSING", "unregistered_combination", "Independent native and remix operations lack a registered bridge.");
     }
     const declared = proposal.declared_effects.map(effectKey).sort();
-    const derived = ordered(operations.flatMap(({ effects }) => effects.map(effectKey)));
-    if (derived.length > 512 || !(worldOperations > 0 && declared.length === 0) && !same(declared, derived)) {
-      throw invalid("declared_footprint", "The declared effects do not match the complete derived footprint.");
-    }
     const route = routes.has("bridged") ? "bridged" : routes.has("native") ? "native" : "remix";
     const time = snapshot.mode === "EDITOR" || operations.every(({ operation }) =>
-      operation.kind === "inspect.entity" || operation.kind === "observation.record" || operation.kind === "belief.update")
+operation.kind === "inspect.entity" || operation.kind === "observation.record" || operation.kind === "belief.update" ||
+      operation.kind === "rule.install")
       ? "none" : operations.some(({ operation }) => operation.kind === "native.line" || operation.kind === "native.character")
         ? "native" : "overlay";
     const plan: EffectPlan = { version: "1.0.0", head, request_id: proposal.request_id, proposal_digest: digest,
       route, time, operations, amendment: amendment.candidate, trace: trace(),
       ...(worldOperations > 0 ? { world_mode: snapshot.mode } : {}) };
-    if (plan.world_mode && inspections === 0) runWorldPlan(snapshot, plan);
-    return { ok: true, plan };
+    const expanded = plan.world_mode && inspections === 0 ? runWorldPlan(snapshot, plan, (current, operation, footprint) => {
+      footprint.effects.forEach(({ surface }) => evidenceIds.add(surface.fact.evidence_id));
+      checkPolicy(current, operation, footprint, amendment.rules,
+        [...snapshot.applicability, ...(amendment.candidate?.applicability ?? [])], digest, ruleIds, evidenceIds, semantic);
+    }) : undefined;
+    const ruleSteps = expanded?.ruleSteps ?? [];
+    const derived = ordered([...operations, ...ruleSteps].flatMap(({ effects }) => effects.map(effectKey)));
+    if (derived.length > 512 || !(worldOperations > 0 && declared.length === 0) && !same(declared, derived)) {
+      throw invalid("declared_footprint", "The declared effects do not match the complete derived footprint.");
+    }
+    return { ok: true, plan: { ...plan, trace: trace(), ...(ruleSteps.length ? { rule_steps: ruleSteps } : {}) } };
   } catch (error) {
     if (error instanceof WorldOperationError) {
       return { ok: false, error: { status: error.status, reason: "remix_world", message: error.message, retry: "none" }, trace: trace() };

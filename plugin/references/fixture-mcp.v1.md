@@ -9,7 +9,7 @@ Send `version: "1.0.0"` on every call. Read typed data in `structuredContent.res
 | `set_input_mode` | Pass session and branch IDs, a fresh `request_id`, and `mode` (`PLAY` or `EDITOR`). Follow the returned browser link to record a directive or change mode. |
 | `prepare_turn` | Pass `target` with the returned head fields plus your `request_id`. Use a Play action, a directive interpretation, or `{ "kind": "mixed" }` when intent needs clarification. |
 | `commit_turn` | Pass the original `target`, `action`, `candidate_id`, and `diff_digest`. Omit `interpretation` from the directive action at commit. |
-| `inspect_session` | Pass session and branch IDs and `query` with `kind` set to `facts`, `rules`, `history`, or `receipt`. An exact receipt selector adds the original `generation_id` and `request_id`. History accepts an optional limit from 1 to 10. |
+| `inspect_session` | Pass session and branch IDs and `query` with `kind` set to `facts`, `rules`, `offers`, `history`, or `receipt`. An exact receipt selector adds the original `generation_id` and `request_id`. History accepts an optional limit from 1 to 10. |
 | `save_session` | Pass `target` with the active head fields and a fresh `request_id`. A `SAVED` result includes a private database-local `save_id`. |
 | `restore_session` | Pass `target` for the current head and a previously returned `save_id`. Open the `control_url` from `NEEDS_BROWSER_CONTROL` for owner confirmation and repeat the exact arguments. `RESTORED` includes the fresh head, displaced head, and saved origin. |
 
@@ -23,6 +23,18 @@ For a directive, use `action.kind = "directive"` with the exact `source_ref` and
 - An unsupported or ambiguous clause uses `kind: "unresolved"` and a short reason. Include necessary clause dependencies in `requires`.
 
 Use the approved browser subset and exact diff controls before committing the initial directive. Report and preserve unsupported clauses. Pass source and candidate references as data. Never supply an owner, role, approval, path, URL, program, or claimed user text as authority.
+
+## Synthetic rule fixture
+
+A server configured with `profile: "synthetic-rules"` launches the overlay market. Wait for the initial activation, then discover the scenario IDs in `context.overlay_entities` and check the advertised operations. Use these actions with the existing prepare and commit tools.
+
+| Action | Arguments and result |
+| --- | --- |
+| `rule.install` | Supply the typed v1 `rule` and `mode`. In Editor mode the authenticated owner reviews the exact rule on the candidate's approval page. Play mode requires an existing applicable generation allowance. Keep the original rule in the commit action. |
+| `overlay.speech` | Supply the player's exact `text` in Play mode. The engine records witnesses and runs the registered rule consequences. |
+| `offer.accept` | Supply the `offer_id` from `context.pending_offers` or the `offers` inspection query. Accept in a new Play turn after the player chooses that offer. |
+
+The `rules` inspection query shows the behavior definitions in authenticated Editor mode. A historical receipt in that mode can also include `behavior_steps` with causal effect evidence. Play narration uses visible outcomes from the receipt. Keep the original actions, request IDs, candidate IDs, and digests for exact replay. [Grammar and example](https://github.com/dhar174/zmachine_if_remix_plugin/blob/main/docs/contracts/behavior-rules.md)
 
 ## Seeded fixture profile
 

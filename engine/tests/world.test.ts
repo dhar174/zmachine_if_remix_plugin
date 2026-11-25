@@ -17,14 +17,14 @@ import { SQLiteTurns, branchKey } from "../src/turn/sqlite-turns.ts";
 import { TurnService } from "../src/turn/service.ts";
 import { TurnImage } from "../src/turn/contracts.ts";
 import type { DurableReceipt, FaultPoint } from "../src/turn/contracts.ts";
-import { remixStateRef } from "../src/world/model.ts";
+import { activeFact, remixStateRef } from "../src/world/model.ts";
 import { fixtureImage } from "../src/fixture/synthetic-world.ts";
 import { openNativeFixture } from "../src/native/executor.ts";
 import { storyBytes } from "../src/native/checkpoint.ts";
 import { makeFixture, play, take } from "./turn-fixture.ts";
 
 function setup(fault?: (point: FaultPoint) => void, clock = Date.now,
-  native?: { state: TurnImage; story: Buffer; key: Buffer }) {
+  native?: { state: TurnImage; story: Buffer; key: Buffer }, configure?: (image: TurnImage) => void) {
   const dir = mkdtempSync(join(tmpdir(), "zirp-world-"));
   const file = join(dir, "state.db");
   let store = new SQLiteTurns(file);
@@ -43,6 +43,7 @@ function setup(fault?: (point: FaultPoint) => void, clock = Date.now,
     id: "rule:" + kind, action: `generate.${kind}`, decision: "allow", triggers: ["player_attempt"], source, supersedes: [],
     scope: { origins: ["remix"], entity_ids: [], region_ids: ["region:market"], domains: ["identity", "topology", "inventory"] },
   }));
+  configure?.(image);
   image.checkpoint.policy_ref = "blob:" + canonicalDigest({ policy, history, applicability });
   image.checkpoint.remix_state_ref = remixStateRef(image.snapshot.entities, image.snapshot.world);
   take(service.initialize(image));
@@ -227,6 +228,376 @@ function editBundle(fx: ReturnType<typeof setup>, label: string, entries: unknow
 
 const protectedScope = (domains: string[]) => ({
   origins: ["remix"], entity_ids: [], region_ids: ["region:market"], domains,
+});
+
+const marketGossip = {
+  giver: "remix:guard", recipient: "remix:player", item: "remix:market-token",
+  topic: "topic:old-friends", text: "We are old friends.",
+};
+
+function marketRule() {
+  const { giver, item, topic, text } = marketGossip;
+  return {
+    version: "1.0.0" as const, id: "behavior:market-gossip", owner: giver,
+    when: { kind: "speech" as const },
+    conditions: [
+      { kind: "speech.equals" as const, text },
+      { kind: "topic.unknown" as const, topic },
+      { kind: "item.held" as const, item },
+    ],
+    effects: [{ kind: "belief.record" as const, topic }, { kind: "offer.create" as const, item }],
+  };
+}
+
+type WorldFixture = ReturnType<typeof setup>;
+
+async function seedMarketGossip(fx: WorldFixture) {
+  const { giver, recipient, item } = marketGossip;
+  fx.mode("edit");
+  await fx.commit(fx.request("token", [{ kind: "overlay.create", entity_kind: "item", entity: item,
+    region: "region:market", label: "Market token", holder: giver }], "EDITOR"));
+  await fx.commit(fx.request("acquaintance", [{ kind: "remix.assign", entity_id: giver,
+    field: "relationship:" + recipient, value: "acquaintance" }], "EDITOR"));
+}
+
+function gossipRequest(fx: WorldFixture, id: string, text = marketGossip.text) {
+  return fx.request(id, [{ kind: "speech.record", text }], "PLAY", text);
+}
+
+async function rejectPlay(fx: WorldFixture, req: ReturnType<WorldFixture["request"]>) {
+  const before = fx.head();
+  const prepared = fx.service.prepareTurn(fx.access, req.envelope, req.proposal);
+  const result = prepared.ok && prepared.value.kind === "prepared"
+    ? await fx.service.commitTurn(fx.access, req.envelope, prepared.value.handle.candidate_id)
+    : prepared;
+  assert.ok(!result.ok);
+  assert.deepEqual(fx.head(), before);
+  return result.error;
+}
+
+void test("A36 approved gossip rule records witnessed knowledge and makes one offer for later acceptance", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  const { giver, recipient, item, topic } = marketGossip;
+  await seedMarketGossip(fx);
+  const rule = marketRule();
+  await fx.commit(fx.request("install-gossip", [{ kind: "rule.install", rule }], "EDITOR"));
+  fx.mode("play");
+  const before = fx.head().snapshot.world!;
+  await fx.commit(gossipRequest(fx, "paraphrase", "We used to be friends."));
+  assert.deepEqual(fx.head().snapshot.world!.beliefs, before.beliefs);
+
+  const req = gossipRequest(fx, "gossip");
+  const stage = fx.prepare(req);
+  const clock = fx.head().snapshot.clock.overlay_turn;
+  const outcome = take(await fx.service.commitTurn(fx.access, req.envelope, stage.handle.candidate_id));
+  const spoken = fx.head();
+  assert.equal(spoken.snapshot.clock.overlay_turn, clock + 1);
+  const world = spoken.snapshot.world!;
+  const speech = world.events.find((event) => event.kind === "speech" && event.request === req.envelope.request_id);
+  assert.equal(speech?.kind, "speech");
+  assert.deepEqual(speech.listeners, [giver]);
+  assert.deepEqual(world.beliefs.map((belief) => ({ character: belief.character, evidence: belief.evidence,
+    topic: "topic" in belief ? belief.topic : undefined })), [{ character: giver, evidence: speech.id, topic }]);
+  assert.deepEqual(world.facts, before.facts);
+  assert.equal(activeFact(world, item, "inventory:holder")?.value, giver);
+  assert.ok("offers" in world);
+  assert.equal(world.offers.length, 1);
+  const offer = world.offers[0]!;
+  assert.deepEqual({ item: offer.item, giver: offer.giver, recipient: offer.recipient, consumed_by: offer.consumed_by },
+    { item, giver, recipient, consumed_by: null });
+  const narration = outcome.receipt.narration_facts.join("\n");
+  assert.ok(narration.includes(offer.id));
+  assert.ok(!narration.includes(topic) && !narration.includes(rule.id));
+
+  assert.deepEqual(take(await fx.service.commitTurn(fx.access, req.envelope, stage.handle.candidate_id)), outcome);
+  assert.deepEqual(fx.head(), spoken);
+  const repeated = await fx.commit(gossipRequest(fx, "fresh-gossip"));
+  const afterRepeat = fx.head().snapshot.world!;
+  assert.ok("offers" in afterRepeat);
+  assert.deepEqual(afterRepeat.offers, world.offers);
+  assert.deepEqual(afterRepeat.beliefs, world.beliefs);
+  assert.equal(repeated.receipt.event_ids.length, 1);
+
+  await rejectPlay(fx, fx.request("take-without-offer", [{ kind: "inventory.transfer", item, from: giver, to: recipient }]));
+  const accept = { kind: "offer.accept", offer_id: offer.id } as const;
+  const acceptClock = fx.head().snapshot.clock.overlay_turn;
+  await fx.commit(fx.request("accept-token", [accept]));
+  const accepted = fx.head().snapshot;
+  assert.equal(accepted.clock.overlay_turn, acceptClock + 1);
+  const after = accepted.world!;
+  assert.ok("offers" in after);
+  assert.equal(after.offers.length, 1);
+  assert.equal(after.offers[0]?.id, offer.id);
+  assert.ok(after.offers[0]?.consumed_by);
+  assert.equal(activeFact(after, item, "inventory:holder")?.value, recipient);
+  assert.deepEqual(after.facts.filter(({ subject }) => subject !== item), before.facts.filter(({ subject }) => subject !== item));
+  await rejectPlay(fx, fx.request("accept-token-again", [accept]));
+});
+
+void test("rule installation rejects unsupported versions, executable parameters, unregistered effects, and a self-cycle", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  await seedMarketGossip(fx);
+  const definition = marketRule();
+  const { giver, item } = marketGossip;
+  const before = fx.head();
+  for (const [id, rule] of [
+    ["version", { ...definition, version: "2.0.0" }],
+    ["expression", { ...definition, conditions: [{ kind: "speech.equals", text: marketGossip.text,
+      expression: "return true" }] }],
+    ["exit", { ...definition, effects: [{ kind: "overlay.connect", connection: "remix:shortcut",
+      from: "remix:market", to: "remix:vault" }] }],
+    ["cycle", { ...definition, when: { kind: "offer.created", item }, conditions: [],
+      effects: [{ kind: "offer.create", item }] }],
+  ] as const) {
+    const { envelope, proposal } = fx.request(id, [{ kind: "rule.install", rule: definition }], "EDITOR");
+    const invalid = { ...proposal, operations: [{ kind: "rule.install", rule }] };
+    assert.equal(fx.service.prepareTurn(fx.access, envelope, invalid).ok, false, id);
+    assert.deepEqual(fx.head(), before);
+  }
+  await fx.commit(fx.request("valid-rule", [{ kind: "rule.install", rule: definition }], "EDITOR"));
+  assert.equal(activeFact(fx.head().snapshot.world!, item, "inventory:holder")?.value, giver);
+});
+
+void test("a later rule failure rolls back witnessed speech, belief, and the staged offer", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  const { giver, recipient, item } = marketGossip;
+  const field = "relationship:" + recipient;
+  await seedMarketGossip(fx);
+  await fx.commit(fx.request("producer", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
+  await fx.commit(fx.request("consumer", [{ kind: "rule.install", rule: {
+    version: "1.0.0", id: "behavior:offer-friendship", owner: giver,
+    when: { kind: "offer.created", item }, conditions: [],
+    effects: [{ kind: "relationship.adjust", target: recipient, step: 1 }],
+  } }], "EDITOR"));
+  await fx.commit(fx.request("at-limit", [{ kind: "remix.assign", entity_id: giver, field, value: "friend" }], "EDITOR"));
+  fx.mode("play");
+  await rejectPlay(fx, gossipRequest(fx, "overflow"));
+
+  fx.mode("edit");
+  await fx.commit(fx.request("within-range", [{ kind: "remix.assign", entity_id: giver, field, value: "acquaintance" }], "EDITOR"));
+  fx.mode("play");
+  await fx.commit(gossipRequest(fx, "within-range-gossip"));
+  const world = fx.head().snapshot.world!;
+  assert.ok("offers" in world);
+  assert.equal(world.offers.length, 1);
+  assert.equal(world.beliefs.length, 1);
+  assert.equal(activeFact(world, giver, field)?.value, "friend");
+});
+
+void test("A07 nested offered inventory checks trusted transitive vault progression before publication", async (t) => {
+  const fixture = setup(undefined, Date.now, undefined, (image) => {
+    const key = { entity_id: marketGossip.item, field: "inventory:holder", change: "write" as const };
+    const native = image.snapshot.entities.find(({ id }) => id === "native:room")!;
+    native.region_ids = ["region:vault"];
+    const gate = native.surfaces.find(({ field }) => field === "progression:counter")!;
+    const fromInventory = { ...key, entity_id: marketGossip.giver, field: "inventory:contents" };
+    image.snapshot.world_dependencies = [
+      { source: key, dependency: fromInventory },
+      { source: fromInventory, dependency: { entity_id: native.id, field: gate.field, change: "write" } },
+    ];
+    const { policy } = image.snapshot;
+    const source = { source_id: policy.sources[0]!.id, start: 0, end: 1 };
+    policy.policy_amendment.invariants.push({
+      id: "rule:vault", source, protected: true, supersedes: [],
+      scope: { origins: ["native"], entity_ids: [native.id], region_ids: ["region:vault"], domains: ["progression"] },
+      guard: { id: "field.unchanged", enforcement: "structural", parameters: { field: gate.field } },
+    });
+  });
+  t.after(() => fixture.close());
+  await seedMarketGossip(fixture);
+  await fixture.commit(fixture.request("a07-install", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
+  fixture.mode("play");
+  await fixture.commit(gossipRequest(fixture, "a07-offer"));
+  const image = fixture.head();
+  const world = image.snapshot.world!;
+  assert.ok(world.version === "2.0.0");
+  const offer = world.offers[0]!;
+  const attempt = fixture.request("a07-accept", [{ kind: "offer.accept", offer_id: offer.id }]);
+  const resolved = resolvePolicy(image.snapshot, attempt.proposal);
+  assert.ok(!resolved.ok);
+  assert.equal(resolved.error.status, "POLICY_CONFLICT");
+  assert.ok(resolved.trace.rule_ids.includes("rule:vault"));
+  assert.equal((await rejectPlay(fixture, attempt)).status, "POLICY_CONFLICT");
+  assert.equal(activeFact(fixture.head().snapshot.world!, offer.item, "inventory:holder")?.value, offer.giver);
+});
+
+void test("A21 offer cascades fail atomically beyond depth, operations, or evaluation limits", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  await seedMarketGossip(fx);
+  const { giver } = marketGossip;
+  const items = Array.from({ length: 9 }, (_, i) => "remix:chain-token-" + i);
+  for (const item of items) {
+    await fx.commit(fx.request("create-" + item, [{ kind: "overlay.create", entity_kind: "item",
+      entity: item, region: "region:market", label: item, holder: giver }], "EDITOR"));
+  }
+  await fx.commit(fx.request("install-chain-root", [{ kind: "rule.install", rule: {
+    ...marketRule(), conditions: [{ kind: "speech.equals", text: marketGossip.text }],
+    effects: [{ kind: "offer.create", item: items[0]! }],
+  } }], "EDITOR"));
+  for (let i = 1; i < items.length; i++) {
+    await fx.commit(fx.request("install-chain-" + i, [{ kind: "rule.install", rule: {
+      version: "1.0.0", id: "behavior:chain-" + i, owner: giver,
+      when: { kind: "offer.created", item: items[i - 1]! }, conditions: [],
+      effects: [{ kind: "offer.create", item: items[i]! }],
+    } }], "EDITOR"));
+  }
+  const cycle = fx.request("install-cycle", [{ kind: "rule.install", rule: {
+    version: "1.0.0", id: "behavior:chain-cycle", owner: giver,
+    when: { kind: "offer.created", item: items.at(-1)! }, conditions: [], effects: [{ kind: "offer.create", item: items[0]! }],
+  } }], "EDITOR");
+  assert.equal(fx.service.prepareTurn(fx.access, cycle.envelope, cycle.proposal).ok, false);
+  fx.mode("play");
+  assert.equal((await rejectPlay(fx, gossipRequest(fx, "overflow-depth"))).status, "ABORTED");
+
+  for (const [size, status] of [[31, "COMMITTED"], [32, "ABORTED"]] as const) {
+    const next = setup();
+    try {
+      await seedMarketGossip(next);
+      const effects = Array.from({ length: 8 }, (_, i) => ({ kind: "belief.record" as const, topic: "topic:slot-" + i }));
+      for (let i = 0; i < 4; i++) {
+        await next.commit(next.request("limit-" + i, [{ kind: "rule.install", rule: {
+          ...marketRule(), id: "behavior:limit-" + i, conditions: [],
+          effects: effects.slice(0, i === 3 ? size - 24 : 8).map((effect) => ({ ...effect, topic: effect.topic + "-" + i })),
+        } }], "EDITOR"));
+      }
+      next.mode("play");
+      const req = gossipRequest(next, "operation-limit");
+      if (status === "COMMITTED") assert.equal((await next.commit(req)).receipt.event_ids.length, 32);
+      else assert.equal((await rejectPlay(next, req)).status, status);
+    } finally {
+      next.close();
+    }
+  }
+
+  const metered = setup();
+  t.after(() => metered.close());
+  await seedMarketGossip(metered);
+  for (let i = 0; i < 15; i++) {
+    await metered.commit(metered.request("metered-" + i, [{ kind: "rule.install", rule: {
+      ...marketRule(), id: "behavior:metered-" + i,
+      conditions: [...Array.from({ length: 7 }, () => ({ kind: "item.held" as const, item: marketGossip.item })),
+        { kind: "speech.equals", text: "Unmatched literal" }],
+    } }], "EDITOR"));
+  }
+  metered.mode("play");
+  assert.equal((await rejectPlay(metered, gossipRequest(metered, "budgeted-misses"))).status, "ABORTED");
+});
+
+void test("behavior outcomes survive reopen, validate signed history, and recover after publication", async (t) => {
+  let fault: FaultPoint | undefined;
+  const fx = setup((point) => { if (point === fault) throw new Error("behavior fault " + point); });
+  t.after(() => fx.close());
+  await seedMarketGossip(fx);
+  await fx.commit(fx.request("persistent-rule", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
+  fx.mode("play");
+  const play = gossipRequest(fx, "durable-cascade");
+  const stage = fx.prepare(play);
+  const attempt = () => fx.service.commitTurn(fx.access, play.envelope, stage.handle.candidate_id);
+  const before = fx.head();
+  fault = "before_commit";
+  assert.equal((await attempt()).ok, false);
+  assert.deepEqual(fx.head(), before);
+  fault = "after_commit";
+  assert.equal((await attempt()).ok, false);
+  const committed = fx.head();
+  assert.notDeepEqual(committed, before);
+  fault = undefined;
+  fx.reopen();
+  const recovered = take(await attempt());
+  assert.equal(recovered.receipt.event_ids.length, 3);
+  assert.deepEqual(fx.head(), committed);
+  const { owner_id } = fx.access;
+  const history = fx.store.portableHistory(committed);
+  assert.ok(history);
+  const key = Buffer.alloc(32, 1);
+  const original = decodePortable(encodePortable(history, key)!, owner_id, key);
+  assert.ok(original);
+  assert.deepEqual(relocatePortable(original).imported.snapshot.world, committed.snapshot.world);
+
+  const corrupt = structuredClone(history);
+  const entry = corrupt.at(-1)!;
+  const world = entry.image.snapshot.world;
+  assert.ok(world?.version === "2.0.0");
+  const forged = world.events.at(-1)!;
+  assert.equal(forged.kind, "rule.effect");
+  forged.step.event_id = forged.id;
+  entry.events[entry.events.length - 1] = forged;
+  entry.image.checkpoint.remix_state_ref = remixStateRef(entry.image.snapshot.entities, world);
+  assert.equal(decodePortable(encodePortable(corrupt, key)!, owner_id, key), undefined);
+  const reordered = structuredClone(history);
+  const last = reordered.at(-1)!;
+  last.events.reverse();
+  assert.equal(decodePortable(encodePortable(reordered, key)!, owner_id, key), undefined);
+});
+
+void test("Play generation reuses the registry for a different observer, fact, topic, and item", async (t) => {
+  const fx = setup(undefined, Date.now, undefined, (image) => {
+    const source = { source_id: image.snapshot.policy.sources[0]!.id, start: 0, end: 1 };
+    image.snapshot.policy.policy_amendment.generation_rules.push({
+      id: "rule:allow-market-behavior", action: "generate.rule", triggers: ["player_attempt"], decision: "allow",
+      source, supersedes: [], scope: {
+        origins: ["remix"], entity_ids: [], region_ids: ["region:market"], domains: ["characterization", "inventory"],
+      },
+    });
+  });
+  t.after(() => fx.close());
+  const observer = "remix:trader";
+  const item = "remix:trader-ribbon";
+  const topic = "topic:market-lantern";
+  fx.mode("edit");
+  for (const operation of [
+    { kind: "overlay.create", entity_kind: "character", entity: observer, region: "region:market", label: "Trader", room: "remix:market" },
+    { kind: "overlay.create", entity_kind: "item", entity: item, region: "region:market", label: "Ribbon", holder: observer },
+  ] as const) await fx.commit(fx.request(operation.entity, [operation], "EDITOR"));
+  fx.mode("play");
+  const install = await fx.commit(fx.request("play-observer-rule", [{ kind: "rule.install", rule: {
+    version: "1.0.0", id: "behavior:observation-reward", owner: observer,
+    when: { kind: "observation", subject: marketGossip.giver, field: "world:description" },
+    conditions: [{ kind: "topic.unknown", topic }, { kind: "offer.eligible", item }],
+    effects: [{ kind: "belief.record", topic }, { kind: "offer.create", item }],
+  } }]));
+  assert.equal(install.receipt.time_cost, 0);
+  assert.deepEqual(install.rule_ids, ["rule:allow-market-behavior"]);
+  const observed = await fx.commit(fx.request("trader-observes", [{ kind: "observation.record",
+    observer, subject: marketGossip.giver, field: "world:description" }]));
+  assert.ok(observed.rule_ids.includes("rule:allow-market-behavior"));
+  const world = fx.head().snapshot.world;
+  assert.ok(world?.version === "2.0.0");
+  assert.deepEqual(world.beliefs.map(({ character, topic }) => [character, topic]), [[observer, topic]]);
+  assert.equal(world.offers[0]?.giver, observer);
+  assert.equal(world.offers[0]?.item, item);
+  assert.equal(activeFact(world, item, "inventory:holder")?.value, observer);
+
+  fx.mode("edit");
+  await fx.commit(fx.request("move-eligible-item", [{ kind: "inventory.transfer", item, from: observer, to: "remix:market" }], "EDITOR"));
+  fx.mode("play");
+  assert.equal((await rejectPlay(fx, fx.request("accept-moved-item", [{ kind: "offer.accept", offer_id: world.offers[0].id }]))).status,
+    "NEEDS_CLARIFICATION");
+});
+
+void test("acceptance of a pending offer enforces the current inventory policy", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  const { giver, item } = marketGossip;
+  await seedMarketGossip(fx);
+  await fx.commit(fx.request("install", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
+  fx.mode("play");
+  await fx.commit(gossipRequest(fx, "offer"));
+  const world = fx.head().snapshot.world!;
+  assert.ok("offers" in world);
+  const offer = world.offers[0];
+  assert.ok(offer);
+  fx.mode("edit");
+  take(await editBundle(fx, "keep-token", [{ kind: "invariant", id: "rule:keep-token", protected: true,
+    scope: protectedScope(["inventory"]), guard: { id: "inventory.possession", enforcement: "structural",
+      parameters: { item, holder: giver } } }])());
+  fx.mode("play");
+  const rejected = await rejectPlay(fx, fx.request("protected-accept", [{ kind: "offer.accept", offer_id: offer.id }]));
+  assert.equal(rejected.status, "POLICY_CONFLICT");
 });
 
 void test("A03/A06/A30 approved policy changes preserve existing entities and roll back with a failing typed fact assignment", async (t) => {

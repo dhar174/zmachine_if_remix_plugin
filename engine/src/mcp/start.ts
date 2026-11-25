@@ -12,7 +12,7 @@ const configSchema = z.strictObject({
   private_story_files: z.boolean().default(false),
   heidi_trial: z.boolean().default(false),
   transfer_key_env: z.string().regex(/^[A-Z][A-Z0-9_]*$/u).optional(),
-  profile: z.enum(["synthetic", "native-z5"]).default("synthetic"),
+  profile: z.enum(["synthetic", "synthetic-rules", "native-z5"]).default("synthetic"),
 });
 const configPath = process.argv[2];
 if (!configPath || process.argv.length !== 3) {

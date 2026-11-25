@@ -52,7 +52,7 @@ const protection = (id: string, field: string) => ({
 });
 
 async function harness(directory: string, browserEnabled = true, fault?: (point: FaultPoint) => void,
-  profile: "synthetic" | "native-z5" = "synthetic", clock = Date.now, transfers = false, heidiTrial = true) {
+  profile: "synthetic" | "synthetic-rules" | "native-z5" = "synthetic", clock = Date.now, transfers = false, heidiTrial = true) {
   const executor = profile === "native-z5" ? createNativeFixtureExecutor() : createFixtureExecutor();
   const service = new TurnService(join(directory, "fixture.sqlite"), executor, clock, fault, profile,
     transfers ? { key: Buffer.alloc(32, 42), heidiTrial } : undefined);
@@ -213,6 +213,100 @@ async function activateFixture(fixture: Awaited<ReturnType<typeof harness>>, exi
   const { session_id, branch_id } = draft.head;
   return { version, session_id, branch_id };
 }
+
+void test("bounded rules through authenticated MCP launch, approve, gossip, offer, accept, and restore", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "zirp-mcp-rules-"));
+  const fixture = await harness(directory, true, undefined, "synthetic-rules");
+  t.after(async () => {
+    await fixture.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const ref = await activateFixture(fixture);
+  const read = async () => context.parse(await fixture.call("get_turn_context", ref)).context;
+  let head = (await read()).head;
+  const mode = async (command: string) => {
+    const response = await fixture.post("/fixture-mode", { ...head, request_id: "request:mode", command });
+    assert.equal(response.status, 200, await response.text());
+  };
+  const prepareAction = (request_id: string, action: unknown) => ({ version, target: { ...head, request_id }, action });
+  const stage = async (args: ReturnType<typeof prepareAction>) =>
+    prepared.parse(await fixture.call("prepare_turn", args));
+  const item = "remix:market-token";
+  const npc = "remix:guard";
+  const text = "We are old friends.";
+  const topic = "topic:old-friends";
+  const rule = {
+    version, id: "behavior:gossip", owner: npc, when: { kind: "speech" },
+    conditions: [{ kind: "speech.equals", text }, { kind: "topic.unknown", topic }, { kind: "item.held", item }],
+    effects: [{ kind: "belief.record", topic }, { kind: "offer.create", item }],
+  };
+  const install = prepareAction("request:rule-install", { kind: "rule.install", mode: "EDITOR", rule });
+  assert.equal(outcome.parse(await fixture.call("prepare_turn", install)).status, "NEEDS_APPROVAL");
+  assert.equal(outcome.parse(await fixture.call("prepare_turn", install, "reader")).status, "INSUFFICIENT_SCOPE");
+  await mode("/edit");
+  const draft = await stage(install);
+  const approval = await fixture.get("/candidate?id=" + draft.candidate_id);
+  assert.equal(approval.status, 200);
+  assert.match(await approval.text(), /behavior:gossip/u);
+  assert.equal(outcome.parse(await fixture.call("commit_turn", { ...install, ...draft })).status, "NEEDS_APPROVAL");
+  await fixture.approve(draft);
+  assert.equal(outcome.parse(await fixture.call("commit_turn", { ...install, ...draft })).status, "COMMITTED");
+  head = (await read()).head;
+  assert.deepEqual((await read()).behavior_rules, [rule]);
+  await mode("/play");
+
+  const gossip = prepareAction("request:gossip", { kind: "overlay.speech", text });
+  const preview = await fixture.call("prepare_turn", gossip);
+  assert.doesNotMatch(JSON.stringify(preview), /topic:old-friends|behavior:gossip/u);
+  const speechArgs = { ...gossip, ...prepared.parse(preview) };
+  const speech = receipt.parse(await fixture.call("commit_turn", speechArgs)).receipt;
+  assert.equal(speech.behavior_steps, undefined);
+  assert.equal(speech.event_ids.length, 3);
+  assert.equal(speech.time_cost, 1);
+  const active = await read();
+  assert.equal(active.behavior_rules, undefined);
+  const offer = active.pending_offers?.[0];
+  assert.ok(offer);
+  assert.deepEqual(active.pending_offers, [{ ...offer, item, giver: npc, recipient: "remix:player" }]);
+  assert.deepEqual(inspection.parse(await fixture.call("inspect_session", { ...ref,
+    query: { kind: "offers" } })).context.pending_offers, [offer]);
+  const id = { generation_id: speech.generation_id, request_id: speech.request_id };
+  assert.deepEqual(inspection.parse(await fixture.call("inspect_session", { ...ref,
+    query: { kind: "receipt", ...id } })).receipts, [speech]);
+  assert.deepEqual(receipt.parse(await fixture.call("commit_turn", speechArgs)).receipt, speech);
+  assert.equal(outcome.parse(await fixture.call("prepare_turn", { ...gossip, action: { ...gossip.action as object, text: "Changed" } })).status,
+    "VALIDATION_FAILED");
+
+  head = active.head;
+  const pendingSave = await saveCombined(fixture, head, "request:save-pending");
+  const accept = prepareAction("request:offer-accept", { kind: "offer.accept", offer_id: offer.id });
+  const competing = prepareAction("request:competing-accept", { kind: "offer.accept", offer_id: offer.id });
+  const acceptArgs = { ...accept, ...await stage(accept) };
+  const competingArgs = { ...competing, ...await stage(competing) };
+  const results = await Promise.all([fixture.call("commit_turn", acceptArgs), fixture.call("commit_turn", acceptArgs),
+    fixture.call("commit_turn", competingArgs)]);
+  const winner = results.find((result) => outcome.parse(result).status === "COMMITTED");
+  assert.ok(winner);
+  assert.equal(receipt.parse(winner).receipt.event_ids.length, 2);
+  assert.equal((await read()).pending_offers?.length, 0);
+  head = (await read()).head;
+  const consumedSave = await saveCombined(fixture, head, "request:save-consumed");
+
+  for (const [save_id, expected] of [[pendingSave, 1], [consumedSave, 0]] as const) {
+    const restore = { version, target: { ...head, request_id: "request:restore-" + expected }, save_id };
+    await reviewRestore(fixture, restore);
+    assert.equal(outcome.parse(await fixture.call("restore_session", restore)).status, "RESTORED");
+    const restored = await read();
+    head = restored.head;
+    assert.equal(restored.pending_offers?.length, expected);
+    assert.deepEqual(inspection.parse(await fixture.call("inspect_session", { ...ref, query: { kind: "receipt", ...id } }))
+      .receipts[0]?.narration_facts, speech.narration_facts);
+  }
+  await mode("/edit");
+  const inspected = inspection.parse(await fixture.call("inspect_session", { ...ref, query: { kind: "receipt", ...id } }));
+  assert.deepEqual(inspected.receipts[0]?.behavior_steps?.map(({ rule_id, effect }) => [rule_id, effect.kind]),
+    [[rule.id, "belief.record"], [rule.id, "offer.create"]]);
+});
 
 function publishedImage(path: string) {
   const db = new DatabaseSync(path, { readOnly: true });
