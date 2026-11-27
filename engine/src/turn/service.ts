@@ -5,6 +5,7 @@ import { capture, compilationRecord, compilerView, fixtureContext, launchRecord,
 import { fixtureGuards, fixtureImage, fixtureNativeWrite, fixtureRoom, fixtureStory, rulesFixtureImage } from "../fixture/synthetic-world.ts";
 import type { FixtureProfile } from "../fixture/synthetic-world.ts";
 import { worldView } from "../world/model.ts";
+import { OfferAccept } from "../world/rule-contracts.ts";
 import { offerEligible } from "../world/rule-state.ts";
 import { heidiStory, isNativeStory, nativePayload, validateStoryBytes } from "../native/checkpoint.ts";
 import { createNativeFixtureExecutor, nativeContext, openNativeFixture } from "../native/executor.ts";
@@ -30,7 +31,10 @@ import { FixtureRecovery } from "../fixture/recovery.ts";
 import { decodePortable, encodePortable, relocatePortable } from "../fixture/portable-session.ts";
 import type { UploadPurpose } from "../fixture/portable-session.ts";
 
-const TurnEnvelope = CoreTurnEnvelope.extend({ fixture_action_digest: z.string().regex(/^[0-9a-f]{64}$/u).optional() });
+const TurnEnvelope = CoreTurnEnvelope.extend({
+  input: z.union([CoreTurnEnvelope.shape.input, OfferAccept]),
+  fixture_action_digest: z.string().regex(/^[0-9a-f]{64}$/u).optional(),
+});
 type TurnEnvelope = z.infer<typeof TurnEnvelope>;
 type Head = ReturnType<typeof expected>;
 type Prepared = { kind: "prepared"; handle: CandidateHandle; diff: string; diff_digest: string };
@@ -423,7 +427,7 @@ readonly fixtureProfile: FixtureProfile;
 
   private fixtureEnvelope(access: Access, request: z.infer<typeof target>, action: z.infer<typeof requestAction>) {
     const editor = action.kind === "directive" || action.kind === "rule.install" && action.mode === "EDITOR";
-    const input = action.kind === "play" ? action.input : { kind: "line",
+    const input = action.kind === "play" ? action.input : action.kind === "offer.accept" ? action : { kind: "line",
       text: action.kind === "directive" ? action.source_ref : action.kind === "overlay.speech" ? action.text :
         action.kind + ":" + canonicalDigest(action) };
     const fixtureAction = action.kind === "play" || action.kind === "directive" ? {} :
@@ -689,6 +693,15 @@ readonly fixtureProfile: FixtureProfile;
       }
       if (requestKey(proposal) !== id || canonicalDigest(expected(proposal)) !== canonicalDigest(wanted) ||
           Buffer.byteLength(canonicalJson([proposal, compiler.data])) > limits.checkpoint_bytes) return reject(invalid());
+      const acceptance = proposal.operations.find(({ kind }) => kind === "offer.accept");
+      if (acceptance || envelope.input.kind === "offer.accept") {
+        if (envelope.input.kind !== "offer.accept" || acceptance?.kind !== "offer.accept" ||
+            acceptance.offer_id !== envelope.input.offer_id ||
+            envelope.intent !== "play" || proposal.mode !== "PLAY" || proposal.amendment ||
+            proposal.operations.length !== 1) {
+          return reject(failure("VALIDATION_FAILED", "An offer acceptance must match the selected offer in its own Play turn."));
+        }
+      }
       const nativeInput = proposal.operations.find(({ kind }) => kind === "native.line" || kind === "native.character");
       if ((nativeInput?.kind === "native.line" && (envelope.input.kind !== "line" || envelope.input.text !== nativeInput.text)) ||
           (nativeInput?.kind === "native.character" &&

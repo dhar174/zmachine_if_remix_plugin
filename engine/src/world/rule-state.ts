@@ -148,9 +148,10 @@ export function validBehaviorState(world: BehaviorWorld, view: ReturnType<typeof
         break;
       case "relationship.adjust": {
         const field = "relationship:" + effect.target;
-        const prior = world.facts.find((fact) => fact.subject === event.subject && fact.field === field && fact.until === event.revision);
+        const prior = view.factBefore(event.subject, field, event.id);
         if (sourcedBeliefs.length || sourcedFacts.length !== 1 || sourcedFacts[0]?.field !== field ||
             !view.observationRoom(effect.target, event.revision) ||
+            prior?.until !== event.revision ||
             prior?.value !== (effect.step === 1 ? "acquaintance" : "friend") ||
             sourcedFacts[0].value !== (effect.step === 1 ? "friend" : "acquaintance")) return false;
         break;

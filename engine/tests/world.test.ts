@@ -57,12 +57,13 @@ function setup(fault?: (point: FaultPoint) => void, clock = Date.now,
   function head() {
     return store.head(access)!;
   }
-  function request(id: string, operations: ResolverOperation[], mode: "PLAY" | "EDITOR" = "PLAY", input = id) {
+  function request(id: string, operations: ResolverOperation[], mode: "PLAY" | "EDITOR" = "PLAY",
+    input: string | { kind: "offer.accept"; offer_id: string } = id) {
     const current = head().snapshot.head;
     return {
       envelope: { ...current, version: "1.0.0", request_id: "request:" + id,
         intent: operations.every(({ kind }) => kind === "inspect.entity") ? "inspect" : mode === "PLAY" ? "play" : "editor",
-        input: { kind: "line", text: input } },
+        input: typeof input === "string" ? { kind: "line", text: input } : input },
       proposal: { ...current, version: "1.0.0", request_id: "request:" + id, mode, operations, declared_effects: [], amendment: null },
     };
   }
@@ -267,6 +268,11 @@ function gossipRequest(fx: WorldFixture, id: string, text = marketGossip.text) {
   return fx.request(id, [{ kind: "speech.record", text }], "PLAY", text);
 }
 
+function offerRequest(fx: WorldFixture, id: string, offerId: string) {
+  const input = { kind: "offer.accept", offer_id: offerId } as const;
+  return fx.request(id, [input], "PLAY", input);
+}
+
 async function rejectPlay(fx: WorldFixture, req: ReturnType<WorldFixture["request"]>) {
   const before = fx.head();
   const prepared = fx.service.prepareTurn(fx.access, req.envelope, req.proposal);
@@ -323,9 +329,8 @@ void test("A36 approved gossip rule records witnessed knowledge and makes one of
   assert.equal(repeated.receipt.event_ids.length, 1);
 
   await rejectPlay(fx, fx.request("take-without-offer", [{ kind: "inventory.transfer", item, from: giver, to: recipient }]));
-  const accept = { kind: "offer.accept", offer_id: offer.id } as const;
   const acceptClock = fx.head().snapshot.clock.overlay_turn;
-  await fx.commit(fx.request("accept-token", [accept]));
+  await fx.commit(offerRequest(fx, "accept-token", offer.id));
   const accepted = fx.head().snapshot;
   assert.equal(accepted.clock.overlay_turn, acceptClock + 1);
   const after = accepted.world!;
@@ -335,7 +340,109 @@ void test("A36 approved gossip rule records witnessed knowledge and makes one of
   assert.ok(after.offers[0]?.consumed_by);
   assert.equal(activeFact(after, item, "inventory:holder")?.value, recipient);
   assert.deepEqual(after.facts.filter(({ subject }) => subject !== item), before.facts.filter(({ subject }) => subject !== item));
-  await rejectPlay(fx, fx.request("accept-token-again", [accept]));
+  await rejectPlay(fx, offerRequest(fx, "accept-token-again", offer.id));
+});
+
+void test("an observation keeps its producing fact when a rule changes that fact in the same turn", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  const { giver, recipient } = marketGossip;
+  const field = "relationship:" + recipient;
+  await seedMarketGossip(fx);
+  await fx.commit(fx.request("install-observed-relationship", [{ kind: "rule.install", rule: {
+    version: "1.0.0", id: "behavior:observed-relationship", owner: giver,
+    when: { kind: "observation", subject: giver, field }, conditions: [],
+    effects: [{ kind: "relationship.adjust", target: recipient, step: 1 }],
+  } }], "EDITOR"));
+  fx.mode("play");
+
+  const prior = activeFact(fx.head().snapshot.world!, giver, field);
+  assert.ok(prior);
+  const receipt = await fx.commit(fx.request("observe-before-adjust", [{
+    kind: "observation.record", observer: giver, subject: giver, field,
+  }]));
+  const image = fx.head();
+  const world = image.snapshot.world!;
+  const observed = world.events.at(-2);
+  const adjusted = world.events.at(-1);
+  assert.equal(observed?.kind, "observation");
+  assert.equal(observed.fact_source, prior.source);
+  assert.equal(adjusted?.kind, "rule.effect");
+  assert.equal(adjusted.step.event_id, observed.id);
+  assert.equal(observed.revision, adjusted.revision);
+  assert.equal(activeFact(world, giver, field)?.value, "friend");
+  assert.equal(receipt.receipt.event_ids.length, 2);
+  assert.ok(validateImage(image, makeFixture()).ok);
+  assert.ok(fx.store.checkpointHistoryValid(image));
+  const history = fx.store.portableHistory(image);
+  const key = Buffer.alloc(32, 20);
+  assert.ok(history && decodePortable(encodePortable(history, key)!, fx.access.owner_id, key));
+
+  observed.fact_source = adjusted.id;
+  image.checkpoint.remix_state_ref = remixStateRef(image.snapshot.entities, world);
+  assert.equal(validateImage(image, makeFixture()).ok, false);
+});
+
+void test("an offer transfer requires an exact acceptance input and its own turn", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  await seedMarketGossip(fx);
+  await fx.commit(fx.request("install-offer-input-rule", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
+  fx.mode("play");
+  await fx.commit(gossipRequest(fx, "make-offer-for-input-check"));
+  const before = fx.head();
+  const world = before.snapshot.world!;
+  assert.equal(world.version, "2.0.0");
+  const offer = world.offers[0]!;
+  const accept = { kind: "offer.accept", offer_id: offer.id } as const;
+  const another = { kind: "offer.accept", offer_id: "world-event:other" } as const;
+  const text = marketGossip.text;
+  for (const req of [
+    fx.request("unrelated-offer-input", [accept], "PLAY", "Look around."),
+    fx.request("hidden-in-speech", [{ kind: "speech.record", text }, accept], "PLAY", text),
+    fx.request("wrong-offer", [accept], "PLAY", another),
+    fx.request("ignore-offer-input", [{ kind: "observation.record", observer: marketGossip.giver,
+      subject: marketGossip.giver, field: "world:description" }], "PLAY", accept),
+    fx.request("compound-acceptance", [{ kind: "observation.record", observer: marketGossip.giver,
+      subject: marketGossip.giver, field: "world:description" }, accept], "PLAY", accept),
+  ]) {
+    const result = fx.service.prepareTurn(fx.access, req.envelope, req.proposal);
+    assert.ok(!result.ok);
+    assert.equal(result.error.status, "VALIDATION_FAILED");
+    assert.deepEqual(fx.head(), before);
+  }
+  const request = offerRequest(fx, "accept-exact-offer", offer.id);
+  const stage = fx.prepare(request);
+  const received = take(await fx.service.commitTurn(fx.access, request.envelope, stage.handle.candidate_id));
+  assert.equal(received.receipt.in_fiction_result, "success");
+  assert.deepEqual(take(await fx.service.commitTurn(fx.access, request.envelope, stage.handle.candidate_id)), received);
+});
+
+void test("bounded relationship adjustments preserve each ordered effect within a turn", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  const { giver, recipient } = marketGossip;
+  const field = "relationship:" + recipient;
+  await seedMarketGossip(fx);
+  await fx.commit(fx.request("install-two-adjustments", [{ kind: "rule.install", rule: {
+    ...marketRule(), conditions: [], effects: [
+      { kind: "relationship.adjust", target: recipient, step: 1 },
+      { kind: "relationship.adjust", target: recipient, step: -1 },
+    ],
+  } }], "EDITOR"));
+  fx.mode("play");
+  const receipt = await fx.commit(gossipRequest(fx, "trigger-two-adjustments"));
+  const image = fx.head();
+  const world = image.snapshot.world!;
+  const revision = image.checkpoint.revision;
+  const facts = world.facts.filter((fact) => fact.subject === giver && fact.field === field && fact.from === revision);
+  assert.deepEqual(facts.map(({ value, until }) => [value, until]), [["friend", revision], ["acquaintance", null]]);
+  assert.deepEqual(facts.map(({ source }) => source), world.events.slice(-2).map(({ id }) => id));
+  assert.equal(receipt.receipt.event_ids.length, 3);
+  assert.ok(fx.store.checkpointHistoryValid(image));
+  const history = fx.store.portableHistory(image);
+  const key = Buffer.alloc(32, 21);
+  assert.ok(history && decodePortable(encodePortable(history, key)!, fx.access.owner_id, key));
 });
 
 void test("rule installation rejects unsupported versions, executable parameters, unregistered effects, and a self-cycle", async (t) => {
@@ -433,7 +540,7 @@ void test("A07 nested offered inventory checks trusted transitive vault progress
   const world = image.snapshot.world!;
   assert.ok(world.version === "2.0.0");
   const offer = world.offers[0]!;
-  const attempt = fixture.request("a07-accept", [{ kind: "offer.accept", offer_id: offer.id }]);
+  const attempt = offerRequest(fixture, "a07-accept", offer.id);
   const resolved = resolvePolicy(image.snapshot, attempt.proposal);
   assert.ok(!resolved.ok);
   assert.equal(resolved.error.status, "POLICY_CONFLICT");
@@ -505,8 +612,10 @@ void test("rule eligibility reports the container and actor reads and a turn acc
   assert.ok(world?.version === "2.0.0");
   assert.equal(world.offers.length, 2);
   const requests = world.offers.map(({ id }) => ({ kind: "offer.accept" as const, offer_id: id }));
-  assert.equal((await rejectPlay(fx, fx.request("accept-two", requests))).status, "NEEDS_CLARIFICATION");
-  await fx.commit(fx.request("accept-one", [requests[0]!]));
+  const multiple = fx.request("accept-two", requests, "PLAY", requests[0]!);
+  assert.equal((await rejectPlay(fx, multiple)).status, "VALIDATION_FAILED");
+  assert.equal(resolvePolicy(fx.head().snapshot, multiple.proposal).ok, false);
+  await fx.commit(offerRequest(fx, "accept-one", requests[0]!.offer_id));
   const after = fx.head().snapshot.world;
   assert.ok(after?.version === "2.0.0");
   assert.deepEqual(after.offers.map(({ consumed_by }) => consumed_by !== null), [true, false]);
@@ -745,7 +854,7 @@ void test("behavior outcomes survive reopen, validate signed history, and recove
 
   const pending = fx.head().snapshot.world;
   assert.ok(pending?.version === "2.0.0");
-  await fx.commit(fx.request("persistent-accept", [{ kind: "offer.accept", offer_id: pending.offers[0]!.id }]));
+  await fx.commit(offerRequest(fx, "persistent-accept", pending.offers[0]!.id));
   const consumed = fx.head();
   const portable = fx.store.portableHistory(consumed);
   assert.ok(portable);
@@ -817,7 +926,7 @@ void test("Play generation reuses the registry for a different observer, fact, t
   fx.mode("edit");
   await fx.commit(fx.request("move-eligible-item", [{ kind: "inventory.transfer", item, from: observer, to: "remix:market" }], "EDITOR"));
   fx.mode("play");
-  assert.equal((await rejectPlay(fx, fx.request("accept-moved-item", [{ kind: "offer.accept", offer_id: world.offers[0].id }]))).status,
+  assert.equal((await rejectPlay(fx, offerRequest(fx, "accept-moved-item", world.offers[0].id))).status,
     "NEEDS_CLARIFICATION");
 });
 
@@ -838,8 +947,38 @@ void test("acceptance of a pending offer enforces the current inventory policy",
     scope: protectedScope(["inventory"]), guard: { id: "inventory.possession", enforcement: "structural",
       parameters: { item, holder: giver } } }])());
   fx.mode("play");
-  const rejected = await rejectPlay(fx, fx.request("protected-accept", [{ kind: "offer.accept", offer_id: offer.id }]));
+  const rejected = await rejectPlay(fx, offerRequest(fx, "protected-accept", offer.id));
   assert.equal(rejected.status, "POLICY_CONFLICT");
+});
+
+void test("a Play-generated rule cannot run after its generation allowance is superseded", async (t) => {
+  const scope = {
+    origins: ["remix"], entity_ids: [], region_ids: ["region:market"], domains: ["characterization", "inventory"],
+  } satisfies TurnImage["snapshot"]["policy"]["policy_amendment"]["generation_rules"][number]["scope"];
+  const allowance = "rule:allow-gossip-behavior";
+  const fx = setup(undefined, Date.now, undefined, ({ snapshot }) => {
+    snapshot.policy.policy_amendment.generation_rules.push({
+      id: allowance, action: "generate.rule", triggers: ["player_attempt"], decision: "allow", scope,
+      source: { source_id: snapshot.policy.sources[0]!.id, start: 0, end: 1 }, supersedes: [],
+    });
+  });
+  t.after(() => fx.close());
+  await seedMarketGossip(fx);
+  fx.mode("play");
+  const installation = await fx.commit(fx.request("install-under-allowance", [{ kind: "rule.install", rule: marketRule() }]));
+  assert.deepEqual(installation.rule_ids, [allowance]);
+  fx.mode("edit");
+  take(await editBundle(fx, "deny-behavior", [{
+    kind: "supersession", old_rule_id: allowance, retained: [],
+    replacement: { kind: "permission", id: "rule:deny-gossip-behavior", action: "generate.rule",
+      triggers: ["player_attempt"], decision: "deny", scope },
+  }])());
+  fx.mode("play");
+  const request = gossipRequest(fx, "trigger-after-denial");
+  assert.equal((await rejectPlay(fx, request)).status, "POLICY_CONFLICT");
+  assert.deepEqual(take(fx.service.inspectFixture(fx.access, { kind: "receipt",
+    generation_id: request.envelope.generation_id,
+    request_id: recoveryTarget.shape.request_id.parse(request.envelope.request_id) })).receipts, []);
 });
 
 void test("A03/A06/A30 approved policy changes preserve existing entities and roll back with a failing typed fact assignment", async (t) => {
