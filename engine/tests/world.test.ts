@@ -21,6 +21,7 @@ import { limits, TurnImage } from "../src/turn/contracts.ts";
 import { turnBudget } from "../src/turn/limits.ts";
 import type { DurableReceipt, FaultPoint } from "../src/turn/contracts.ts";
 import { activeFact, remixStateRef } from "../src/world/model.ts";
+import { runWorldPlan } from "../src/world/operations.ts";
 import { fixtureImage } from "../src/fixture/synthetic-world.ts";
 import { openNativeFixture } from "../src/native/executor.ts";
 import { storyBytes } from "../src/native/checkpoint.ts";
@@ -411,6 +412,14 @@ void test("an offer transfer requires an exact acceptance input and its own turn
     assert.equal(result.error.status, "VALIDATION_FAILED");
     assert.deepEqual(fx.head(), before);
   }
+  const mixed = fx.request("speech-and-acceptance", [{ kind: "speech.record", text }, accept], "PLAY", text);
+  assert.throws(() => runWorldPlan(before.snapshot, {
+    head: before.snapshot.head, world_mode: "PLAY",
+    request_id: recoveryTarget.shape.request_id.parse(mixed.envelope.request_id),
+    proposal_digest: canonicalDigest(mixed.proposal),
+    operations: mixed.proposal.operations.map((operation) => ({ operation })),
+  }), /offer acceptance requires its own Play turn/u);
+  assert.equal(resolvePolicy(before.snapshot, mixed.proposal).ok, false);
   const request = offerRequest(fx, "accept-exact-offer", offer.id);
   const stage = fx.prepare(request);
   const received = take(await fx.service.commitTurn(fx.access, request.envelope, stage.handle.candidate_id));
@@ -443,6 +452,38 @@ void test("bounded relationship adjustments preserve each ordered effect within 
   const history = fx.store.portableHistory(image);
   const key = Buffer.alloc(32, 21);
   assert.ok(history && decodePortable(encodePortable(history, key)!, fx.access.owner_id, key));
+});
+
+void test("stored observations cannot describe a character introduced by a later event in the same revision", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  const { giver } = marketGossip;
+  const guest = "remix:late-guest";
+  const field = "relationship:" + guest;
+  fx.mode("edit");
+  await fx.commit(fx.request("introduce-guest", [{ kind: "overlay.create", entity_kind: "character", entity: guest,
+    region: "region:market", label: "Guest", room: "remix:market" }], "EDITOR"));
+  await fx.commit(fx.request("describe-guest", [{ kind: "remix.assign", entity_id: giver, field, value: "acquaintance" }], "EDITOR"));
+  fx.mode("play");
+  await fx.commit(fx.request("observe-guest", [{ kind: "observation.record", observer: giver, subject: giver, field }]));
+  const image = fx.head();
+  const world = image.snapshot.world!;
+  assert.equal(world.version, "1.0.0");
+  const introduced = world.events.at(-3);
+  const assigned = world.events.at(-2);
+  const observed = world.events.at(-1);
+  const fact = activeFact(world, giver, field);
+  assert.ok(introduced?.kind === "change" && assigned?.kind === "change" && observed?.kind === "observation" && fact);
+
+  introduced.revision = observed.revision;
+  assigned.revision = observed.revision;
+  fact.from = observed.revision;
+  image.checkpoint.remix_state_ref = remixStateRef(image.snapshot.entities, world);
+  assert.ok(validateImage(image, makeFixture()).ok);
+
+  world.events.splice(-3, 3, assigned, observed, introduced);
+  image.checkpoint.remix_state_ref = remixStateRef(image.snapshot.entities, world);
+  assert.equal(validateImage(image, makeFixture()).ok, false);
 });
 
 void test("rule installation rejects unsupported versions, executable parameters, unregistered effects, and a self-cycle", async (t) => {
@@ -612,7 +653,7 @@ void test("rule eligibility reports the container and actor reads and a turn acc
   assert.ok(world?.version === "2.0.0");
   assert.equal(world.offers.length, 2);
   const requests = world.offers.map(({ id }) => ({ kind: "offer.accept" as const, offer_id: id }));
-  const multiple = fx.request("accept-two", requests, "PLAY", requests[0]!);
+  const multiple = fx.request("accept-two", requests, "PLAY", requests[0]);
   assert.equal((await rejectPlay(fx, multiple)).status, "VALIDATION_FAILED");
   assert.equal(resolvePolicy(fx.head().snapshot, multiple.proposal).ok, false);
   await fx.commit(offerRequest(fx, "accept-one", requests[0]!.offer_id));

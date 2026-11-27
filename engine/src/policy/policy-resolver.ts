@@ -258,8 +258,8 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, 
     if (worldOperations > 0 && worldOperations !== amendment.operations.length) {
       throw new ResolutionProblem("NEEDS_CLARIFICATION", "world_subturn", "Resolve world operations separately from legacy or native operations.");
     }
-    if (amendment.operations.filter(({ kind }) => kind === "offer.accept").length > 1) {
-      throw new ResolutionProblem("NEEDS_CLARIFICATION", "single_offer", "Accept at most one offer per Play turn.");
+    if (amendment.operations.length > 1 && amendment.operations.some(({ kind }) => kind === "offer.accept")) {
+      throw new ResolutionProblem("NEEDS_CLARIFICATION", "single_offer", "An offer acceptance requires its own Play turn.");
     }
     for (const [index, operation] of amendment.operations.entries()) {
       if (budget.remaining() <= 0) throw new WorldOperationError("ABORTED", "The turn deadline expired during policy planning.");

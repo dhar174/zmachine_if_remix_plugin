@@ -397,9 +397,11 @@ export function runWorldPlan(snapshot: ResolverSnapshot, plan: PlanInput,
   options: { check?: RuleCheck; budget?: TurnBudget | undefined } = {}) {
   if (!plan.world_mode) return undefined;
   if (!snapshot.world || plan.operations.length === 0 ||
-      plan.operations.filter(({ operation }) => operation.kind === "offer.accept").length > 1 ||
       !plan.operations.every(({ operation }) => usesWorld(snapshot, operation))) {
     throw invalid("The validated plan does not belong to this remix world.");
+  }
+  if (plan.operations.length > 1 && plan.operations.some(({ operation }) => operation.kind === "offer.accept")) {
+    throw invalid("An offer acceptance requires its own Play turn.");
   }
   let current = snapshot.world;
   const initial = snapshot.world;

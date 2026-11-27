@@ -132,16 +132,19 @@ export function worldView(world: World) {
   function rootHolder(id: string, at?: number, before?: string): string | undefined {
     const seen = new Set<string>();
     let entity = entities.get(id);
-    while (entity?.kind === "item") {
+    while (entity) {
+      if (before !== undefined && position(entity.source) >= position(before)) return;
+      if (entity.kind !== "item") return entity.id;
       if (seen.has(entity.id) || seen.size >= 16) return;
       seen.add(entity.id);
       entity = entities.get(holderAt(entity.id, at, before) ?? "");
     }
-    return entity?.id;
   }
   function roomOf(id: string, at?: number, before?: string): string | undefined {
     const entity = entities.get(rootHolder(id, at, before) ?? "");
-    return entity?.kind === "character" ? entity.room : entity?.id;
+    if (entity?.kind !== "character") return entity?.id;
+    const room = entities.get(entity.room);
+    if (before === undefined || room && position(room.source) < position(before)) return entity.room;
   }
   function listenersAt(speaker: string, room: string, at: number): string[] {
     return world.entities.filter((entity) => entity.kind === "character" && entity.id !== speaker && entity.room === room &&
