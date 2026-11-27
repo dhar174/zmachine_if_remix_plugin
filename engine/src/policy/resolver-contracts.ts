@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CapabilityManifest, DirectiveBundle, HeadExpectation, PendingInput, RequestIdentity, TurnProposal } from "../contracts.ts";
 import { World } from "../world/model.ts";
+import { BridgeAction, BridgeState } from "../turn/bridge-contracts.ts";
 import { OfferAccept, RuleInstall, RuleStep } from "../world/rule-contracts.ts";
 import type { Failure } from "../ports.ts";
 import { CompilationInput, CompilationProposal, ModelInterpretation, PolicyRule, SupportedSubsetSelection } from "./directive-contracts.ts";
@@ -18,6 +19,7 @@ const operation = z.discriminatedUnion("kind", [
   ...TurnProposal.shape.operations.element.options,
   RuleInstall,
   OfferAccept,
+  ...BridgeAction.options,
   z.strictObject({ kind: z.literal("inventory.transfer"), item: entityId, from: entityId, to: entityId }),
   z.strictObject({ kind: z.literal("overlay.create"), entity: entityId, region: id,
     entity_kind: z.enum(["location", "character", "item", "rule"]), label: z.string().min(1).max(32000),
@@ -58,7 +60,7 @@ const native = z.strictObject({
   manifest: CapabilityManifest.extend({
     capabilities: z.array(CapabilityManifest.shape.capabilities.element.extend({
       operation: z.enum(["native.line", "native.character", "inspect.entity", "remix.assign",
-        "inventory.transfer", "overlay.connect", "dialogue.change"]),
+        "inventory.transfer", "overlay.connect", "dialogue.change", "bridge.author", "bridge.enter", "bridge.return"]),
     })).max(256),
   }), pending: PendingInput,
   bindings: z.array(capabilityBinding).max(256),
@@ -81,6 +83,8 @@ export const ResolverSnapshot = z.strictObject({
     rule_id: id, from_turn: z.int().nonnegative(), until_turn: z.int().positive().nullable(),
   })).max(512),
   world: World.optional(),
+  // The coordinator derives this from the validated image for planning only.
+  extension_anchor: z.strictObject({ at_anchor: z.boolean(), bridge: BridgeState.optional() }).optional(),
   world_dependencies: z.array(z.strictObject({ source: effect, dependency: effect })).max(128).optional(),
   regions: z.array(id).max(256),
   entities: z.array(entity).max(1024), native: native.nullable(), bridges: z.array(bridge).max(256),
@@ -105,6 +109,13 @@ export function proposalOperations(proposal: ResolverProposal): ResolverOperatio
   return proposal.amendment ? proposal.amendment.compiled.bundle.world_patch.map(({ entity_id, field, value }) =>
     ({ kind: "remix.assign", entity_id, field, value })) : proposal.operations;
 }
+
+export function operationTime(mode: ResolverSnapshot["mode"], operations: readonly ResolverOperation[]): EffectPlan["time"] {
+  if (mode === "EDITOR" || operations.every(({ kind }) => kind === "inspect.entity" || kind === "observation.record" ||
+      kind === "belief.update" || kind === "rule.install")) return "none";
+  return operations.some(({ kind }) => kind === "native.line" || kind === "native.character") ? "native" : "overlay";
+}
+
 export type EffectRef = z.infer<typeof effect>;
 export type EntityProjection = z.infer<typeof entity>;
 export type ActiveRule = z.infer<typeof PolicyRule>;

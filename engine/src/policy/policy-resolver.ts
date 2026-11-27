@@ -1,7 +1,8 @@
 import { canonicalDigest, canonicalJson } from "../contracts.ts";
+import type { Json } from "../contracts.ts";
 import { compileDirective, selectDirectiveSubset } from "./directive-compiler.ts";
-import { proposalOperations, ResolverProposal, ResolverSnapshot } from "./resolver-contracts.ts";
-import type { ActiveRule, DecisionTrace, EffectPlan, PolicyResolverPort, Resolution, ResolverOperation } from "./resolver-contracts.ts";
+import { operationTime, proposalOperations, ResolverProposal, ResolverSnapshot } from "./resolver-contracts.ts";
+import type { ActiveRule, DecisionTrace, EffectPlan, EntityProjection, PolicyResolverPort, Resolution, ResolverOperation } from "./resolver-contracts.ts";
 import { deriveFootprint, effectKey, ResolutionProblem } from "./resolver-effects.ts";
 import type { Footprint, ResolvedEffect } from "./resolver-effects.ts";
 import { validWorld } from "../world/model.ts";
@@ -10,6 +11,11 @@ import { evaluateWorldOperation, expandWorldDependencies, runWorldPlan, usesWorl
 import type { Operation as WorldOperation } from "../world/operations.ts";
 import { turnBudget } from "../turn/limits.ts";
 import type { TurnBudget } from "../turn/limits.ts";
+import { isBridgeAction, pedestalCapability, pedestalRegion } from "../turn/bridge-contracts.ts";
+import type { BridgeAction } from "../turn/bridge-contracts.ts";
+import { bridgeActionAllowed, extensionPlayer, extensionRoomId } from "../turn/extension-bridge.ts";
+import { entityId, objects } from "../native/checkpoint.ts";
+import { projectWorld } from "../world/projection.ts";
 
 const ordered = (ids: Iterable<string>) => [...new Set(ids)].sort();
 const same = (left: Parameters<typeof canonicalJson>[0], right: Parameters<typeof canonicalJson>[0]) =>
@@ -140,13 +146,14 @@ function structuralGuard(rule: Extract<ActiveRule, { kind: "invariant" }>,
 
 function checkPolicy(snapshot: ResolverSnapshot, operation: WorldOperation, footprint: Footprint,
   rules: ActiveRule[], windows: ResolverSnapshot["applicability"], digest: string,
-  ruleIds: Set<string>, evidenceIds: Set<string>, semantic: DecisionTrace["semantic"][number][]) {
+  ruleIds: Set<string>, evidenceIds: Set<string>, semantic: DecisionTrace["semantic"][number][],
+  permissionReads: readonly ResolvedEffect[] = []) {
   const active = rules.filter(({ id }) => {
     const window = windows.find((window) => window.rule_id === id);
     const turn = snapshot.clock.overlay_turn;
     return !window || (window.from_turn <= turn && (window.until_turn === null || turn < window.until_turn));
   });
-  for (const effect of footprint.effects.filter(({ ref }) => ref.change === "write")) {
+  for (const effect of [...footprint.effects.filter(({ ref }) => ref.change === "write"), ...permissionReads]) {
     const matches = active.map((rule) => ({ rule, match: scopeMatch(rule, effect) })).filter(({ match }) => match !== "no");
     if (footprint.action !== null) {
       const permissions = matches.filter(({ rule }) => rule.kind === "permission" &&
@@ -166,6 +173,7 @@ function checkPolicy(snapshot: ResolverSnapshot, operation: WorldOperation, foot
         throw new ResolutionProblem("POLICY_CONFLICT", "no_allowance", "A required effect has no matching generation allowance.");
       }
     }
+    if (effect.ref.change !== "write") continue;
     for (const { rule, match } of matches) {
       if (rule.kind !== "invariant") continue;
       ruleIds.add(rule.id);
@@ -202,6 +210,62 @@ function checkPolicy(snapshot: ResolverSnapshot, operation: WorldOperation, foot
       }
     }
   }
+}
+
+function bridgeFootprints(snapshot: ResolverSnapshot, proposal: ResolverProposal, action: BridgeAction) {
+  const { extension_anchor: anchor } = snapshot;
+  if (!bridgeActionAllowed(anchor, !!snapshot.world, action)) {
+    throw new ResolutionProblem("CAPABILITY_MISSING", "extension_anchor", "The selected passage is unavailable at this native fixture boundary.");
+  }
+  const room = anchor?.bridge?.room_id ?? extensionRoomId(proposal);
+  const established = new Map([...snapshot.entities, ...(snapshot.world ? projectWorld(snapshot.world) : [])]
+    .map((entity) => [entity.id, entity]));
+  type Domain = EntityProjection["surfaces"][number]["domain"];
+  const evidence_id = "evidence:fixture-pedestal";
+  const surface = (entity_id: string, field: string, domain: Domain, change: "read" | "write", attested?: Json): ResolvedEffect => {
+    const origin = entity_id.startsWith("native:") ? "native" : "remix";
+    const establishedEntity = established.get(entity_id);
+    const establishedField = establishedEntity?.surfaces.find((entry) => entry.field === field);
+    if (change === "read" && (establishedField ? establishedEntity?.existence !== "present" ||
+        establishedField.coverage !== "complete" || establishedField.fact.state !== "present" : attested === undefined)) {
+      throw new ResolutionProblem("CAPABILITY_MISSING", "extension_evidence", "A pedestal effect lacks complete endpoint evidence.");
+    }
+    const projected: EntityProjection["surfaces"][number] = { field, domain, owner: origin,
+      direct_assignment: false, risk: "consequential", coverage: "complete", dependencies: [],
+      fact: attested === undefined ? { state: "absent", evidence_id } : { state: "present", value: attested, evidence_id } };
+    const entity: EntityProjection = establishedEntity ?? { id: entity_id, origin, region_ids: origin === "remix" ? [pedestalRegion] : [],
+      existence: "present", evidence_id, surfaces: [projected], takeover_surfaces: null };
+    return { ref: { entity_id, field, change }, entity, surface: establishedField ?? projected };
+  };
+  const read = [
+    surface(entityId(objects.player), "topology:location", "topology", "read"),
+    // The verified checkpoint proves the pedestal is an authored object in the native endpoint.
+    surface(entityId(objects.vault), "topology:connection-endpoint", "topology", "read", entityId(objects.pedestal)),
+    surface(entityId(objects.pedestal), "topology:anchor-present", "topology", "read", true),
+    surface(entityId(objects.door), "progression:locked", "progression", "read"),
+    surface(entityId(objects.door), "progression:open", "progression", "read"),
+    surface("native:fixture", "progression:pending-input", "progression", "read"),
+  ];
+  const passage = "remix:pedestal-passage";
+  const make = (direct: ResolvedEffect[], action: Footprint["action"] = null, permissionReads: ResolvedEffect[] = []) => ({
+    action, direct, permissionReads, effects: expandWorldDependencies(snapshot, direct), route: "bridged" as const,
+    capability_ids: [pedestalCapability],
+  });
+  if (action.kind === "bridge.author") {
+    return [
+      make([surface(room, "entity:record", "identity", "write"),
+        surface(room, "world:description", "presentation", "write")], "generate.location"),
+      make([...read, surface(passage, "topology:connection", "topology", "write"),
+        surface(room, "topology:exits", "topology", "write")], "generate.connection", read),
+      make([surface(extensionPlayer, "entity:record", "identity", "write"),
+        surface(room, "identity:occupants", "identity", "write")]),
+    ];
+  }
+  return [make([...read, surface(room, "entity:record", "identity", "read"),
+    surface(passage, "topology:connection", "topology", "read", { anchor: action.anchor_id, room }),
+    surface(passage, "topology:active-scene", "topology", "write"),
+    surface(passage, "topology:return-capsule", "topology", "write"),
+    surface(passage, "progression:clock-policy", "progression", "write")])];
 }
 
 function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, budget = turnBudget()): Resolution {
@@ -242,6 +306,32 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, 
     if (amendment.operations.some((op) => op.kind === "remix.assign" && snapshot.mode !== "EDITOR")) {
       throw new ResolutionProblem("NEEDS_APPROVAL", "editor_assignment", "Direct assignments require Editor authority.");
     }
+    const bridgeAction = amendment.operations.find((operation) => isBridgeAction(operation));
+    if (bridgeAction && isBridgeAction(bridgeAction)) {
+      if (amendment.operations.length !== 1 || snapshot.trigger !== "player_attempt" ||
+          snapshot.mode !== (bridgeAction.kind === "bridge.author" ? "EDITOR" : "PLAY")) {
+        throw new ResolutionProblem("NEEDS_CLARIFICATION", "bridge_subturn", "Resolve the bridge action in its own appropriate turn.");
+      }
+      const footprints = bridgeFootprints(snapshot, proposal, bridgeAction);
+      const effects = new Map<string, EffectPlan["operations"][number]["effects"][number]>();
+      for (const footprint of footprints) {
+        checkPolicy(snapshot, bridgeAction, footprint, amendment.rules, snapshot.applicability, digest, ruleIds, evidenceIds,
+          semantic, footprint.permissionReads);
+        verifyWorldWrites(footprint.direct, footprint.effects);
+        footprint.effects.forEach(({ ref, surface }) => {
+          evidenceIds.add(surface.fact.evidence_id);
+          effects.set(effectKey(ref), ref);
+        });
+      }
+      const declared = proposal.declared_effects.map(effectKey).sort();
+      if (effects.size > 512 || declared.length > 0 && !same(declared, [...effects.keys()].sort())) {
+        throw invalid("declared_footprint", "The declared effects do not match the complete bridge footprint.");
+      }
+      capabilityIds.add(pedestalCapability);
+      return { ok: true, plan: { version: "1.0.0", head, request_id: proposal.request_id, proposal_digest: digest,
+        route: "bridged", time: "none", amendment: null, trace: trace(),
+        operations: [{ operation: bridgeAction, effects: [...effects.values()], capability_ids: [pedestalCapability] }] } };
+    }
     if (amendment.operations.some((op) => op.kind === "native.line" || op.kind === "native.character") &&
         (amendment.operations.length !== 1 || snapshot.mode !== "PLAY" || snapshot.trigger !== "player_attempt")) {
       throw new ResolutionProblem("NEEDS_CLARIFICATION", "native_subturn", "Resolve native input as one ordinary Play subturn.");
@@ -255,6 +345,17 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, 
     const operations: EffectPlan["operations"][number][] = [];
     const routes = new Set<EffectPlan["route"]>();
     const worldOperations = amendment.operations.filter((operation) => usesWorld(snapshot, operation)).length;
+    if (snapshot.extension_anchor?.bridge && amendment.operations.some((operation) => operation.kind === "inventory.transfer" &&
+      new Set([operation.item, operation.from, operation.to].map((id) => id.split(":", 1)[0])).size > 1)) {
+      throw new ResolutionProblem("CAPABILITY_MISSING", "extension_inventory", "The pedestal bridge cannot transfer items between worlds.");
+    }
+    if (worldOperations > 0 && snapshot.extension_anchor?.bridge?.owner === "native") {
+      throw new ResolutionProblem("CAPABILITY_MISSING", "inactive_extension", "Enter the extension before acting in its room.");
+    }
+    if (snapshot.extension_anchor?.bridge && amendment.operations.some((operation) =>
+      operation.kind === "overlay.create" && operation.entity_kind === "location")) {
+      throw new ResolutionProblem("CAPABILITY_MISSING", "extension_room_limit", "The pedestal bridge supports one authored room.");
+    }
     if (worldOperations > 0 && worldOperations !== amendment.operations.length) {
       throw new ResolutionProblem("NEEDS_CLARIFICATION", "world_subturn", "Resolve world operations separately from legacy or native operations.");
     }
@@ -299,13 +400,8 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, 
     }
     const declared = proposal.declared_effects.map(effectKey).sort();
     const route = routes.has("bridged") ? "bridged" : routes.has("native") ? "native" : "remix";
-    const time = snapshot.mode === "EDITOR" || operations.every(({ operation }) =>
-operation.kind === "inspect.entity" || operation.kind === "observation.record" || operation.kind === "belief.update" ||
-      operation.kind === "rule.install")
-      ? "none" : operations.some(({ operation }) => operation.kind === "native.line" || operation.kind === "native.character")
-        ? "native" : "overlay";
     const plan: EffectPlan = { version: "1.0.0", head, request_id: proposal.request_id, proposal_digest: digest,
-      route, time, operations, amendment: amendment.candidate, trace: trace(),
+      route, time: operationTime(snapshot.mode, amendment.operations), operations, amendment: amendment.candidate, trace: trace(),
       ...(worldOperations > 0 ? { world_mode: snapshot.mode } : {}) };
     const expanded = plan.world_mode && inspections === 0 ? runWorldPlan(snapshot, plan, {
       budget,

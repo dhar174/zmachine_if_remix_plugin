@@ -4,7 +4,7 @@ import { capture, compilationRecord, compilerView, fixtureContext, launchRecord,
   receiptView, requestAction, sessionRef, sourceRecord, subset, target } from "../fixture/session-contracts.ts";
 import { fixtureGuards, fixtureImage, fixtureNativeWrite, fixtureRoom, fixtureStory, rulesFixtureImage } from "../fixture/synthetic-world.ts";
 import type { FixtureProfile } from "../fixture/synthetic-world.ts";
-import { worldView } from "../world/model.ts";
+import { activeFact, worldView } from "../world/model.ts";
 import { OfferAccept } from "../world/rule-contracts.ts";
 import { offerEligible } from "../world/rule-state.ts";
 import { heidiStory, isNativeStory, nativePayload, validateStoryBytes } from "../native/checkpoint.ts";
@@ -23,7 +23,9 @@ import { DurableReceipt, TurnImage, conflict, failure, invalid, limits, ok, stal
 import type { Access, FaultPoint, Stage, TurnExecutor } from "./contracts.ts";
 import { turnBudget } from "./limits.ts";
 import type { TurnBudget } from "./limits.ts";
-import { buildImage, executeWorld, jsonEvent, supported, validateImage } from "./execution.ts";
+import { buildImage, executeBridge, executeWorld, jsonEvent, supported, validateImage } from "./execution.ts";
+import { BridgeAction, isBridgeAction, pedestalAnchor } from "./bridge-contracts.ts";
+import { atPedestal, bridgeContext, bridgeReceipt, publicBridge } from "./extension-bridge.ts";
 import { visibleWorldNote, worldInspection } from "../world/projection.ts";
 import { SQLiteTurns, branchKey } from "./sqlite-turns.ts";
 import type { TurnStore } from "./sqlite-turns.ts";
@@ -32,7 +34,7 @@ import { decodePortable, encodePortable, relocatePortable } from "../fixture/por
 import type { UploadPurpose } from "../fixture/portable-session.ts";
 
 const TurnEnvelope = CoreTurnEnvelope.extend({
-  input: z.union([CoreTurnEnvelope.shape.input, OfferAccept]),
+  input: z.union([CoreTurnEnvelope.shape.input, OfferAccept, BridgeAction]),
   fixture_action_digest: z.string().regex(/^[0-9a-f]{64}$/u).optional(),
 });
 type TurnEnvelope = z.infer<typeof TurnEnvelope>;
@@ -343,13 +345,21 @@ readonly fixtureProfile: FixtureProfile;
           coverage === "complete" && domain === "presentation" && fact.state === "present" && typeof fact.value === "string"
             ? [{ entity_id, field, value: fact.value, evidence_id: fact.evidence_id }] : []));
       const restored_from = draft ? undefined : this.store.restoreOrigin(image.snapshot.head);
-      const world = !draft && image.snapshot.world;
+      const bridge = image.checkpoint.bridge;
+      const inside = bridge?.owner === "remix";
+      const anchorReady = !draft && (inside || atPedestal(image));
+      const world = !draft && (!bridge || inside) && image.snapshot.world;
       const projection = world ? worldView(world) : undefined;
       const revision = image.checkpoint.revision;
       const editor = mode.value.mode === "EDITOR";
       const scene = world && projection?.roomOf(world.player, revision);
       const visible = world && world.entities.filter(({ id }) => editor || projection?.roomOf(id, revision) === scene)
         .slice(0, 64).map(({ id, label, kind }) => ({ id, label, kind }));
+      if (inside && world) {
+        const description = activeFact(world, bridge.room_id, "world:description");
+        if (description) facts.push({ entity_id: bridge.room_id, field: description.field,
+          value: description.value, evidence_id: description.source });
+      }
       const behavior = world && world.version === "2.0.0" && projection ? {
         ...(editor ? { behavior_rules: world.rules.map(({ definition }) => definition) } : {}),
         pending_offers: world.offers.filter(({ consumed_by, recipient, giver, item }) => consumed_by === null &&
@@ -359,13 +369,19 @@ readonly fixtureProfile: FixtureProfile;
       return ok(fixtureContext.parse({
         ...(restored_from ? { restored_from } : {}),
         head, state: draft ? "draft" : "active", mode: mode.value.mode, story_sha256: story,
-        pending_input: draft ? null : image.checkpoint.native_state.pending_input.kind,
-        operations: draft ? ["initial_directive"] : ["play", "editor_assignment", "policy_amendment", "inspect",
-          ...(world ? ["rule.install", "overlay.speech", "offer.accept"] : [])],
+        pending_input: draft || inside ? null : image.checkpoint.native_state.pending_input.kind,
+        operations: draft ? ["initial_directive"] : [
+          ...(!inside ? ["play"] : []), "editor_assignment", "policy_amendment", "inspect",
+          ...(world ? bridge && world.version === "1.0.0" ? ["overlay.speech"] :
+            ["rule.install", "overlay.speech", "offer.accept"] : []),
+          ...(inside ? ["bridge.return"] : anchorReady && bridge ? ["bridge.enter"] :
+            anchorReady && !image.snapshot.world ? ["bridge.author"] : [])],
+        ...(anchorReady ? { extension_anchor: pedestalAnchor } : {}),
+        ...(bridge ? { bridge: publicBridge(bridge) } : {}),
         ...(visible ? { overlay_entities: visible } : {}), ...behavior,
         clocks: draft ? null : { native: image.checkpoint.clocks.native, overlay: image.checkpoint.clocks.overlay },
         facts: draft ? [] : facts,
-        ...(isNativeStory(story) ? { native: nativeContext(image, draft) } : {}),
+        ...(isNativeStory(story) ? { native: nativeContext(image, draft || inside) } : {}),
         rules: this.fixtureRules(image).slice(0, 128).map(({ id, kind, source, supersedes }) =>
           ({ id, kind, source_id: source.source_id, supersedes })),
       }));
@@ -410,6 +426,10 @@ readonly fixtureProfile: FixtureProfile;
     });
     const fields = image.snapshot.entities.flatMap(({ id: entity_id, surfaces }) =>
       surfaces.filter(({ direct_assignment }) => direct_assignment).map(({ field }) => ({ entity_id, field })));
+    const bridge = image.checkpoint.bridge;
+    if (bridge?.owner === "remix" && record.purpose === "assignment") {
+      fields.push({ entity_id: bridge.room_id, field: "world:description" });
+    }
     return ok({ context, record, fields });
   }
 
@@ -426,8 +446,8 @@ readonly fixtureProfile: FixtureProfile;
   }
 
   private fixtureEnvelope(access: Access, request: z.infer<typeof target>, action: z.infer<typeof requestAction>) {
-    const editor = action.kind === "directive" || action.kind === "rule.install" && action.mode === "EDITOR";
-    const input = action.kind === "play" ? action.input : action.kind === "offer.accept" ? action : { kind: "line",
+    const editor = action.kind === "directive" || action.kind === "bridge.author" || action.kind === "rule.install" && action.mode === "EDITOR";
+    const input = action.kind === "play" ? action.input : action.kind === "offer.accept" || isBridgeAction(action) ? action : { kind: "line",
       text: action.kind === "directive" ? action.source_ref : action.kind === "overlay.speech" ? action.text :
         action.kind + ":" + canonicalDigest(action) };
     const fixtureAction = action.kind === "play" || action.kind === "directive" ? {} :
@@ -441,7 +461,12 @@ readonly fixtureProfile: FixtureProfile;
     selection: SupportedSubsetSelection | null): Result<Preparation> {
     const { bundle, clauses } = compiled;
     const assignments = bundle.world_patch.map(({ entity_id, field, value }) => ({ kind: "remix.assign", entity_id, field, value }));
-    if (assignments.some(({ value, entity_id }) => entity_id !== fixtureRoom || typeof value !== "string" || value.length > 256)) {
+    const currentBridge = this.fixtureBase(access)?.image.checkpoint.bridge;
+    const activeDescription = purpose === "assignment" && currentBridge?.owner === "remix"
+      ? currentBridge.room_id : undefined;
+    if (assignments.some(({ value, entity_id, field }) => typeof value !== "string" ||
+      (entity_id === activeDescription && field === "world:description" ? !value.trim() || value.length > 2048 :
+        entity_id !== fixtureRoom || value.length > 256))) {
       return failure("CAPABILITY_MISSING", "Fixture assignments require a short string on a registered room field.");
     }
     const assignmentOnly = purpose === "assignment";
@@ -455,7 +480,8 @@ readonly fixtureProfile: FixtureProfile;
     const proposal = {
       ...expected(envelope), version: "1.0.0", request_id: envelope.request_id, mode: "EDITOR",
       operations: assignmentOnly ? assignments : [],
-      declared_effects: assignments.map(({ entity_id, field }) => ({ entity_id, field, change: "write" })),
+      declared_effects: assignments.some(({ entity_id }) => entity_id === activeDescription) ? [] :
+        assignments.map(({ entity_id, field }) => ({ entity_id, field, change: "write" })),
       amendment: assignmentOnly ? null : { compiled, interpretation, selection },
     };
     return this.prepareTurn(access, envelope, proposal, context);
@@ -474,6 +500,9 @@ readonly fixtureProfile: FixtureProfile;
       if (action.kind === "play") {
         if (prior?.receipt) return ok({ kind: "committed", record: prior.receipt });
         if (base.draft) return failure("NEEDS_APPROVAL", "Approve the initial directive before Play.");
+        if (base.image.checkpoint.bridge?.owner === "remix") {
+          return failure("CAPABILITY_MISSING", "Native input is paused in the extension. Use the pedestal passage to return.");
+        }
         const input = action.input;
         if (canonicalDigest(base.image.snapshot.head) !== canonicalDigest(expected(envelope))) return stale();
         const pending = base.image.checkpoint.native_state.pending_input.kind;
@@ -488,8 +517,10 @@ readonly fixtureProfile: FixtureProfile;
       }
       if (action.kind !== "directive") {
         if (base.draft) return failure("NEEDS_APPROVAL", "Approve the initial directive before using overlay behavior.");
-        if (!base.image.snapshot.world) return failure("CAPABILITY_MISSING", "The session has no registered remix world.");
-        const authoring = action.kind === "rule.install" && action.mode === "EDITOR";
+        if (!isBridgeAction(action) && !base.image.snapshot.world) {
+          return failure("CAPABILITY_MISSING", "The session has no registered remix world.");
+        }
+        const authoring = action.kind === "bridge.author" || action.kind === "rule.install" && action.mode === "EDITOR";
         if (authoring && !browserAvailable && !prior?.receipt) {
           return failure("NEEDS_APPROVAL", "Authenticated browser control is unavailable.");
         }
@@ -618,7 +649,7 @@ readonly fixtureProfile: FixtureProfile;
       return receiptView.parse({ ...base, native_output: [], event_ids: [], narration_facts: [], warnings: [], rule_ids: [], capability_ids: [] });
     }
     let facts = narration_facts;
-    const transition = editor || (record.receipt.visibility === "player" && narration_facts.length > 0)
+    const transition = editor || record.bridge || (record.receipt.visibility === "player" && narration_facts.length > 0)
       ? this.store.receiptTransition(requestKey(record.receipt), record) : undefined;
     const validTransition = transition && validateImage(transition.image, this.executor).ok &&
       (!transition.previous || validateImage(transition.previous, this.executor).ok) ? transition : undefined;
@@ -639,6 +670,7 @@ readonly fixtureProfile: FixtureProfile;
       .flatMap((event) => event.kind === "rule.effect" && event.revision === revision ? [event.step] : []);
     return receiptView.parse({ ...base, native_output, event_ids, narration_facts: facts, warnings,
       rule_ids: record.rule_ids, capability_ids: record.capability_ids,
+      ...(record.bridge && validTransition ? { bridge: record.bridge } : {}),
       ...(steps && steps.length > 0 ? { behavior_steps: steps } : {}) });
   }
 
@@ -656,7 +688,9 @@ readonly fixtureProfile: FixtureProfile;
         native.value.identity.adapter_build !== checkpoint.adapter_build ||
         native.value.identity.checkpoint_format !== checkpoint.checkpoint_format ||
         native.value.pending.kind !== checkpoint.native_state.pending_input.kind)) return invalid();
-    return ok({ ...image.snapshot, native: native.value, compiler_context: compiler });
+    const extension = checkpoint.bridge || proposal.operations.some(isBridgeAction) ? bridgeContext(image) : undefined;
+    return ok({ ...image.snapshot, native: native.value, compiler_context: compiler,
+      ...(extension ? { extension_anchor: extension } : {}) });
   }
 
   prepareTurn(access: Access, rawEnvelope: unknown, rawProposal: unknown, trustedCompiler: unknown = null): Result<Preparation> {
@@ -693,6 +727,15 @@ readonly fixtureProfile: FixtureProfile;
       }
       if (requestKey(proposal) !== id || canonicalDigest(expected(proposal)) !== canonicalDigest(wanted) ||
           Buffer.byteLength(canonicalJson([proposal, compiler.data])) > limits.checkpoint_bytes) return reject(invalid());
+      const bridgeAction = proposal.operations.find(isBridgeAction);
+      if (bridgeAction || isBridgeAction(envelope.input)) {
+        const mode = bridgeAction?.kind === "bridge.author" ? "EDITOR" : "PLAY";
+        if (!bridgeAction || !isBridgeAction(envelope.input) || proposal.operations.length !== 1 ||
+            proposal.amendment || proposal.mode !== mode || envelope.intent !== mode.toLowerCase() ||
+            canonicalJson(bridgeAction) !== canonicalJson(envelope.input)) {
+          return reject(failure("VALIDATION_FAILED", "A bridge action must match its exact standalone input."));
+        }
+      }
       const acceptance = proposal.operations.find(({ kind }) => kind === "offer.accept");
       if (acceptance || envelope.input.kind === "offer.accept") {
         if (envelope.input.kind !== "offer.accept" || acceptance?.kind !== "offer.accept" ||
@@ -885,11 +928,18 @@ readonly fixtureProfile: FixtureProfile;
       const valid = validateImage(image, this.executor);
       if (expired()) return timedOut();
       if (!valid.ok) return valid;
-      const executed = await Promise.race([
-        plan.world_mode ? executeWorld(image, plan, budget) :
-          this.executor.execute(structuredClone(image), structuredClone(plan), limits, abort.signal),
-        interrupted,
-      ]);
+      const operation = plan.operations[0]?.operation;
+      const crossing = operation && isBridgeAction(operation) ? operation : undefined;
+      const isolated = async () => {
+        if (!crossing) return plan.world_mode ? executeWorld(image, plan, budget) :
+          this.executor.execute(structuredClone(image), structuredClone(plan), limits, abort.signal);
+        const candidate = executeBridge(image, plan, stage.proposal);
+        if (!candidate.ok || crossing.kind !== "bridge.return") return candidate;
+        const recreated = await this.executor.recreateNative?.(structuredClone(image), abort.signal);
+        return recreated?.ok ? candidate : recreated ??
+          failure("CAPABILITY_MISSING", "The paused native checkpoint cannot be recreated.");
+      };
+      const executed = await Promise.race([isolated(), interrupted]);
       if (expired()) return timedOut();
       if (!executed.ok) return executed;
       const next = buildImage(image, executed.value, plan, this.executor, budget, stage.proposal);
@@ -897,10 +947,12 @@ readonly fixtureProfile: FixtureProfile;
       if (!next.ok) return next;
       const candidate = next.value;
       const events = executed.value.events.map((event) => jsonEvent.parse(event));
+      const bridge = bridgeReceipt(image, candidate, crossing?.kind);
       const receipt = DurableReceipt.parse({
         version: "1.0.0", rule_ids: plan.trace.rule_ids, capability_ids: plan.trace.capability_ids,
-        ...(plan.world_mode && candidate.snapshot.world?.version === "2.0.0" ?
+        ...(crossing || plan.world_mode && (candidate.checkpoint.bridge?.owner === "remix" || candidate.snapshot.world?.version === "2.0.0") ?
           { world_proposal: stage.proposal } : {}),
+        ...(bridge ? { bridge } : {}),
         recovery: { retry: "same_request", checkpoint: candidate.checkpoint.checkpoint_id },
         receipt: {
           ...RequestIdentity.parse(JSON.parse(id) as unknown), version: "1.0.0", status: "COMMITTED",

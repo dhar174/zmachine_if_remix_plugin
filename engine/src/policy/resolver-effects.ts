@@ -206,6 +206,9 @@ export function deriveFootprint(snapshot: ResolverSnapshot, entities: Map<string
     case "speech.record":
     case "observation.record":
     case "belief.update": throw missing("world_operation", "The operation requires a registered remix world.");
+    case "bridge.author":
+    case "bridge.enter":
+    case "bridge.return": throw missing("extension_anchor", "The action requires the verified pedestal bridge.");
     case "dialogue.change": {
       const character = present(operation.character);
       action = "dialogue.adapt";

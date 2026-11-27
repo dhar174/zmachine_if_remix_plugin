@@ -11,9 +11,16 @@ import { worldTransitionValid } from "../world/history.ts";
 import type { TurnBudget } from "./limits.ts";
 import { runWorldPlan, WorldOperationError } from "../world/operations.ts";
 import type { Execution, TurnExecutor } from "./contracts.ts";
+import { isBridgeAction, pedestalCapability, pedestalRegion } from "./bridge-contracts.ts";
+import { bridgeImageValid, bridgeTransition } from "./extension-bridge.ts";
 
 export function supported(plan: EffectPlan): boolean {
   const { operations } = plan;
+  const first = operations[0];
+  if (first && isBridgeAction(first.operation)) {
+    return operations.length === 1 && plan.route === "bridged" && plan.time === "none" &&
+      !plan.world_mode && !plan.amendment && first.capability_ids.includes(pedestalCapability);
+  }
   if (plan.world_mode) return plan.route === "remix" && operations.length <= limits.operations;
   return operations.length <= limits.operations && operations.every(({ operation, effects }) => {
     if (operation.kind === "inventory.transfer") {
@@ -75,9 +82,29 @@ export function executeWorld(before: TurnImage, plan: EffectPlan, budget?: TurnB
   }
 }
 
+export function executeBridge(before: TurnImage, plan: EffectPlan, proposal: ResolverProposal): Result<Execution> {
+  const first = plan.operations[0];
+  if (!first || !isBridgeAction(first.operation) || !supported(plan) ||
+      plan.proposal_digest !== canonicalDigest(proposal) ||
+      canonicalJson(plan.head) !== canonicalJson(before.snapshot.head) ||
+      proposal.operations.length !== 1 || canonicalJson(proposal.operations[0]!) !== canonicalJson(first.operation)) return invalidEffect();
+  const next = bridgeTransition(before, proposal, plan.proposal_digest, proposal.mode, first.operation);
+  if (!next) return failure("CAPABILITY_MISSING", "The pedestal connection is unavailable at this boundary.");
+  return ok({ ...next, effects: first.effects, entities: before.snapshot.entities, native: before.native,
+    pending: before.checkpoint.native_state.pending_input, time_cost: 0, outcome: "success", output: [], facts: [] });
+}
+
 export function buildImage(before: TurnImage, execution: Execution, plan: EffectPlan, executor: TurnExecutor,
   budget?: TurnBudget, proposal?: ResolverProposal): Result<TurnImage> {
-  if (plan.world_mode) {
+  const first = plan.operations[0]?.operation;
+  const crossing = first !== undefined && isBridgeAction(first);
+  if (crossing) {
+    if (!proposal) return invalidEffect();
+    const verified = executeBridge(before, plan, proposal);
+    if (!verified.ok) return verified;
+    if (canonicalJson(z.json().parse(execution)) !== canonicalJson(z.json().parse(verified.value))) return invalidEffect();
+  } else if (execution.bridge) return invalidEffect();
+  else if (plan.world_mode) {
     const verified = executeWorld(before, plan, budget);
     if (!verified.ok) return verified;
     if (canonicalDigest(z.json().parse(execution)) !== canonicalDigest(z.json().parse(verified.value))) return invalidEffect();
@@ -146,22 +173,28 @@ export function buildImage(before: TurnImage, execution: Execution, plan: Effect
     expected_policy_revision: rules.policy.revision });
   const nativeDigest = canonicalDigest(execution.native);
   const world = execution.world ?? before.snapshot.world;
+  const bridge = execution.bridge ?? before.checkpoint.bridge;
+  const regions = execution.bridge && !before.checkpoint.bridge && !before.snapshot.regions.includes(pedestalRegion)
+    ? [...before.snapshot.regions, pedestalRegion] : before.snapshot.regions;
   const checkpoint = CombinedCheckpoint.parse({
     ...before.checkpoint, revision, policy_revision: rules.policy.revision, checkpoint_id: "checkpoint:" + randomUUID(),
     native_state: { pending_input: execution.pending, payload_ref: "blob:" + nativeDigest, payload_sha256: nativeDigest },
     remix_state_ref: remixStateRef(execution.entities, world),
     policy_ref: "blob:" + canonicalDigest(rules), history_ref: "history:" + randomUUID(),
+    ...(bridge ? { bridge } : {}),
     clocks: { ...before.checkpoint.clocks, native: before.checkpoint.clocks.native + (runNative ? execution.time_cost : 0),
-      overlay: before.checkpoint.clocks.overlay + (plan.time === "overlay" ? 1 : 0) },
+      overlay: before.checkpoint.clocks.overlay + (plan.time === "overlay" ? 1 : 0),
+      policy: bridge ? bridge.owner === "remix" ? "native_paused" : "native_running" : before.checkpoint.clocks.policy },
   });
   const candidate = TurnImage.parse({ checkpoint, native: execution.native, amendment: plan.amendment?.compiled ?? null,
-    snapshot: { ...before.snapshot, ...rules, head, entities: execution.entities, native: null, guard_evidence: [],
+    snapshot: { ...before.snapshot, ...rules, head, regions, entities: execution.entities, native: null, guard_evidence: [],
       ...(world ? { world } : {}),
-      clock: { ...before.snapshot.clock, overlay_turn: checkpoint.clocks.overlay }, editor_authority: null, compiler_context: null },
+      clock: { overlay_turn: checkpoint.clocks.overlay, native_running: checkpoint.clocks.policy === "native_running" },
+      editor_authority: null, compiler_context: null },
   });
   const valid = validateImage(candidate, executor);
-  const worldTurn = plan.world_mode && world?.version === "2.0.0" && proposal ?
-    { proposal, mode: plan.world_mode, durableDigest: plan.proposal_digest } : undefined;
+  const worldTurn = proposal && (crossing || plan.world_mode && (bridge?.owner === "remix" || world?.version === "2.0.0")) ?
+    { proposal, mode: proposal.mode, durableDigest: plan.proposal_digest } : undefined;
   if (valid.ok && !worldTransitionValid(before, candidate, execution.events, plan.request_id, worldTurn, budget)) return invalidEffect();
   return valid.ok ? ok(candidate) : valid;
 }
@@ -181,7 +214,8 @@ export function validateImage(image: TurnImage, executor: TurnExecutor): Result<
       checkpoint.policy_ref !== "blob:" + canonicalDigest(rules) ||
       snapshot.clock.overlay_turn !== checkpoint.clocks.overlay ||
       snapshot.clock.native_running !== (checkpoint.clocks.policy === "native_running") ||
-      snapshot.editor_authority || snapshot.compiler_context || snapshot.native || snapshot.guard_evidence.length) return invalidEffect();
+      snapshot.editor_authority || snapshot.compiler_context || snapshot.native || snapshot.guard_evidence.length ||
+      snapshot.extension_anchor || !bridgeImageValid(image)) return invalidEffect();
   return executor.verifyRestore(structuredClone(image));
 }
 
