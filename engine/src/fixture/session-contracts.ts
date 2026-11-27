@@ -2,6 +2,7 @@ import { z } from "zod";
 import { HeadExpectation, RequestIdentity, TurnEnvelope } from "../contracts.ts";
 import { CompilationInput, CompilationProposal, ModelInterpretation } from "../policy/directive-contracts.ts";
 import { startupRecord } from "../native/checkpoint.ts";
+import { Offer, OfferAccept, RuleDefinition, RuleStep } from "../world/rule-contracts.ts";
 
 const version = z.literal("1.0.0");
 export const opaque = (prefix: string) => z.string().regex(new RegExp("^" + prefix + ":[0-9a-f-]{36}$", "u"));
@@ -17,14 +18,16 @@ export const sourceRecord = z.strictObject({
 });
 export const launchRecord = z.strictObject({
   owner: HeadExpectation.shape.owner_id, expires: z.number(), session: sessionRef.nullable(),
-  profile: z.literal("native-z5").optional(),
+  profile: z.enum(["native-z5", "synthetic-rules"]).optional(),
 });
 export const compilationRecord = z.strictObject({ interpretation: ModelInterpretation, proposal: CompilationProposal });
 const play = z.strictObject({ kind: z.literal("play"), input: TurnEnvelope.shape.input });
 const directive = z.strictObject({ kind: z.literal("directive"), source_ref: opaque("source") });
-export const requestAction = z.discriminatedUnion("kind", [play, directive]);
+const speech = z.strictObject({ kind: z.literal("overlay.speech"), text: z.string().min(1).max(2048) });
+const install = z.strictObject({ kind: z.literal("rule.install"), mode: z.enum(["PLAY", "EDITOR"]), rule: RuleDefinition });
+export const requestAction = z.discriminatedUnion("kind", [play, directive, speech, install, OfferAccept]);
 export const preparedAction = z.discriminatedUnion("kind", [
-  play, directive.extend({ interpretation: ModelInterpretation }),
+  play, directive.extend({ interpretation: ModelInterpretation }), speech, install, OfferAccept,
   z.strictObject({ kind: z.literal("mixed") }),
 ]);
 export const capture = target.extend({ purpose: sourcePurpose, text: z.string().min(1).max(4096) });
@@ -48,7 +51,12 @@ const nativeContext = z.strictObject({
 export const fixtureContext = z.strictObject({
   head: publicHead, state: z.enum(["draft", "active"]), mode: z.enum(["PLAY", "EDITOR"]),
   story_sha256: digest, pending_input: z.enum(["line", "character", "halted"]).nullable(),
-  operations: z.array(z.enum(["initial_directive", "play", "editor_assignment", "policy_amendment", "inspect"])),
+  operations: z.array(z.enum(["initial_directive", "play", "editor_assignment", "policy_amendment", "inspect",
+    "overlay.speech", "rule.install", "offer.accept"])),
+  pending_offers: z.array(Offer.omit({ consumed_by: true })).max(32).optional(),
+  behavior_rules: z.array(RuleDefinition).max(32).optional(),
+  overlay_entities: z.array(z.strictObject({ id: z.string(), label: z.string(), kind: z.enum(["location", "character", "item"]) }))
+    .max(64).optional(),
   clocks: z.strictObject({ native: z.int().nonnegative(), overlay: z.int().nonnegative() }).nullable(),
   facts: visibleFacts, rules: publicRules, native: nativeContext.optional(), restored_from: publicHead.optional(),
 });
@@ -64,4 +72,5 @@ export const receiptView = z.strictObject({
   native_output: z.array(z.string()), event_ids: z.array(z.string()), narration_facts: z.array(z.string()),
   time_cost: z.int().nonnegative(), in_fiction_result: z.enum(["success", "failure"]), warnings: z.array(z.string()),
   rule_ids: z.array(z.string()), capability_ids: z.array(z.string()),
+  behavior_steps: z.array(RuleStep).max(32).optional(),
 });

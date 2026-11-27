@@ -4,6 +4,7 @@ import { HeadExpectation, canonicalDigest, canonicalJson } from "../contracts.ts
 import type { Authority } from "../auth/authority.ts";
 import type { Result } from "../ports.ts";
 import { fixtureStory } from "./synthetic-world.ts";
+import type { FixtureProfile } from "./synthetic-world.ts";
 import { isNativeStory } from "../native/checkpoint.ts";
 import { TurnImage, conflict, failure, invalid, limits, ok, stale } from "../turn/contracts.ts";
 import type { Access, FaultPoint, TurnExecutor } from "../turn/contracts.ts";
@@ -37,12 +38,12 @@ export class FixtureRecovery {
   private readonly store: TurnStore;
   private readonly authority: Authority;
   private readonly executor: TurnExecutor;
-  private readonly profile: "synthetic" | "native-z5";
+  private readonly profile: FixtureProfile;
   private readonly atomic: Atomic;
   private readonly clock: () => number;
   private readonly fault: (point: FaultPoint) => void;
 
-  constructor(store: TurnStore, authority: Authority, executor: TurnExecutor, profile: "synthetic" | "native-z5",
+  constructor(store: TurnStore, authority: Authority, executor: TurnExecutor, profile: FixtureProfile,
     atomic: Atomic, clock: () => number, fault: (point: FaultPoint) => void) {
     this.store = store;
     this.authority = authority;

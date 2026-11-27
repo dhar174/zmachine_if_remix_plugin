@@ -47,6 +47,12 @@ export function projectWorld(world: World): EntityProjection[] {
           .map(({ id }) => id);
         const observations = world.events.filter((event) => event.kind === "observation" && event.observer === id).map(({ id }) => id);
         const beliefs = world.beliefs.filter(({ character }) => character === id).map(({ source }) => source);
+        if (world.version === "2.0.0") {
+          surfaces.push(surface("behavior:rules", "characterization", world.rules
+            .filter(({ definition }) => definition.owner === id).map(({ definition }) => definition.id), source),
+          surface("inventory:offers", "inventory", world.offers
+            .filter(({ giver, recipient }) => giver === id || recipient === id), source));
+        }
         surfaces.push(surface("dialogue:speech", "dialogue", speech, source),
           surface("dialogue:observation", "dialogue", observations, source),
           surface("characterization:beliefs", "characterization", beliefs, source));
@@ -81,6 +87,10 @@ export function worldInspection(world: World, target: string, editor: boolean, r
       belief, evidence: world.events.find(({ id }) => id === belief.evidence) ?? null,
     }));
     if (knowledge.length > 0) facts.push({ field: "characterization:beliefs", value: knowledge });
+    if (world.version === "2.0.0") {
+      const rules = world.rules.filter(({ definition }) => definition.owner === target);
+      if (rules.length > 0) facts.push({ field: "behavior:rules", value: rules });
+    }
   }
   const structural = row.surfaces.flatMap(({ field, fact }) => {
     if (fact.state !== "present") return [];
@@ -98,6 +108,8 @@ export function ownedByWorld(world: World, id: string): boolean {
 
 
 const worldNote = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("offer.created"), id: z.string(), item: z.string(),
+    giver: z.string(), recipient: z.string() }),
   z.strictObject({ kind: z.literal("speech"), speaker: z.string(), text: z.string() }),
   z.strictObject({ kind: z.literal("overlay.create"), entity: z.string(), entity_kind: z.enum(["location", "character", "item"]),
     label: z.string(), room: z.string().optional(), holder: z.string().optional() }),
@@ -118,6 +130,13 @@ export function visibleWorldNote(text: string, world: World | undefined, revisio
   if (!scene) return;
   const createdAt = (source: string) => events.get(source)?.revision === revision;
   switch (note.kind) {
+    case "offer.created": {
+      const offer = world.version === "2.0.0" && world.offers.find(({ id }) => id === note.id);
+      if (!offer || !createdAt(offer.id) || offer.item !== note.item || offer.giver !== note.giver ||
+          offer.recipient !== note.recipient || offer.recipient !== world.player ||
+          roomOf(offer.giver, revision) !== scene || roomOf(offer.item, revision) !== scene) return;
+      break;
+    }
     case "speech":
       if (!world.events.some((event) => event.kind === "speech" && event.revision === revision && event.room === scene &&
           event.speaker === note.speaker && event.text === note.text)) return;

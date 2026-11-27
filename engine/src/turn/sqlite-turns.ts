@@ -9,7 +9,7 @@ import type { Access } from "./contracts.ts";
 import { recoveryResult, restoreIntent, savedSession } from "../fixture/recovery-contracts.ts";
 import type { RestoreIntent, RestoreResult, SavedSession } from "../fixture/recovery-contracts.ts";
 import { publicHead, sessionRef } from "../fixture/session-contracts.ts";
-import { worldTransitionValid } from "../world/history.ts";
+import { receiptWorldTurn, worldTransitionValid } from "../world/history.ts";
 import { importedSession, portableBytes, portableEntry, portableHistoryLimit } from "../fixture/portable-session.ts";
 import type { PortableEntry, UploadPurpose } from "../fixture/portable-session.ts";
 
@@ -162,7 +162,7 @@ export class SQLiteTurns {
     const receipt = record.receipt;
     const branch = branchKey(receipt);
     const row = this.db.prepare(`
-      SELECT r.receipt, l.parent, p.id AS pre_published
+      SELECT r.receipt, r.proposal, r.envelope, l.parent, p.id AS pre_published
       FROM requests r JOIN checkpoint_links l ON l.id=r.checkpoint
       LEFT JOIN checkpoints p ON p.id=? AND p.published=1
       WHERE r.id=? AND l.id=? AND l.branch=? AND l.generation=? AND l.revision=? AND l.origin IS NULL
@@ -186,7 +186,8 @@ export class SQLiteTurns {
       }
 
       const events = this.receiptEventBodies(id, receipt.event_ids);
-      if (!events || !worldTransitionValid(previous, image, events, receipt.request_id)) return;
+      const worldTurn = receiptWorldTurn(record, row.envelope === "" ? undefined : z.string().parse(row.proposal ?? ""));
+      if (!events || !worldTransitionValid(previous, image, events, receipt.request_id, worldTurn)) return;
       const priorWorld = previous?.snapshot.world;
       const worldChanged = priorWorld !== undefined && (image.snapshot.world?.events.length ?? 0) > priorWorld.events.length;
       return { image, previous, worldChanged };
@@ -270,7 +271,7 @@ export class SQLiteTurns {
     }
     if (!snapshot.world) return true;
     const rows = this.db.prepare(lineage + `
-      SELECT c.id,c.body,c.digest,r.id AS request,r.receipt
+      SELECT c.id,c.body,c.digest,r.id AS request,r.receipt,r.proposal,r.envelope
       FROM ancestry a JOIN checkpoint_links l ON l.id=a.id JOIN checkpoints c ON c.id=a.id
       LEFT JOIN requests r ON r.checkpoint=a.id ORDER BY l.revision
     `).iterate(checkpoint.checkpoint_id);
@@ -279,9 +280,11 @@ export class SQLiteTurns {
       for (const row of rows) {
         const current = TurnImage.parse(parseJson(z.string().parse(row.body)));
         if (current.checkpoint.checkpoint_id !== row.id || canonicalDigest(current) !== row.digest) return false;
-        const receipt = row.receipt === null ? undefined : DurableReceipt.parse(parseJson(z.string().parse(row.receipt))).receipt;
+        const record = row.receipt === null ? undefined : DurableReceipt.parse(parseJson(z.string().parse(row.receipt)));
+        const receipt = record?.receipt;
         const bodies = receipt ? this.receiptEventBodies(z.string().parse(row.request), receipt.event_ids) : [];
-        if (!bodies || !worldTransitionValid(previous, current, bodies, receipt?.request_id)) return false;
+        const worldTurn = receiptWorldTurn(record, row.envelope === "" ? undefined : z.string().parse(row.proposal ?? ""));
+        if (!bodies || !worldTransitionValid(previous, current, bodies, receipt?.request_id, worldTurn)) return false;
         previous = current;
       }
       return previous?.checkpoint.checkpoint_id === checkpoint.checkpoint_id &&

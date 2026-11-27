@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CapabilityManifest, DirectiveBundle, HeadExpectation, PendingInput, RequestIdentity, TurnProposal } from "../contracts.ts";
 import { World } from "../world/model.ts";
+import { OfferAccept, RuleInstall, RuleStep } from "../world/rule-contracts.ts";
 import type { Failure } from "../ports.ts";
 import { CompilationInput, CompilationProposal, ModelInterpretation, PolicyRule, SupportedSubsetSelection } from "./directive-contracts.ts";
 
@@ -15,6 +16,8 @@ const trigger = z.enum(["player_attempt", "autonomous_event"]);
 const scope = PolicyRule.options[0].shape.scope.shape;
 const operation = z.discriminatedUnion("kind", [
   ...TurnProposal.shape.operations.element.options,
+  RuleInstall,
+  OfferAccept,
   z.strictObject({ kind: z.literal("inventory.transfer"), item: entityId, from: entityId, to: entityId }),
   z.strictObject({ kind: z.literal("overlay.create"), entity: entityId, region: id,
     entity_kind: z.enum(["location", "character", "item", "rule"]), label: z.string().min(1).max(32000),
@@ -78,6 +81,7 @@ export const ResolverSnapshot = z.strictObject({
     rule_id: id, from_turn: z.int().nonnegative(), until_turn: z.int().positive().nullable(),
   })).max(512),
   world: World.optional(),
+  world_dependencies: z.array(z.strictObject({ source: effect, dependency: effect })).max(128).optional(),
   regions: z.array(id).max(256),
   entities: z.array(entity).max(1024), native: native.nullable(), bridges: z.array(bridge).max(256),
   editor_authority: z.strictObject({ proposal_digest: digest, evidence_id: id }).nullable(),
@@ -96,6 +100,11 @@ export const ResolverProposal = HeadExpectation.extend({
 export type ResolverSnapshot = z.infer<typeof ResolverSnapshot>;
 export type ResolverProposal = z.infer<typeof ResolverProposal>;
 export type ResolverOperation = z.infer<typeof operation>;
+
+export function proposalOperations(proposal: ResolverProposal): ResolverOperation[] {
+  return proposal.amendment ? proposal.amendment.compiled.bundle.world_patch.map(({ entity_id, field, value }) =>
+    ({ kind: "remix.assign", entity_id, field, value })) : proposal.operations;
+}
 export type EffectRef = z.infer<typeof effect>;
 export type EntityProjection = z.infer<typeof entity>;
 export type ActiveRule = z.infer<typeof PolicyRule>;
@@ -117,6 +126,7 @@ export interface EffectPlan {
   readonly route: "native" | "remix" | "bridged";
   readonly time: "native" | "overlay" | "none";
   readonly world_mode?: ResolverSnapshot["mode"];
+  readonly rule_steps?: readonly z.infer<typeof RuleStep>[];
   readonly operations: readonly {
     operation: ResolverOperation;
     effects: readonly EffectRef[];

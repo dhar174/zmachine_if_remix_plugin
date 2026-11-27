@@ -3,10 +3,12 @@ import { z } from "zod";
 import { CombinedCheckpoint, DirectiveBundle, HeadExpectation, Revision, canonicalDigest, canonicalJson } from "../contracts.ts";
 import type { Json } from "../contracts.ts";
 import type { Result } from "../ports.ts";
-import type { EffectPlan, ResolverSnapshot } from "../policy/resolver-contracts.ts";
+import type { EffectPlan, ResolverProposal, ResolverSnapshot } from "../policy/resolver-contracts.ts";
 import { effectKey } from "../policy/resolver-effects.ts";
 import { TurnImage, failure, limits, ok } from "./contracts.ts";
 import { remixStateRef, validWorld } from "../world/model.ts";
+import { worldTransitionValid } from "../world/history.ts";
+import type { TurnBudget } from "./limits.ts";
 import { runWorldPlan, WorldOperationError } from "../world/operations.ts";
 import type { Execution, TurnExecutor } from "./contracts.ts";
 
@@ -59,11 +61,12 @@ function nextPolicy(before: TurnImage, plan: EffectPlan) {
     history: [...history, ...compiled.lineage.map(({ old_rule }) => ({ id: old_rule.id, supersedes: old_rule.supersedes }))] };
 }
 
-export function executeWorld(before: TurnImage, plan: EffectPlan): Result<Execution> {
+export function executeWorld(before: TurnImage, plan: EffectPlan, budget?: TurnBudget): Result<Execution> {
   try {
-    const result = runWorldPlan(before.snapshot, plan);
-    if (!result) return invalidEffect();
-    const effects = [...new Map(plan.operations.flatMap(({ effects }) => effects.map((effect) => [effectKey(effect), effect] as const))).values()];
+    const result = runWorldPlan(before.snapshot, plan, { budget });
+    if (!result || canonicalDigest(result.ruleSteps) !== canonicalDigest([...(plan.rule_steps ?? [])])) return invalidEffect();
+    const effects = [...new Map([...plan.operations, ...result.ruleSteps]
+      .flatMap(({ effects }) => effects.map((effect) => [effectKey(effect), effect] as const))).values()];
     return ok({ ...result, effects, entities: before.snapshot.entities, native: before.native,
       pending: before.checkpoint.native_state.pending_input, time_cost: 0, outcome: "success", output: [] });
   } catch (error) {
@@ -72,9 +75,10 @@ export function executeWorld(before: TurnImage, plan: EffectPlan): Result<Execut
   }
 }
 
-export function buildImage(before: TurnImage, execution: Execution, plan: EffectPlan, executor: TurnExecutor): Result<TurnImage> {
+export function buildImage(before: TurnImage, execution: Execution, plan: EffectPlan, executor: TurnExecutor,
+  budget?: TurnBudget, proposal?: ResolverProposal): Result<TurnImage> {
   if (plan.world_mode) {
-    const verified = executeWorld(before, plan);
+    const verified = executeWorld(before, plan, budget);
     if (!verified.ok) return verified;
     if (canonicalDigest(z.json().parse(execution)) !== canonicalDigest(z.json().parse(verified.value))) return invalidEffect();
   } else if (execution.world !== undefined) return invalidEffect();
@@ -84,7 +88,7 @@ export function buildImage(before: TurnImage, execution: Execution, plan: Effect
       !fits(JSON.stringify([execution.output, execution.facts]), limits.output_bytes)) {
     return failure("ABORTED", "The isolated turn exceeded its execution or output budget.");
   }
-  const expected = new Set(plan.operations.flatMap(({ effects }) => effects.map(effectKey)));
+  const expected = new Set([...plan.operations, ...(plan.rule_steps ?? [])].flatMap(({ effects }) => effects.map(effectKey)));
   const observed = execution.effects.map(effectKey);
   if (new Set(observed).size !== observed.length || observed.some((key) => !expected.has(key))) return invalidEffect();
   // Native adapters account for hidden fixture state as well as exposed native surfaces.
@@ -156,6 +160,9 @@ export function buildImage(before: TurnImage, execution: Execution, plan: Effect
       clock: { ...before.snapshot.clock, overlay_turn: checkpoint.clocks.overlay }, editor_authority: null, compiler_context: null },
   });
   const valid = validateImage(candidate, executor);
+  const worldTurn = plan.world_mode && world?.version === "2.0.0" && proposal ?
+    { proposal, mode: plan.world_mode, durableDigest: plan.proposal_digest } : undefined;
+  if (valid.ok && !worldTransitionValid(before, candidate, execution.events, plan.request_id, worldTurn, budget)) return invalidEffect();
   return valid.ok ? ok(candidate) : valid;
 }
 

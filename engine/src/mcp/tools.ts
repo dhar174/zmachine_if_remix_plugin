@@ -16,6 +16,7 @@ const controlInput = ref.extend({ request_id: requestId, mode: z.enum(["PLAY", "
 const historyQuery = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("facts") }),
   z.strictObject({ kind: z.literal("rules") }),
+  z.strictObject({ kind: z.literal("offers") }),
   z.strictObject({ kind: z.literal("history"), limit: z.int().min(1).max(10).optional() }),
   z.strictObject({ kind: z.literal("receipt"), generation_id: target.shape.generation_id, request_id: requestId }),
 ]);
@@ -135,9 +136,10 @@ export function fixtureTools(service: TurnService, origin: string, browserAvaila
         }
         if (value.kind !== "prepared") return failure("VALIDATION_FAILED", "Invalid fixture preparation.");
         const { candidate_id, proposal_digest, expires_at } = value.handle;
+        const editorAction = args.action.kind === "directive" || args.action.kind === "rule.install" && args.action.mode === "EDITOR";
         return ok({ status: "PREPARED" as const, candidate_id, proposal_digest, expires_at, diff_digest: value.diff_digest,
-          preview: previewOf(value.diff, args.action.kind === "directive"),
-          ...(args.action.kind === "directive" ? { approval_url: browserUrl("/candidate", { id: candidate_id }) } : {}) });
+          preview: previewOf(value.diff, editorAction),
+          ...(editorAction ? { approval_url: browserUrl("/candidate", { id: candidate_id }) } : {}) });
       }),
     commit_turn: route(z.strictObject({ version, target, action: requestAction, candidate_id: opaque("candidate"), diff_digest: digest }),
       committed, scopes.commit, "Commit the exact staged fixture candidate. Retry with all original fields to recover a durable receipt.",

@@ -1,11 +1,15 @@
 import { canonicalDigest, canonicalJson } from "../contracts.ts";
 import { compileDirective, selectDirectiveSubset } from "./directive-compiler.ts";
-import { ResolverProposal, ResolverSnapshot } from "./resolver-contracts.ts";
+import { proposalOperations, ResolverProposal, ResolverSnapshot } from "./resolver-contracts.ts";
 import type { ActiveRule, DecisionTrace, EffectPlan, PolicyResolverPort, Resolution, ResolverOperation } from "./resolver-contracts.ts";
 import { deriveFootprint, effectKey, ResolutionProblem } from "./resolver-effects.ts";
 import type { Footprint, ResolvedEffect } from "./resolver-effects.ts";
 import { validWorld } from "../world/model.ts";
-import { evaluateWorldOperation, runWorldPlan, usesWorld, WorldOperationError } from "../world/operations.ts";
+import { evaluateWorldOperation, expandWorldDependencies, runWorldPlan, usesWorld, verifyWorldWrites,
+  WorldOperationError } from "../world/operations.ts";
+import type { Operation as WorldOperation } from "../world/operations.ts";
+import { turnBudget } from "../turn/limits.ts";
+import type { TurnBudget } from "../turn/limits.ts";
 
 const ordered = (ids: Iterable<string>) => [...new Set(ids)].sort();
 const same = (left: Parameters<typeof canonicalJson>[0], right: Parameters<typeof canonicalJson>[0]) =>
@@ -71,7 +75,7 @@ function assertSnapshot(snapshot: ResolverSnapshot, rules: ActiveRule[]) {
 function prepareAmendment(snapshot: ResolverSnapshot, proposal: ResolverProposal, rules: ActiveRule[]):
 { operations: ResolverOperation[]; candidate: EffectPlan["amendment"]; rules: ActiveRule[] } {
   const amendment = proposal.amendment;
-  if (!amendment) return { operations: proposal.operations, candidate: null, rules };
+  if (!amendment) return { operations: proposalOperations(proposal), candidate: null, rules };
   if (snapshot.mode !== "EDITOR") {
     throw new ResolutionProblem("NEEDS_APPROVAL", "editor_mode", "An amendment requires trusted Editor mode.");
   }
@@ -111,12 +115,12 @@ function prepareAmendment(snapshot: ResolverSnapshot, proposal: ResolverProposal
     candidate: { compiled, active_rules: candidateRules,
       applicability, preferences: [...snapshot.policy.preferences, ...compiled.bundle.preferences] },
     rules: evaluationRules,
-    operations: compiled.bundle.world_patch.map(({ entity_id, field, value }) => ({ kind: "remix.assign", entity_id, field, value })),
+    operations: proposalOperations(proposal),
   };
 }
 
 function structuralGuard(rule: Extract<ActiveRule, { kind: "invariant" }>,
-  effect: ResolvedEffect, operation: ResolverOperation): boolean {
+  effect: ResolvedEffect, operation: WorldOperation): boolean {
   const parameters = rule.guard.parameters;
   if (rule.guard.id === "inventory.possession" && typeof parameters.holder === "string" &&
       typeof parameters.item === "string" && Object.keys(parameters).length === 2) {
@@ -134,7 +138,7 @@ function structuralGuard(rule: Extract<ActiveRule, { kind: "invariant" }>,
   throw new ResolutionProblem("CAPABILITY_MISSING", "structural_guard", "The structural guard or its parameters are unsupported.");
 }
 
-function checkPolicy(snapshot: ResolverSnapshot, operation: ResolverOperation, footprint: Footprint,
+function checkPolicy(snapshot: ResolverSnapshot, operation: WorldOperation, footprint: Footprint,
   rules: ActiveRule[], windows: ResolverSnapshot["applicability"], digest: string,
   ruleIds: Set<string>, evidenceIds: Set<string>, semantic: DecisionTrace["semantic"][number][]) {
   const active = rules.filter(({ id }) => {
@@ -200,7 +204,7 @@ function checkPolicy(snapshot: ResolverSnapshot, operation: ResolverOperation, f
   }
 }
 
-function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean): Resolution {
+function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, budget = turnBudget()): Resolution {
   const ruleIds = new Set<string>();
   const capabilityIds = new Set<string>();
   const evidenceIds = new Set<string>();
@@ -254,12 +258,20 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean):
     if (worldOperations > 0 && worldOperations !== amendment.operations.length) {
       throw new ResolutionProblem("NEEDS_CLARIFICATION", "world_subturn", "Resolve world operations separately from legacy or native operations.");
     }
+    if (amendment.operations.length > 1 && amendment.operations.some(({ kind }) => kind === "offer.accept")) {
+      throw new ResolutionProblem("NEEDS_CLARIFICATION", "single_offer", "An offer acceptance requires its own Play turn.");
+    }
     for (const [index, operation] of amendment.operations.entries()) {
+      if (budget.remaining() <= 0) throw new WorldOperationError("ABORTED", "The turn deadline expired during policy planning.");
       let footprint: Footprint;
+      let directWorldEffects: ResolvedEffect[] | undefined;
       if (worldOperations > 0) {
-        const { effects, action } = evaluateWorldOperation(snapshot, operation, {
+        const result = evaluateWorldOperation(snapshot, operation, {
           request: proposal.request_id, proposal: digest, revision: head.expected_revision + 1, index, mode: snapshot.mode,
         });
+        directWorldEffects = result.effects;
+        const effects = expandWorldDependencies(snapshot, directWorldEffects);
+        const { action } = result;
         effects.forEach(({ surface }) => evidenceIds.add(surface.fact.evidence_id));
         footprint = { effects, action, route: "remix", capability_ids: [] };
       } else {
@@ -268,6 +280,7 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean):
       routes.add(footprint.route);
       checkPolicy(snapshot, operation, footprint, amendment.rules,
         [...snapshot.applicability, ...(amendment.candidate?.applicability ?? [])], digest, ruleIds, evidenceIds, semantic);
+      if (directWorldEffects) verifyWorldWrites(directWorldEffects, footprint.effects);
       for (const { ref } of footprint.effects) {
         const key = canonicalJson([ref.entity_id, ref.field]);
         if (accumulated.has(key) && (ref.change === "write" || accumulated.get(key) === "write")) {
@@ -285,20 +298,29 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean):
       throw new ResolutionProblem("CAPABILITY_MISSING", "unregistered_combination", "Independent native and remix operations lack a registered bridge.");
     }
     const declared = proposal.declared_effects.map(effectKey).sort();
-    const derived = ordered(operations.flatMap(({ effects }) => effects.map(effectKey)));
-    if (derived.length > 512 || !(worldOperations > 0 && declared.length === 0) && !same(declared, derived)) {
-      throw invalid("declared_footprint", "The declared effects do not match the complete derived footprint.");
-    }
     const route = routes.has("bridged") ? "bridged" : routes.has("native") ? "native" : "remix";
     const time = snapshot.mode === "EDITOR" || operations.every(({ operation }) =>
-      operation.kind === "inspect.entity" || operation.kind === "observation.record" || operation.kind === "belief.update")
+operation.kind === "inspect.entity" || operation.kind === "observation.record" || operation.kind === "belief.update" ||
+      operation.kind === "rule.install")
       ? "none" : operations.some(({ operation }) => operation.kind === "native.line" || operation.kind === "native.character")
         ? "native" : "overlay";
     const plan: EffectPlan = { version: "1.0.0", head, request_id: proposal.request_id, proposal_digest: digest,
       route, time, operations, amendment: amendment.candidate, trace: trace(),
       ...(worldOperations > 0 ? { world_mode: snapshot.mode } : {}) };
-    if (plan.world_mode && inspections === 0) runWorldPlan(snapshot, plan);
-    return { ok: true, plan };
+    const expanded = plan.world_mode && inspections === 0 ? runWorldPlan(snapshot, plan, {
+      budget,
+      check(current, operation, footprint) {
+        footprint.effects.forEach(({ surface }) => evidenceIds.add(surface.fact.evidence_id));
+        checkPolicy(current, operation, footprint, amendment.rules,
+          [...snapshot.applicability, ...(amendment.candidate?.applicability ?? [])], digest, ruleIds, evidenceIds, semantic);
+      },
+    }) : undefined;
+    const ruleSteps = expanded?.ruleSteps ?? [];
+    const derived = ordered([...operations, ...ruleSteps].flatMap(({ effects }) => effects.map(effectKey)));
+    if (derived.length > 512 || !(worldOperations > 0 && declared.length === 0) && !same(declared, derived)) {
+      throw invalid("declared_footprint", "The declared effects do not match the complete derived footprint.");
+    }
+    return { ok: true, plan: { ...plan, trace: trace(), ...(ruleSteps.length ? { rule_steps: ruleSteps } : {}) } };
   } catch (error) {
     if (error instanceof WorldOperationError) {
       return { ok: false, error: { status: error.status, reason: "remix_world", message: error.message, retry: "none" }, trace: trace() };
@@ -310,14 +332,14 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean):
   }
 }
 
-export function resolvePolicy(snapshot: unknown, proposal: unknown): Resolution {
-  return evaluate(snapshot, proposal, false);
+export function resolvePolicy(snapshot: unknown, proposal: unknown, budget?: TurnBudget): Resolution {
+  return evaluate(snapshot, proposal, false, budget);
 }
 
 /** Server-side preview only. Its result carries neither a plan nor authority. */
-export function previewPolicy(snapshot: unknown, proposal: unknown):
+export function previewPolicy(snapshot: unknown, proposal: unknown, budget?: TurnBudget):
   { ok: true; preview: Omit<EffectPlan, "version"> } | Extract<Resolution, { ok: false }> {
-  const result = evaluate(snapshot, proposal, true);
+  const result = evaluate(snapshot, proposal, true, budget);
   if (!result.ok) return result;
   const { version: schemaVersion, ...preview } = result.plan;
   void schemaVersion;

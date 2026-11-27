@@ -5,8 +5,35 @@ import type { Access, Execution, TurnExecutor } from "../turn/contracts.ts";
 import type { EffectPlan } from "../policy/resolver-contracts.ts";
 import { TurnImage, failure, ok } from "../turn/contracts.ts";
 import { randomUUID } from "node:crypto";
+import { World, remixStateRef } from "../world/model.ts";
 
 export const fixtureRoom = "remix:room";
+export type FixtureProfile = "synthetic" | "synthetic-rules" | "native-z5";
+
+export function rulesFixtureImage(owner: Access["owner_id"]): TurnImage {
+  const image = fixtureImage(owner);
+  const source = "world-event:seed";
+  const world = World.parse({
+    version: "1.0.0", player: "remix:player",
+    entities: [
+      { id: "remix:market", label: "Market", kind: "location", region: "region:market", source },
+      { id: "remix:player", label: "Player", kind: "character", room: "remix:market", source },
+      { id: "remix:guard", label: "Market guard", kind: "character", room: "remix:market", source },
+      { id: "remix:market-token", label: "Market token", kind: "item", container: false, source },
+      { id: "remix:vault", label: "Vault", kind: "location", region: "region:vault", source },
+      { id: "remix:distant-guard", label: "Vault guard", kind: "character", room: "remix:vault", source },
+    ],
+    facts: [
+      { subject: "remix:market-token", field: "inventory:holder", value: "remix:guard" },
+      { subject: "remix:guard", field: "relationship:remix:player", value: "acquaintance" },
+    ].map((fact) => ({ ...fact, source, from: 0, until: null, owner: "remix", visibility: "player", evidence: "fixture" })),
+    events: [{ id: source, revision: 0, kind: "seed" }], exits: [], beliefs: [],
+  });
+  image.snapshot.world = world;
+  image.snapshot.regions = ["region:market", "region:vault"];
+  image.checkpoint.remix_state_ref = remixStateRef(image.snapshot.entities, world);
+  return image;
+}
 export const fixtureLabel = "presentation:label";
 export const fixtureInscription = "presentation:inscription";
 export const fixtureNativeField = { entity_id: "native:room", field: "progression:counter" };

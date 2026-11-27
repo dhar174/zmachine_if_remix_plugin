@@ -60,7 +60,8 @@ function reject(result: ReturnType<typeof resolvePolicy>, status: string, reason
 function approve(context: ResolverSnapshot, request: Parameters<typeof canonicalDigest>[0]): ResolverSnapshot {
   return { ...context, mode: "EDITOR", editor_authority: { proposal_digest: canonicalDigest(request), evidence_id: "grant:fixture" } };
 }
-function capability(op: Exclude<ResolverOperation, { kind: "speech.record" | "observation.record" | "belief.update" }>,
+function capability(op: Exclude<ResolverOperation,
+  { kind: "speech.record" | "observation.record" | "belief.update" | "rule.install" | "offer.accept" }>,
   effects: EffectRef[], suppressed_surfaces: EffectRef[] = []): ResolverSnapshot["native"] {
   return {
     identity: { story_sha256: story, runtime_build: story, adapter_build: story, checkpoint_format: "format:synthetic" },

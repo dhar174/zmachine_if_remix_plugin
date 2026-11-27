@@ -2,7 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { capture, compilationRecord, compilerView, fixtureContext, launchRecord, preparedAction, publicHead,
   receiptView, requestAction, sessionRef, sourceRecord, subset, target } from "../fixture/session-contracts.ts";
-import { fixtureGuards, fixtureImage, fixtureNativeWrite, fixtureRoom, fixtureStory } from "../fixture/synthetic-world.ts";
+import { fixtureGuards, fixtureImage, fixtureNativeWrite, fixtureRoom, fixtureStory, rulesFixtureImage } from "../fixture/synthetic-world.ts";
+import type { FixtureProfile } from "../fixture/synthetic-world.ts";
+import { worldView } from "../world/model.ts";
+import { OfferAccept } from "../world/rule-contracts.ts";
+import { offerEligible } from "../world/rule-state.ts";
 import { heidiStory, isNativeStory, nativePayload, validateStoryBytes } from "../native/checkpoint.ts";
 import { createNativeFixtureExecutor, nativeContext, openNativeFixture } from "../native/executor.ts";
 import { coveredInput } from "../native/profiles.ts";
@@ -10,13 +14,15 @@ import { compileDirective, selectDirectiveSubset } from "../policy/directive-com
 import type { CompilationProposal, ModelInterpretation, SupportedSubsetSelection } from "../policy/directive-contracts.ts";
 import { Authority } from "../auth/authority.ts";
 import type { Permit } from "../auth/authority.ts";
-import { CandidateHandle, HeadExpectation, RequestIdentity, TurnEnvelope, canonicalDigest, canonicalJson } from "../contracts.ts";
+import { CandidateHandle, HeadExpectation, RequestIdentity, TurnEnvelope as CoreTurnEnvelope, canonicalDigest, canonicalJson } from "../contracts.ts";
 import type { Result } from "../ports.ts";
 import { CompilationInput } from "../policy/directive-contracts.ts";
 import { ResolverProposal } from "../policy/resolver-contracts.ts";
 import type { EffectPlan, ResolverSnapshot } from "../policy/resolver-contracts.ts";
 import { DurableReceipt, TurnImage, conflict, failure, invalid, limits, ok, stale } from "./contracts.ts";
 import type { Access, FaultPoint, Stage, TurnExecutor } from "./contracts.ts";
+import { turnBudget } from "./limits.ts";
+import type { TurnBudget } from "./limits.ts";
 import { buildImage, executeWorld, jsonEvent, supported, validateImage } from "./execution.ts";
 import { visibleWorldNote, worldInspection } from "../world/projection.ts";
 import { SQLiteTurns, branchKey } from "./sqlite-turns.ts";
@@ -25,6 +31,11 @@ import { FixtureRecovery } from "../fixture/recovery.ts";
 import { decodePortable, encodePortable, relocatePortable } from "../fixture/portable-session.ts";
 import type { UploadPurpose } from "../fixture/portable-session.ts";
 
+const TurnEnvelope = CoreTurnEnvelope.extend({
+  input: z.union([CoreTurnEnvelope.shape.input, OfferAccept]),
+  fixture_action_digest: z.string().regex(/^[0-9a-f]{64}$/u).optional(),
+});
+type TurnEnvelope = z.infer<typeof TurnEnvelope>;
 type Head = ReturnType<typeof expected>;
 type Prepared = { kind: "prepared"; handle: CandidateHandle; diff: string; diff_digest: string };
 type Preparation = Prepared | { kind: "committed"; record: DurableReceipt } |
@@ -68,7 +79,7 @@ export class TurnService {
   private readonly inFlight = new Map<string, { digest: string; candidate: string; diff: string; promise: Promise<Commit>; abort: AbortController }>();
   private inTransaction = false;
   readonly browser: BrowserOperations;
-  readonly fixtureProfile: "synthetic" | "native-z5";
+readonly fixtureProfile: FixtureProfile;
   readonly recovery: FixtureRecovery;
   readonly privateStories: boolean;
   readonly heidiTrial: boolean;
@@ -76,10 +87,12 @@ export class TurnService {
 
   private readonly executor: TurnExecutor;
   private readonly clock: () => number;
+  private readonly monotonicClock: (() => number) | undefined;
   private readonly fault: (point: FaultPoint) => void;
   constructor(storage: string | TurnStore, executor: TurnExecutor,
     clock: () => number = Date.now, fault: (point: FaultPoint) => void = () => {},
-    fixtureProfile: "synthetic" | "native-z5" = "synthetic", privateFiles?: { key: Buffer; heidiTrial?: boolean }) {
+    fixtureProfile: FixtureProfile = "synthetic", privateFiles?: { key: Buffer; heidiTrial?: boolean },
+    monotonicClock?: () => number) {
     if (privateFiles && (fixtureProfile !== "native-z5" || privateFiles.key.length !== 32)) {
       throw new Error("Private transfers require the native profile and a 32-byte key.");
     }
@@ -88,6 +101,7 @@ export class TurnService {
     this.heidiTrial = privateFiles?.heidiTrial ?? false;
     this.transferKey = privateFiles ? Buffer.from(privateFiles.key) : undefined;
     this.clock = clock;
+    this.monotonicClock = monotonicClock;
     this.fault = fault;
     this.store = typeof storage === "string" ? new SQLiteTurns(storage) : storage;
     this.executor = this.privateStories ? createNativeFixtureExecutor((scope) => this.store.storyFor(scope)) : executor;
@@ -139,7 +153,7 @@ export class TurnService {
     return this.atomic(() => {
       const handle = "launch:" + randomUUID();
       this.store.saveFixtureRecord("launch", handle, { owner, session: null, expires: this.clock() + 300_000,
-        ...(this.fixtureProfile === "native-z5" ? { profile: this.fixtureProfile } : {}),
+        ...(this.fixtureProfile !== "synthetic" ? { profile: this.fixtureProfile } : {}),
       });
       return ok(handle);
     });
@@ -277,7 +291,8 @@ export class TurnService {
     const launch = this.atomic(lookup);
     if (!launch.ok) return launch;
     if (launch.value.session) return this.readFixture({ owner_id: owner, ...launch.value.session });
-    const created = this.fixtureProfile === "native-z5" ? await openNativeFixture(owner) : ok(fixtureImage(owner));
+    const created = this.fixtureProfile === "native-z5" ? await openNativeFixture(owner) :
+      ok(this.fixtureProfile === "synthetic-rules" ? rulesFixtureImage(owner) : fixtureImage(owner));
     if (!created.ok) return created;
     return this.atomic(() => {
       const current = lookup();
@@ -328,11 +343,26 @@ export class TurnService {
           coverage === "complete" && domain === "presentation" && fact.state === "present" && typeof fact.value === "string"
             ? [{ entity_id, field, value: fact.value, evidence_id: fact.evidence_id }] : []));
       const restored_from = draft ? undefined : this.store.restoreOrigin(image.snapshot.head);
+      const world = !draft && image.snapshot.world;
+      const projection = world ? worldView(world) : undefined;
+      const revision = image.checkpoint.revision;
+      const editor = mode.value.mode === "EDITOR";
+      const scene = world && projection?.roomOf(world.player, revision);
+      const visible = world && world.entities.filter(({ id }) => editor || projection?.roomOf(id, revision) === scene)
+        .slice(0, 64).map(({ id, label, kind }) => ({ id, label, kind }));
+      const behavior = world && world.version === "2.0.0" && projection ? {
+        ...(editor ? { behavior_rules: world.rules.map(({ definition }) => definition) } : {}),
+        pending_offers: world.offers.filter(({ consumed_by, recipient, giver, item }) => consumed_by === null &&
+          recipient === world.player && offerEligible(world, projection, giver, item, revision)).slice(0, 32)
+          .map(({ id, giver, recipient, item }) => ({ id, giver, recipient, item })),
+      } : {};
       return ok(fixtureContext.parse({
         ...(restored_from ? { restored_from } : {}),
         head, state: draft ? "draft" : "active", mode: mode.value.mode, story_sha256: story,
         pending_input: draft ? null : image.checkpoint.native_state.pending_input.kind,
-        operations: draft ? ["initial_directive"] : ["play", "editor_assignment", "policy_amendment", "inspect"],
+        operations: draft ? ["initial_directive"] : ["play", "editor_assignment", "policy_amendment", "inspect",
+          ...(world ? ["rule.install", "overlay.speech", "offer.accept"] : [])],
+        ...(visible ? { overlay_entities: visible } : {}), ...behavior,
         clocks: draft ? null : { native: image.checkpoint.clocks.native, overlay: image.checkpoint.clocks.overlay },
         facts: draft ? [] : facts,
         ...(isNativeStory(story) ? { native: nativeContext(image, draft) } : {}),
@@ -396,8 +426,14 @@ export class TurnService {
   }
 
   private fixtureEnvelope(access: Access, request: z.infer<typeof target>, action: z.infer<typeof requestAction>) {
-    return TurnEnvelope.parse({ ...request, owner_id: access.owner_id, version: "1.0.0", intent: action.kind === "play" ? "play" : "editor",
-      input: action.kind === "play" ? action.input : { kind: "line", text: action.source_ref } });
+    const editor = action.kind === "directive" || action.kind === "rule.install" && action.mode === "EDITOR";
+    const input = action.kind === "play" ? action.input : action.kind === "offer.accept" ? action : { kind: "line",
+      text: action.kind === "directive" ? action.source_ref : action.kind === "overlay.speech" ? action.text :
+        action.kind + ":" + canonicalDigest(action) };
+    const fixtureAction = action.kind === "play" || action.kind === "directive" ? {} :
+      { fixture_action_digest: canonicalDigest(action) };
+    return TurnEnvelope.parse({ ...request, owner_id: access.owner_id, version: "1.0.0",
+      intent: editor ? "editor" : "play", input, ...fixtureAction });
   }
 
   private prepareCompiledFixture(access: Access, envelope: TurnEnvelope, context: z.infer<typeof CompilationInput>,
@@ -449,6 +485,18 @@ export class TurnService {
         if (!declared.ok) return declared;
         return this.prepareTurn(access, envelope, { ...expected(envelope), version: "1.0.0", request_id: envelope.request_id,
           mode: "PLAY", operations: [operation], declared_effects: declared.value, amendment: null });
+      }
+      if (action.kind !== "directive") {
+        if (base.draft) return failure("NEEDS_APPROVAL", "Approve the initial directive before using overlay behavior.");
+        if (!base.image.snapshot.world) return failure("CAPABILITY_MISSING", "The session has no registered remix world.");
+        const authoring = action.kind === "rule.install" && action.mode === "EDITOR";
+        if (authoring && !browserAvailable && !prior?.receipt) {
+          return failure("NEEDS_APPROVAL", "Authenticated browser control is unavailable.");
+        }
+        const operation = action.kind === "overlay.speech" ? { kind: "speech.record", text: action.text } :
+          action.kind === "rule.install" ? { kind: action.kind, rule: action.rule } : action;
+        return this.prepareTurn(access, envelope, { ...expected(envelope), version: "1.0.0", request_id: envelope.request_id,
+          mode: authoring ? "EDITOR" : "PLAY", operations: [operation], declared_effects: [], amendment: null });
       }
       const existing = compilationRecord.safeParse(this.store.fixtureRecord("compilation", action.source_ref));
       if (existing.success && (branchKey(existing.data.proposal.head) !== branchKey(access) ||
@@ -533,7 +581,7 @@ export class TurnService {
   }
 
   inspectFixture(access: Access, query:
-    { kind: "facts" | "rules" } | { kind: "history"; limit?: number | undefined } |
+    { kind: "facts" | "rules" | "offers" } | { kind: "history"; limit?: number | undefined } |
     ({ kind: "receipt" } & Pick<z.infer<typeof target>, "generation_id" | "request_id">)) {
     return this.atomic((): Result<{ context: z.infer<typeof fixtureContext>; receipts: z.infer<typeof receiptView>[];
       receipt_on_active_lineage?: boolean }> => {
@@ -541,6 +589,8 @@ export class TurnService {
       if (!view.ok) return view;
       const context = { ...view.value, facts: query.kind === "facts" ? view.value.facts : [],
         rules: query.kind === "rules" ? view.value.rules : [] };
+      if (query.kind !== "rules") delete context.behavior_rules;
+      if (query.kind !== "offers") delete context.pending_offers;
       const base = this.store.head(access);
       if (query.kind === "receipt") {
         const receipt = this.store.request(requestKey({ ...access, generation_id: query.generation_id,
@@ -562,21 +612,22 @@ export class TurnService {
     } = record.receipt;
     const base = { version, session_id, branch_id, generation_id, request_id, status, revision, policy_revision,
       time_cost, in_fiction_result };
-    if (record.receipt.visibility === "owner") {
-      const view = this.readFixture(record.receipt);
-      if (!view.ok || view.value.mode !== "EDITOR") {
-        return receiptView.parse({ ...base, native_output: [], event_ids: [], narration_facts: [], warnings: [], rule_ids: [], capability_ids: [] });
-      }
+    const view = this.readFixture(record.receipt);
+    const editor = view.ok && view.value.mode === "EDITOR";
+    if (record.receipt.visibility === "owner" && !editor) {
+      return receiptView.parse({ ...base, native_output: [], event_ids: [], narration_facts: [], warnings: [], rule_ids: [], capability_ids: [] });
     }
     let facts = narration_facts;
+    const transition = editor || (record.receipt.visibility === "player" && narration_facts.length > 0)
+      ? this.store.receiptTransition(requestKey(record.receipt), record) : undefined;
+    const validTransition = transition && validateImage(transition.image, this.executor).ok &&
+      (!transition.previous || validateImage(transition.previous, this.executor).ok) ? transition : undefined;
     if (record.receipt.visibility === "player" && narration_facts.length > 0) {
-      const transition = this.store.receiptTransition(requestKey(record.receipt), record);
-      if (!transition || !validateImage(transition.image, this.executor).ok ||
-          (transition.previous && !validateImage(transition.previous, this.executor).ok)) {
+      if (!validTransition) {
         facts = [];
-      } else if (transition.worldChanged) {
+      } else if (validTransition.worldChanged) {
         facts = narration_facts.flatMap((note) => {
-          const visible = visibleWorldNote(note, transition.image.snapshot.world, revision);
+          const visible = visibleWorldNote(note, validTransition.image.snapshot.world, revision);
           return visible === undefined ? [] : [visible];
         });
       } else {
@@ -584,8 +635,11 @@ export class TurnService {
         facts = narration_facts.filter((note) => !note.trimStart().startsWith("{"));
       }
     }
+    const steps = editor && validTransition?.image.snapshot.world?.events
+      .flatMap((event) => event.kind === "rule.effect" && event.revision === revision ? [event.step] : []);
     return receiptView.parse({ ...base, native_output, event_ids, narration_facts: facts, warnings,
-      rule_ids: record.rule_ids, capability_ids: record.capability_ids });
+      rule_ids: record.rule_ids, capability_ids: record.capability_ids,
+      ...(steps && steps.length > 0 ? { behavior_steps: steps } : {}) });
   }
 
   lookupApproval(access: Access, head: Head, candidate: CandidateHandle["candidate_id"]) {
@@ -639,6 +693,15 @@ export class TurnService {
       }
       if (requestKey(proposal) !== id || canonicalDigest(expected(proposal)) !== canonicalDigest(wanted) ||
           Buffer.byteLength(canonicalJson([proposal, compiler.data])) > limits.checkpoint_bytes) return reject(invalid());
+      const acceptance = proposal.operations.find(({ kind }) => kind === "offer.accept");
+      if (acceptance || envelope.input.kind === "offer.accept") {
+        if (envelope.input.kind !== "offer.accept" || acceptance?.kind !== "offer.accept" ||
+            acceptance.offer_id !== envelope.input.offer_id ||
+            envelope.intent !== "play" || proposal.mode !== "PLAY" || proposal.amendment ||
+            proposal.operations.length !== 1) {
+          return reject(failure("VALIDATION_FAILED", "An offer acceptance must match the selected offer in its own Play turn."));
+        }
+      }
       const nativeInput = proposal.operations.find(({ kind }) => kind === "native.line" || kind === "native.character");
       if ((nativeInput?.kind === "native.line" && (envelope.input.kind !== "line" || envelope.input.text !== nativeInput.text)) ||
           (nativeInput?.kind === "native.character" &&
@@ -708,7 +771,7 @@ export class TurnService {
     });
   }
 
-  private plan(access: Access, image: TurnImage, stage: Stage, permit: Permit | undefined): Result<EffectPlan> {
+  private plan(access: Access, image: TurnImage, stage: Stage, permit: Permit | undefined, budget: TurnBudget): Result<EffectPlan> {
     const proposal = stage.proposal;
     if (canonicalDigest(proposal) !== stage.handle.proposal_digest || digest(stage.diff) !== stage.diff_digest) return invalid();
     if (Date.parse(stage.handle.expires_at) <= this.clock()) {
@@ -721,8 +784,9 @@ export class TurnService {
       return failure("NEEDS_APPROVAL", "The exact candidate needs current Editor authority.");
     }
     const result = stage.editor && permit
-      ? this.authority.resolveApproved(owner, snapshot.value, proposal, permit)
-      : this.authority.resolveWithoutGrant(owner, snapshot.value, proposal);
+      ? this.authority.resolveApproved(owner, snapshot.value, proposal, permit, budget)
+      : this.authority.resolveWithoutGrant(owner, snapshot.value, proposal, budget);
+    if (budget.remaining() <= 0) return timedOut();
     if (!result.ok) return result;
     if (!supported(result.plan)) return failure("CAPABILITY_MISSING", "This operation has no complete executor.");
     if (result.plan.time === "native" && image.checkpoint.clocks.policy !== "native_running") {
@@ -743,6 +807,7 @@ export class TurnService {
       return active.candidate === candidateId && (!exact || exact.diff === active.diff)
         ? active.promise : Promise.resolve(invalid());
     }
+    const budget = turnBudget(this.monotonicClock);
     const result = this.atomic<Work | DurableReceipt>(() => {
       const request = this.store.request(id);
       if (request && request.envelope !== hash) return conflict();
@@ -776,7 +841,7 @@ export class TurnService {
         if (!approval.ok) return approval;
         selectedPermit = { candidate_id: candidateId, source: "approval", reference: approval.value.grant_id, diff_digest: exact.diff };
       }
-      const plan = this.plan(access, image, stage, selectedPermit);
+      const plan = this.plan(access, image, stage, selectedPermit, budget);
       if (!plan.ok) return plan;
       const claim = randomUUID();
       this.store.claim(id, claim);
@@ -788,7 +853,7 @@ export class TurnService {
     const work = result.value;
     const boundPermit = work.permit ? structuredClone(work.permit) : undefined;
     const scope = { ...access };
-    const promise = Promise.resolve().then(() => this.execute(scope, envelope, work, boundPermit, abort))
+    const promise = Promise.resolve().then(() => this.execute(scope, envelope, work, boundPermit, abort, budget))
       .then((result) => {
         this.atomic(() => {
           if (this.store.request(id)?.claim === work.claim) {
@@ -805,31 +870,37 @@ export class TurnService {
     return promise;
   }
 
-  private async execute(access: Access, envelope: TurnEnvelope, work: Work, permit: Permit | undefined, abort: AbortController): Promise<Commit> {
+  private async execute(access: Access, envelope: TurnEnvelope, work: Work, permit: Permit | undefined, abort: AbortController,
+    budget: TurnBudget): Promise<Commit> {
     const { image, stage, plan, claim } = work;
     const id = requestKey(envelope);
-    const timeout = setTimeout(() => abort.abort(), limits.turn_ms);
+    const expired = () => abort.signal.aborted || budget.remaining() <= 0;
+    const timeout = setTimeout(() => abort.abort(), budget.remaining());
     const interrupted = new Promise<ReturnType<typeof timedOut>>((resolve) => {
       if (abort.signal.aborted) resolve(timedOut());
       else abort.signal.addEventListener("abort", () => resolve(timedOut()), { once: true });
     });
     try {
-      if (abort.signal.aborted) return timedOut();
+      if (expired()) return timedOut();
       const valid = validateImage(image, this.executor);
+      if (expired()) return timedOut();
       if (!valid.ok) return valid;
       const executed = await Promise.race([
-        plan.world_mode ? executeWorld(image, plan) :
+        plan.world_mode ? executeWorld(image, plan, budget) :
           this.executor.execute(structuredClone(image), structuredClone(plan), limits, abort.signal),
         interrupted,
       ]);
+      if (expired()) return timedOut();
       if (!executed.ok) return executed;
-      if (abort.signal.aborted) return timedOut();
-      const next = buildImage(image, executed.value, plan, this.executor);
+      const next = buildImage(image, executed.value, plan, this.executor, budget, stage.proposal);
+      if (expired()) return timedOut();
       if (!next.ok) return next;
       const candidate = next.value;
       const events = executed.value.events.map((event) => jsonEvent.parse(event));
       const receipt = DurableReceipt.parse({
         version: "1.0.0", rule_ids: plan.trace.rule_ids, capability_ids: plan.trace.capability_ids,
+        ...(plan.world_mode && candidate.snapshot.world?.version === "2.0.0" ?
+          { world_proposal: stage.proposal } : {}),
         recovery: { retry: "same_request", checkpoint: candidate.checkpoint.checkpoint_id },
         receipt: {
           ...RequestIdentity.parse(JSON.parse(id) as unknown), version: "1.0.0", status: "COMMITTED",
@@ -843,7 +914,7 @@ export class TurnService {
       });
       this.fault("before_checkpoint");
       const staged = this.atomic(() => {
-        if (abort.signal.aborted) return timedOut();
+        if (expired()) return timedOut();
         if (this.store.request(id)?.claim !== claim) return timedOut();
         this.store.insertCheckpoint(candidate, claim);
         return ok(undefined);
@@ -851,15 +922,16 @@ export class TurnService {
       if (!staged.ok) return staged;
       this.fault("after_checkpoint");
       const committed = this.atomic(() => {
-        if (abort.signal.aborted) return timedOut();
+        if (expired()) return timedOut();
         const request = this.store.request(id);
         if (request?.claim !== claim || request.stage?.handle.candidate_id !== stage.handle.candidate_id) return timedOut();
         const live = this.store.head(access);
         const current = work.draft && !live ? this.store.draft(access) : live;
         if (!current || current.checkpoint.checkpoint_id !== image.checkpoint.checkpoint_id) return stale();
-        const fresh = this.plan(access, current, request.stage, permit);
+        const fresh = this.plan(access, current, request.stage, permit, budget);
         if (!fresh.ok) return fresh;
         if (canonicalDigest(jsonEvent.parse(fresh.value)) !== canonicalDigest(jsonEvent.parse(plan))) return invalid();
+        if (expired()) return timedOut();
         if (permit && stage.editor) {
           const consumed = this.authority.consume(access.owner_id, image.snapshot.head, permit, envelope.request_id);
           if (!consumed.ok) return consumed;
@@ -868,6 +940,7 @@ export class TurnService {
         if (!updated.ok) throw new RejectPublication(updated);
         this.store.publish(id, claim, current, candidate, receipt, events, stage, work.draft);
         this.fault("before_commit");
+        if (expired()) throw new RejectPublication(timedOut());
         return ok(receipt);
       });
       if (committed.ok) this.fault("after_commit");
