@@ -1608,6 +1608,7 @@ void test("#89 signed history rejects a receipt ID shared by version 1 and versi
   const receiptIds = (entries: PortableEntry[]) => entries.flatMap(({ receipt }) => receipt?.receipt.event_ids ?? []);
   const originalIds = new Set(receiptIds(history));
   const relocatedIds = receiptIds(relocated.entries);
+  assert.equal(relocatedIds.length, originalIds.size);
   assert.equal(new Set(relocatedIds).size, relocatedIds.length);
   assert.ok(relocatedIds.every((id) => !originalIds.has(id)));
 
