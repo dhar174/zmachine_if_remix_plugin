@@ -11,6 +11,16 @@ Issue #24 adds a deterministic synthetic overlay scenario. The `synthetic-rules`
 | Replay and A36 | Exact and concurrent MCP retries return the same receipt. A competing acceptance goes stale, and a direct engine proposal can accept at most one offer. Native input and overlay speech with identical text use separate request bindings. An absent character does not receive evidence. The nearby character records attributed knowledge while the objective facts retain their values. Public receipts omit private topics and steps. |
 | History integrity | Signed portable histories with pending and consumed offers pass codec validation and relocation. Separate cases reject a self-referential cause, reordered receipt events, a missing or incorrect footprint, a false condition, and an omitted cascade. |
 
+## Version 2 coverage for PR #90 fixes
+
+[PR #90](https://github.com/dhar174/zmachine_if_remix_plugin/pull/90) introduced the shared observation, narration, and portable receipt checks. PR #91 exercises these checks through the version 2 world and typed fixture actions.
+
+| Issue | Regression evidence |
+| --- | --- |
+| [#87](https://github.com/dhar174/zmachine_if_remix_plugin/issues/87) | Both world versions reject an off-scene observation in Play. The image validator, SQLite ancestry check, and signed decoder reject matching forged observation bodies. The same-room observation passes all three checks and still supports a later belief. [World test](../../engine/tests/world.test.ts#L1490) |
+| [#88](https://github.com/dhar174/zmachine_if_remix_plugin/issues/88) | Authenticated MCP history, exact lookup, prepare replay, and commit replay all withhold off-scene prose in a stored version 2 offer receipt. A genuine offer note survives when the two are mixed. The native prose control still passes. [MCP test](../../engine/tests/fixture-mcp.test.ts#L286) |
+| [#89](https://github.com/dhar174/zmachine_if_remix_plugin/issues/89) | A valid mixed-version history decodes and relocates with its fictional IDs and event bodies intact. A signed copy reusing an external receipt event ID across versions fails decoding. The fresh-SQLite round trip still supports continued native and remix play. [World test](../../engine/tests/world.test.ts#L1583) |
+
 The added coverage lives in [world tests](../../engine/tests/world.test.ts) and [fixture MCP tests](../../engine/tests/fixture-mcp.test.ts). The default limits are visible in [rule contracts](../../engine/src/world/rule-contracts.ts) and [turn limits](../../engine/src/turn/limits.ts). Reproduce from `engine` with the pinned Node and npm versions.
 
 ```text

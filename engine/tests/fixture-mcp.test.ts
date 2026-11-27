@@ -283,6 +283,39 @@ void test("bounded rules through authenticated MCP launch, approve, gossip, offe
   assert.equal(outcome.parse(await fixture.call("prepare_turn", { ...gossip, action: { ...gossip.action as object, text: "Changed" } })).status,
     "VALIDATION_FAILED");
 
+  await t.test("#88 all receipt reads redact off-scene prose from a persisted version 2 offer", async () => {
+    const legitimate = speech.narration_facts.find((note) => note.includes(offer.id));
+    assert.ok(legitimate);
+    const hidden = "The distant guard in the vault offers an unseen reward.";
+    const db = new DatabaseSync(join(directory, "fixture.sqlite"));
+    const overwrite = db.prepare("UPDATE requests SET receipt=json_set(receipt, '$.receipt.narration_facts', json(?)) " +
+      "WHERE json_extract(receipt, '$.receipt.session_id')=? AND json_extract(receipt, '$.receipt.branch_id')=? " +
+      "AND json_extract(receipt, '$.receipt.generation_id')=? AND json_extract(receipt, '$.receipt.request_id')=?");
+    const writeNotes = (notes: string[]) => {
+      assert.equal(overwrite.run(JSON.stringify(notes), ref.session_id, ref.branch_id, id.generation_id, id.request_id).changes, 1);
+    };
+    try {
+      for (const localNotes of [[], [legitimate]]) {
+        writeNotes([hidden, ...localNotes]);
+        const history = inspection.parse(await fixture.call("inspect_session", { ...ref, query: { kind: "history" } }));
+        const historical = history.receipts.find(({ request_id }) => request_id === id.request_id);
+        const exact = inspection.parse(await fixture.call("inspect_session", { ...ref, query: { kind: "receipt", ...id } }));
+        const preparedReplay = await fixture.call("prepare_turn", gossip);
+        const committedReplay = await fixture.call("commit_turn", speechArgs);
+        const expected = { ...speech, narration_facts: localNotes };
+        assert.equal(outcome.parse(preparedReplay).status, "COMMITTED");
+        assert.equal(outcome.parse(committedReplay).status, "COMMITTED");
+        assert.deepEqual(historical, expected);
+        assert.deepEqual(exact.receipts, [expected]);
+        assert.deepEqual(receipt.parse(preparedReplay).receipt, expected);
+        assert.deepEqual(receipt.parse(committedReplay).receipt, expected);
+      }
+      assert.deepEqual(await read(), active);
+    } finally {
+      try { writeNotes(speech.narration_facts); } finally { db.close(); }
+    }
+  });
+
   head = active.head;
   const pendingSave = await saveCombined(fixture, head, "request:save-pending");
   const accept = prepareAction("request:offer-accept", { kind: "offer.accept", offer_id: offer.id });

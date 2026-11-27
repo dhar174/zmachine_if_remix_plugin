@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+import type { TestContext } from "node:test";
 import { canonicalDigest, canonicalJson } from "../src/contracts.ts";
 import type { ResolverOperation } from "../src/policy/resolver-contracts.ts";
 import { compileDirective } from "../src/policy/directive-compiler.ts";
@@ -1422,7 +1423,7 @@ void test("stored observation and belief evidence must be the specific eligible 
 });
 
 
-void test("#87 stored observations require the player and observer in the same historical room", async (t) => {
+async function checkObservationProvenance(t: TestContext, worldVersion: "1.0.0" | "2.0.0") {
   const fx = setup();
   t.after(() => fx.close());
   const remote = "remix:distant-guard";
@@ -1432,6 +1433,10 @@ void test("#87 stored observations require the player and observer in the same h
   await fx.commit(fx.request("vault-fact", [
     { kind: "remix.assign", entity_id: remote, field, value: "A guard staffs the vault." },
   ], "EDITOR"));
+  if (worldVersion === "2.0.0") {
+    await seedMarketGossip(fx);
+    await fx.commit(fx.request("install-observation-fixture", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
+  }
   fx.mode("play");
   const observe = (character: string): ResolverOperation =>
     ({ kind: "observation.record", observer: character, subject: character, field });
@@ -1445,8 +1450,13 @@ void test("#87 stored observations require the player and observer in the same h
   assert.ok(history);
   const entry = history.at(-1)!;
   const world = entry.image.snapshot.world!;
+  assert.equal(world.version, worldVersion);
   const observed = world.events.at(-1);
   assert.equal(observed?.kind, "observation");
+  const key = Buffer.alloc(32, 7);
+  assert.ok(validateImage(entry.image, makeFixture()).ok);
+  assert.ok(fx.store.checkpointHistoryValid(entry.image));
+  assert.ok(decodePortable(encodePortable(history, key)!, fx.access.owner_id, key));
   await fx.commit(fx.request("learn-market", [{ kind: "belief.update", character: local, evidence: observed.id }]));
   assert.deepEqual(fx.head().snapshot.world?.beliefs.map(({ character, evidence }) => ({ character, evidence })),
     [{ character: local, evidence: observed.id }]);
@@ -1459,7 +1469,6 @@ void test("#87 stored observations require the player and observer in the same h
   assert.notEqual(player.room, observed.room);
   entry.events[0] = observed;
   entry.image.checkpoint.remix_state_ref = remixStateRef(entry.image.snapshot.entities, world);
-  const key = Buffer.alloc(32, 7);
   const bytes = encodePortable(history, key);
   assert.ok(bytes);
 
@@ -1476,6 +1485,11 @@ void test("#87 stored observations require the player and observer in the same h
       portable: decodePortable(bytes, fx.access.owner_id, key) !== undefined,
     }, { image: false, sqlite: false, portable: false });
   } finally { db.close(); }
+}
+
+void test("#87 observations require historical player co-location in both world versions", async (t) => {
+  await t.test("version 1", (subtest) => checkObservationProvenance(subtest, "1.0.0"));
+  await t.test("version 2", (subtest) => checkObservationProvenance(subtest, "2.0.0"));
 });
 
 void test("#88 Play narration uses the committed turn for history, exact lookup, and MCP replay", async (t) => {
@@ -1564,4 +1578,43 @@ void test("#89 portable decode rejects one external receipt event ID reused by s
   assert.ok(reused && second.receipt);
   second.receipt.receipt.event_ids = [reused];
   assert.ok(!decodePortable(encodePortable(history, key)!, fx.access.owner_id, key), "reused external ID must invalidate the signed history");
+});
+
+void test("#89 signed history rejects a receipt ID shared by version 1 and version 2 turns", async (t) => {
+  const fx = setup();
+  t.after(() => fx.close());
+  await fx.commit(gossipRequest(fx, "before-upgrade", "Before the rule."));
+  await seedMarketGossip(fx);
+  await fx.commit(fx.request("install-portable-rule", [{ kind: "rule.install", rule: marketRule() }], "EDITOR"));
+  fx.mode("play");
+  await fx.commit(gossipRequest(fx, "after-upgrade", "After the rule."));
+  const history = fx.store.portableHistory(fx.head());
+  assert.ok(history);
+  const before = history.find(({ receipt }) => receipt?.receipt.request_id === "request:before-upgrade");
+  const after = history.find(({ receipt }) => receipt?.receipt.request_id === "request:after-upgrade");
+  assert.equal(before?.image.snapshot.world?.version, "1.0.0");
+  assert.equal(after?.image.snapshot.world?.version, "2.0.0");
+  assert.ok(before?.receipt && after?.receipt);
+  assert.notEqual(before.image.snapshot.world.events.at(-1)?.id, after.image.snapshot.world.events.at(-1)?.id);
+  assert.equal(after.events.length, 1);
+
+  const key = Buffer.alloc(32, 8);
+  const verified = decodePortable(encodePortable(history, key)!, fx.access.owner_id, key);
+  assert.ok(verified);
+  const relocated = relocatePortable(verified);
+  assert.deepEqual(relocated.entries.map(({ image }) => image.snapshot.world),
+    history.map(({ image }) => image.snapshot.world));
+  assert.deepEqual(relocated.entries.map(({ events }) => events), history.map(({ events }) => events));
+  const receiptIds = (entries: PortableEntry[]) => entries.flatMap(({ receipt }) => receipt?.receipt.event_ids ?? []);
+  const originalIds = new Set(receiptIds(history));
+  const relocatedIds = receiptIds(relocated.entries);
+  assert.equal(new Set(relocatedIds).size, relocatedIds.length);
+  assert.ok(relocatedIds.every((id) => !originalIds.has(id)));
+
+  const reused = before.receipt.receipt.event_ids[0];
+  assert.ok(reused);
+  after.receipt.receipt.event_ids = [reused];
+  const duplicate = encodePortable(history, key);
+  assert.ok(duplicate);
+  assert.equal(decodePortable(duplicate, fx.access.owner_id, key), undefined);
 });
