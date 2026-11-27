@@ -344,17 +344,18 @@ function evaluate(rawSnapshot: unknown, rawProposal: unknown, preview: boolean, 
     const accumulated = new Map<string, "read" | "write">();
     const operations: EffectPlan["operations"][number][] = [];
     const routes = new Set<EffectPlan["route"]>();
+    const extension = snapshot.extension_anchor?.bridge;
     const worldOperations = amendment.operations.filter((operation) => usesWorld(snapshot, operation)).length;
-    if (snapshot.extension_anchor?.bridge && amendment.operations.some((operation) => operation.kind === "inventory.transfer" &&
+    if (extension && amendment.operations.some((operation) => operation.kind === "inventory.transfer" &&
       new Set([operation.item, operation.from, operation.to].map((id) => id.split(":", 1)[0])).size > 1)) {
       throw new ResolutionProblem("CAPABILITY_MISSING", "extension_inventory", "The pedestal bridge cannot transfer items between worlds.");
     }
-    if (worldOperations > 0 && snapshot.extension_anchor?.bridge?.owner === "native") {
+    if (worldOperations > 0 && extension?.owner === "native") {
       throw new ResolutionProblem("CAPABILITY_MISSING", "inactive_extension", "Enter the extension before acting in its room.");
     }
-    if (snapshot.extension_anchor?.bridge && amendment.operations.some((operation) =>
-      operation.kind === "overlay.create" && operation.entity_kind === "location")) {
-      throw new ResolutionProblem("CAPABILITY_MISSING", "extension_room_limit", "The pedestal bridge supports one authored room.");
+    if (extension && amendment.operations.some((operation) => operation.kind === "overlay.connect" ||
+        operation.kind === "overlay.create" && operation.entity_kind === "location")) {
+      throw new ResolutionProblem("CAPABILITY_MISSING", "extension_room_limit", "The pedestal bridge supports one room and its registered passage.");
     }
     if (worldOperations > 0 && worldOperations !== amendment.operations.length) {
       throw new ResolutionProblem("NEEDS_CLARIFICATION", "world_subturn", "Resolve world operations separately from legacy or native operations.");

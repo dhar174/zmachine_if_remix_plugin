@@ -27,6 +27,7 @@ import { TurnImage, failure } from "../src/turn/contracts.ts";
 import type { FaultPoint, TurnExecutor } from "../src/turn/contracts.ts";
 import { TurnService } from "../src/turn/service.ts";
 import { atPedestal, bridgeContext } from "../src/turn/extension-bridge.ts";
+import { remixStateRef } from "../src/world/model.ts";
 import { edit, endpoint, makeFixture, play, take } from "./turn-fixture.ts";
 
 const origin = "https://fixture.test";
@@ -439,8 +440,8 @@ void test("#25 crosses the pedestal with a frozen native checkpoint and an autho
   assert.equal(atAnchor.extension_anchor, anchor_id);
   await reject({ kind: "bridge.enter", anchor_id, room_id: "remix:unregistered" });
   const unregistered = await saveCombined(fixture, atAnchor.head, "request:before-bridge");
-  const author = await args(authorAction);
   const unplaced = image();
+  const authorPreview = await args(authorAction);
   for (const [entity, domain] of [["native:object-29", "topology"], ["native:object-34", "progression"]] as const) {
     const { policy } = unplaced.snapshot;
     const blocked = previewPolicy({ ...unplaced.snapshot, mode: "EDITOR", extension_anchor: bridgeContext(unplaced),
@@ -451,11 +452,24 @@ void test("#25 crosses the pedestal with a frozen native checkpoint and an autho
           scope: { entity_ids: [entity], origins: ["native"], domains: [domain], region_ids: [] },
         }],
       } },
-    }, { ...unplaced.snapshot.head, version, request_id: author.target.request_id, mode: "EDITOR",
+    }, { ...unplaced.snapshot.head, version, request_id: authorPreview.target.request_id, mode: "EDITOR",
       operations: [authorAction], declared_effects: [], amendment: null });
     assert.ok(!blocked.ok, "Connection policy must cover " + entity);
     assert.equal(blocked.error.status, "POLICY_CONFLICT");
   }
+  await commitFixtureEdit(fixture, atAnchor.head, "request:protect-vault-passage", "amendment",
+    "Deny new generated connections that involve the vault door.", {
+      kind: "permission", id: "rule:protect-vault-passage", action: "generate.connection", triggers: ["player_attempt"], decision: "deny",
+      scope: { entity_ids: ["native:object-34"], origins: ["native"], domains: ["progression"], region_ids: [] },
+    });
+  const protectedAuthor = await args(authorAction);
+  const switchForPreview = await fixture.post("/fixture-mode", { ...protectedAuthor.target, command: "/edit" });
+  assert.equal(switchForPreview.status, 200, await switchForPreview.text());
+  await reject(authorAction, "POLICY_CONFLICT");
+  const clearProtection = { version, target: { ...(await read()).head, request_id: "request:restore-before-protection" }, save_id: unregistered };
+  await reviewRestore(fixture, clearProtection);
+  assert.equal(outcome.parse(await fixture.call("restore_session", clearProtection)).status, "RESTORED");
+  const author = await args(authorAction);
   await reject(authorAction, "NEEDS_APPROVAL");
   const switched = await fixture.post("/fixture-mode", { ...author.target, command: "/edit" });
   assert.equal(switched.status, 200, await switched.text());
@@ -492,7 +506,7 @@ void test("#25 crosses the pedestal with a frozen native checkpoint and an autho
   await commit(await args({ kind: "play", input: { kind: "character", value: "q" } }));
   const before = image();
   assert.ok(atPedestal(before));
-  for (const mismatch of [{ story_sha256: heidiStory }, { adapter_build: "0".repeat(64) },
+  for (const mismatch of [{ story_sha256: heidiStory }, { adapter_build: "0".repeat(64) }, { runtime_build: "0".repeat(64) },
     { native_state: { ...before.checkpoint.native_state, pending_input: { kind: "halted" as const } } }]) {
     assert.equal(atPedestal({ ...before, checkpoint: { ...before.checkpoint, ...mismatch } }), false);
   }
@@ -539,6 +553,25 @@ void test("#25 crosses the pedestal with a frozen native checkpoint and an autho
     assert.equal(result.error.status, "CAPABILITY_MISSING");
   }
   assert.deepEqual(image(), beforeRejections);
+  await t.test("raw paused native input and additional connections fail before staging", async () => {
+    const attempts = [
+      { input: { kind: "line", text: "look" }, operation: { kind: "native.line", text: "look" } },
+      { input: { kind: "line", text: "take stone panel" }, operation: { kind: "native.line", text: "take stone panel" } },
+      { input: { kind: "character", value: "q" }, operation: { kind: "native.character", value: "q" } },
+      { input: { kind: "line", text: "create a self-loop" },
+        operation: { kind: "overlay.connect", connection: "remix:loop", from: room.id, to: room.id } },
+    ];
+    const statuses = [];
+    for (const { input, operation } of attempts) {
+      const request = await args({ kind: "play", input });
+      const target = { ...request.target, owner_id: owner, version };
+      const result = fixture.service.prepareTurn(access, { ...target, intent: "play", input },
+        { ...target, mode: "PLAY", operations: [operation], declared_effects: [], amendment: null });
+      statuses.push(result.ok ? result.value.kind : result.error.status);
+    }
+    assert.deepEqual(statuses, attempts.map(() => "CAPABILITY_MISSING"));
+    assert.deepEqual(image(), beforeRejections);
+  });
   const inspectionBefore = image();
   await fixture.call("inspect_session", { ...ref, query: { kind: "facts" } });
   assert.deepEqual(image(), inspectionBefore);
@@ -607,6 +640,7 @@ void test("#25 crosses the pedestal with a frozen native checkpoint and an autho
   assert.deepEqual(returned.native, before.native);
   assert.deepEqual(await read().then(({ clocks }) => clocks), { native: before.checkpoint.clocks.native, overlay: 1 });
   await reject(line("take listening alcove"));
+  await reject(returnAction);
   const outsideSave = await saveCombined(fixture, (await read()).head, "request:outside-pedestal");
   await commit(await args(enterAction));
   const revisited = await read();
@@ -619,6 +653,34 @@ void test("#25 crosses the pedestal with a frozen native checkpoint and an autho
   assert.equal(rolled.time_cost, 1);
   assert.deepEqual(rolled.native_output, [expected.delta]);
   assert.deepEqual(nativePayload.parse(image().native).checkpoint, capture(reference));
+  await t.test("signed native-side history cannot edit the dormant extension", async () => {
+    const save_id = await saveCombined(fixture, (await read()).head, "request:after-pedestal-roll");
+    const download = take(fixture.service.authorizePrivateDownload(access, save_id));
+    const bytes = take(fixture.service.exportPrivateSession(access, save_id, download));
+    const history = decodePortable(bytes, owner, key);
+    const last = history?.at(-1);
+    assert.ok(history && last?.receipt);
+    assert.equal(last.image.checkpoint.bridge?.owner, "native");
+    assert.equal(last.events.length, 0);
+    const world = last.image.snapshot.world;
+    assert.ok(world);
+    const description = world.facts.find((fact) => fact.subject === room.id && fact.field === "world:description" && fact.until === null);
+    assert.ok(description);
+    const revision = last.image.checkpoint.revision;
+    const proposal = canonicalDigest("forged-inactive-edit");
+    const event = { kind: "change" as const, mode: "PLAY" as const, revision, request: last.receipt.receipt.request_id,
+      id: "world-event:" + proposal, subject: room.id, proposal };
+    description.until = revision;
+    world.events.push(event);
+    world.facts.push({ ...description, from: revision, until: null, source: event.id,
+      value: "A forged description.", evidence: "play_committed" });
+    last.image.checkpoint.remix_state_ref = remixStateRef(last.image.snapshot.entities, world);
+    last.events.push(event);
+    last.receipt.receipt.event_ids = ["event:forged-inactive-edit"];
+    const forged = encodePortable(history, key);
+    assert.ok(forged);
+    assert.equal(decodePortable(forged, owner, key) === undefined, true, "Native-side Play cannot change the dormant room.");
+  });
   const pending = await args(line("roll"));
   const staleCandidate = await stage(pending);
   for (const [save_id, ownership] of [[insideSave, "remix"], [outsideSave, "native"], [unregistered, undefined]] as const) {

@@ -38,6 +38,7 @@ const TurnEnvelope = CoreTurnEnvelope.extend({
   fixture_action_digest: z.string().regex(/^[0-9a-f]{64}$/u).optional(),
 });
 type TurnEnvelope = z.infer<typeof TurnEnvelope>;
+const nativePaused = () => failure("CAPABILITY_MISSING", "Native input is paused in the extension. Use the pedestal passage to return.");
 type Head = ReturnType<typeof expected>;
 type Prepared = { kind: "prepared"; handle: CandidateHandle; diff: string; diff_digest: string };
 type Preparation = Prepared | { kind: "committed"; record: DurableReceipt } |
@@ -500,9 +501,7 @@ readonly fixtureProfile: FixtureProfile;
       if (action.kind === "play") {
         if (prior?.receipt) return ok({ kind: "committed", record: prior.receipt });
         if (base.draft) return failure("NEEDS_APPROVAL", "Approve the initial directive before Play.");
-        if (base.image.checkpoint.bridge?.owner === "remix") {
-          return failure("CAPABILITY_MISSING", "Native input is paused in the extension. Use the pedestal passage to return.");
-        }
+        if (base.image.checkpoint.bridge?.owner === "remix") return nativePaused();
         const input = action.input;
         if (canonicalDigest(base.image.snapshot.head) !== canonicalDigest(expected(envelope))) return stale();
         const pending = base.image.checkpoint.native_state.pending_input.kind;
@@ -680,9 +679,12 @@ readonly fixtureProfile: FixtureProfile;
   }
 
   private snapshot(image: TurnImage, proposal: ResolverProposal, compiler: Stage["compiler"]): Result<ResolverSnapshot> {
+    const checkpoint = image.checkpoint;
+    if (checkpoint.bridge?.owner === "remix" && proposal.operations.some(({ kind }) => kind === "native.line" || kind === "native.character")) {
+      return nativePaused();
+    }
     const native = this.executor.project(structuredClone(image), structuredClone(proposal));
     if (!native.ok) return native;
-    const checkpoint = image.checkpoint;
     if (native.value && (native.value.identity.story_sha256 !== checkpoint.story_sha256 ||
         native.value.identity.runtime_build !== checkpoint.runtime_build ||
         native.value.identity.adapter_build !== checkpoint.adapter_build ||

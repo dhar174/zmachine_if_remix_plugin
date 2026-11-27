@@ -91,7 +91,7 @@ export function worldTransitionValid(previous: TurnImage | undefined, image: Tur
     const parsed = legacyEvent.safeParse(row);
     return parsed.success && (!paused || parsed.data.kind === "assignment");
   });
-  if (!request || !same(delta, [...rows]) ||
+  if (!request || priorBridge?.owner === "native" || !same(delta, [...rows]) ||
       delta.some((entry) => entry.kind === "seed" || entry.revision !== revision || entry.request !== request)) return false;
 
   if (world.version === "2.0.0" || paused) {
