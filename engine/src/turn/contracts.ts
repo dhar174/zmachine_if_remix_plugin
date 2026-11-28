@@ -6,6 +6,8 @@ import type { EffectPlan, EffectRef, ResolverProposal, ResolverSnapshot } from "
 import { ResolverProposal as ProposalSchema, ResolverSnapshot as SnapshotSchema } from "../policy/resolver-contracts.ts";
 import { CompilationInput, CompilationProposal } from "../policy/directive-contracts.ts";
 import type { Result } from "../ports.ts";
+import { BridgeReceipt } from "./bridge-contracts.ts";
+import type { BridgeState } from "./bridge-contracts.ts";
 
 export const TurnImage = z.strictObject({
   checkpoint: CombinedCheckpoint,
@@ -31,6 +33,7 @@ export const DurableReceipt = z.strictObject({
   rule_ids: z.array(z.string()),
   capability_ids: z.array(z.string()),
   world_proposal: ProposalSchema.optional(),
+  bridge: BridgeReceipt.optional(),
   recovery: z.strictObject({ retry: z.literal("same_request"), checkpoint: CombinedCheckpoint.shape.checkpoint_id }),
 });
 export type DurableReceipt = z.infer<typeof DurableReceipt>;
@@ -45,6 +48,7 @@ export type Execution = {
   pending: TurnImage["checkpoint"]["native_state"]["pending_input"];
   entities: ResolverSnapshot["entities"];
   world?: World;
+  bridge?: BridgeState;
   effects: readonly EffectRef[];
   time_cost: number;
   outcome: "success" | "failure";

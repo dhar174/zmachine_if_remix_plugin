@@ -15,16 +15,19 @@ import { test } from "node:test";
 import { z } from "zod";
 import { Authority } from "../src/auth/authority.ts";
 import { OwnerId, canonicalDigest, canonicalJson } from "../src/contracts.ts";
-import { importedSession } from "../src/fixture/portable-session.ts";
+import { decodePortable, encodePortable, importedSession } from "../src/fixture/portable-session.ts";
 import { compilerView, fixtureContext, receiptView } from "../src/fixture/session-contracts.ts";
 import { createFixtureExecutor } from "../src/fixture/synthetic-world.ts";
 import { fixtureServer } from "../src/mcp/server.ts";
 import { scopes } from "../src/mcp/tools.ts";
 import { capture, checkpointView, fingerprint, heidiStory, nativePayload, nativeStory, openStory, priorFixtureAdapter, restore, send, storyBytes } from "../src/native/checkpoint.ts";
 import { createNativeFixtureExecutor } from "../src/native/executor.ts";
+import { previewPolicy } from "../src/policy/policy-resolver.ts";
 import { TurnImage, failure } from "../src/turn/contracts.ts";
 import type { FaultPoint, TurnExecutor } from "../src/turn/contracts.ts";
 import { TurnService } from "../src/turn/service.ts";
+import { atPedestal, bridgeContext } from "../src/turn/extension-bridge.ts";
+import { remixStateRef } from "../src/world/model.ts";
 import { edit, endpoint, makeFixture, play, take } from "./turn-fixture.ts";
 
 const origin = "https://fixture.test";
@@ -384,6 +387,326 @@ async function commitFixtureEdit(fixture: Awaited<ReturnType<typeof harness>>, h
   if (publish) assert.equal(outcome.parse(await fixture.call("commit_turn", commit)).status, "COMMITTED");
   return commit;
 }
+
+void test("#25 crosses the pedestal with a frozen native checkpoint and an authored room", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "zirp-pedestal-"));
+  const database = join(directory, "fixture.sqlite");
+  let fault: FaultPoint | undefined;
+  const injected = (point: FaultPoint) => {
+    if (point === fault) {
+      fault = undefined;
+      throw new Error("Injected interruption at " + point);
+    }
+  };
+  let fixture = await harness(directory, true, injected, "native-z5", Date.now, true);
+  t.after(async () => {
+    await fixture.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const story = storyBytes();
+  const launch = take(fixture.service.uploadPrivateStory(owner, "open", story));
+  const ref = await activateFixture(fixture, await fixture.open(launch));
+  const read = async () => context.parse(await fixture.call("get_turn_context", ref)).context;
+  const image = () => publishedImage(database);
+  let sequence = 0;
+  const args = async (action: unknown, head?: Context["head"]) => ({
+    version, target: { ...(head ?? (await read()).head), request_id: "request:pedestal-" + ++sequence }, action,
+  });
+  const stage = async (request: Awaited<ReturnType<typeof args>>) => {
+    const result = await fixture.call("prepare_turn", request);
+    assert.equal(outcome.parse(result).status, "PREPARED", JSON.stringify(result));
+    return prepared.parse(result);
+  };
+  const commit = async (request: Awaited<ReturnType<typeof args>>, candidate?: z.infer<typeof prepared>) =>
+    receipt.parse(await fixture.call("commit_turn", { ...request, ...(candidate ?? await stage(request)) })).receipt;
+  const reject = async (action: unknown, status = "CAPABILITY_MISSING") => {
+    const original = image();
+    assert.equal(outcome.parse(await fixture.call("prepare_turn", await args(action))).status, status);
+    assert.deepEqual(image(), original);
+  };
+  const line = (text: string) => ({ kind: "play", input: { kind: "line", text } });
+  const anchor_id = "anchor:fixture-pedestal";
+  const authorAction = { kind: "bridge.author", anchor_id, label: "Listening Alcove", description: "Its walls carry echoes." };
+  for (const command of ["take brass key", "north"]) {
+    assert.equal((await commit(await args(line(command)))).in_fiction_result, "success", command);
+  }
+  await reject({ kind: "bridge.enter", anchor_id, room_id: "remix:unregistered" });
+  assert.equal((await commit(await args(line("north")))).in_fiction_result, "failure");
+  for (const command of ["unlock vault door with brass key", "open vault door", "north"]) {
+    assert.equal((await commit(await args(line(command)))).in_fiction_result, "success", command);
+  }
+  const atAnchor = await read();
+  assert.equal(atAnchor.native?.projection?.room.name, "Records Vault");
+  assert.equal(atAnchor.extension_anchor, anchor_id);
+  await reject({ kind: "bridge.enter", anchor_id, room_id: "remix:unregistered" });
+  const unregistered = await saveCombined(fixture, atAnchor.head, "request:before-bridge");
+  const unplaced = image();
+  const authorPreview = await args(authorAction);
+  for (const [entity, domain] of [["native:object-29", "topology"], ["native:object-34", "progression"]] as const) {
+    const { policy } = unplaced.snapshot;
+    const blocked = previewPolicy({ ...unplaced.snapshot, mode: "EDITOR", extension_anchor: bridgeContext(unplaced),
+      policy: { ...policy, policy_amendment: { ...policy.policy_amendment,
+        generation_rules: [...policy.policy_amendment.generation_rules, {
+          id: "rule:keep-native-boundary", action: "generate.connection", triggers: ["player_attempt"], decision: "deny",
+          source: { source_id: policy.sources[0]!.id, start: 0, end: 1 }, supersedes: [],
+          scope: { entity_ids: [entity], origins: ["native"], domains: [domain], region_ids: [] },
+        }],
+      } },
+    }, { ...unplaced.snapshot.head, version, request_id: authorPreview.target.request_id, mode: "EDITOR",
+      operations: [authorAction], declared_effects: [], amendment: null });
+    assert.ok(!blocked.ok, "Connection policy must cover " + entity);
+    assert.equal(blocked.error.status, "POLICY_CONFLICT");
+  }
+  await commitFixtureEdit(fixture, atAnchor.head, "request:protect-vault-passage", "amendment",
+    "Deny new generated connections that involve the vault door.", {
+      kind: "permission", id: "rule:protect-vault-passage", action: "generate.connection", triggers: ["player_attempt"], decision: "deny",
+      scope: { entity_ids: ["native:object-34"], origins: ["native"], domains: ["progression"], region_ids: [] },
+    });
+  const protectedAuthor = await args(authorAction);
+  const switchForPreview = await fixture.post("/fixture-mode", { ...protectedAuthor.target, command: "/edit" });
+  assert.equal(switchForPreview.status, 200, await switchForPreview.text());
+  await reject(authorAction, "POLICY_CONFLICT");
+  const clearProtection = { version, target: { ...(await read()).head, request_id: "request:restore-before-protection" }, save_id: unregistered };
+  await reviewRestore(fixture, clearProtection);
+  assert.equal(outcome.parse(await fixture.call("restore_session", clearProtection)).status, "RESTORED");
+  const author = await args(authorAction);
+  await reject(authorAction, "NEEDS_APPROVAL");
+  const switched = await fixture.post("/fixture-mode", { ...author.target, command: "/edit" });
+  assert.equal(switched.status, 200, await switched.text());
+  const draft = await stage(author);
+  const approvalPage = await fixture.get("/candidate?id=" + draft.candidate_id);
+  const approvalText = await approvalPage.text();
+  assert.equal(approvalPage.status, 200);
+  assert.match(approvalText, /Listening Alcove/u);
+  assert.match(approvalText, /Its walls carry echoes/u);
+  assert.match(approvalText, /remix:pedestal-passage/u);
+  assert.equal(outcome.parse(await fixture.call("commit_turn", { ...author, ...draft })).status, "NEEDS_APPROVAL");
+  const conflictView = z.object({ status: z.literal("VALIDATION_FAILED"), subtype: z.literal("IDEMPOTENCY_CONFLICT") });
+  conflictView.parse(await fixture.call("prepare_turn", { ...author, action: { ...authorAction, label: "Different room" } }));
+  conflictView.parse(await fixture.call("commit_turn", { ...author, ...draft, action: { ...authorAction, label: "Different room" } }));
+  await fixture.approve(draft);
+  assert.equal((await commit(author, draft)).time_cost, 0);
+  const world = image().snapshot.world;
+  const room = world?.entities.find(({ label }) => label === "Listening Alcove");
+  assert.ok(room);
+  const enterAction = { kind: "bridge.enter", anchor_id, room_id: room.id };
+  const playMode = await fixture.post("/fixture-mode", { ...(await args(enterAction)).target, command: "/play" });
+  assert.equal(playMode.status, 200, await playMode.text());
+  const replacement = await args({ ...authorAction, label: "Second room" });
+  const secondEdit = await fixture.post("/fixture-mode", { ...replacement.target, command: "/edit" });
+  assert.equal(secondEdit.status, 200, await secondEdit.text());
+  assert.equal(outcome.parse(await fixture.call("prepare_turn", replacement)).status, "CAPABILITY_MISSING");
+  const resumePlay = await fixture.post("/fixture-mode", { ...(await args(enterAction)).target, command: "/play" });
+  assert.equal(resumePlay.status, 200, await resumePlay.text());
+  await reject({ ...enterAction, anchor_id: "anchor:other" });
+  await reject({ ...enterAction, room_id: "remix:unregistered" });
+  await commit(await args(line("menu")));
+  assert.equal((await read()).pending_input, "character");
+  await reject(enterAction);
+  await commit(await args({ kind: "play", input: { kind: "character", value: "q" } }));
+  const before = image();
+  assert.ok(atPedestal(before));
+  for (const mismatch of [{ story_sha256: heidiStory }, { adapter_build: "0".repeat(64) }, { runtime_build: "0".repeat(64) },
+    { native_state: { ...before.checkpoint.native_state, pending_input: { kind: "halted" as const } } }]) {
+    assert.equal(atPedestal({ ...before, checkpoint: { ...before.checkpoint, ...mismatch } }), false);
+  }
+  const enter = await args(enterAction);
+  const crossing = await stage(enter);
+  const rival = await args(enterAction, enter.target);
+  const rivalStage = await stage(rival);
+  fault = "before_commit";
+  assert.equal(outcome.parse(await fixture.call("commit_turn", { ...enter, ...crossing })).status, "ABORTED");
+  assert.deepEqual(image(), before);
+  const races = await Promise.all([fixture.call("commit_turn", { ...enter, ...crossing }),
+    fixture.call("commit_turn", { ...rival, ...rivalStage })]);
+  assert.deepEqual(races.map((result) => outcome.parse(result).status).sort(), ["COMMITTED", "STALE_REVISION"]);
+  const winner = outcome.parse(races[0]).status === "COMMITTED" ? [enter, crossing] as const : [rival, rivalStage] as const;
+  const entered = receipt.parse(races.find((result) => outcome.parse(result).status === "COMMITTED")).receipt;
+  assert.equal(entered.time_cost, 0);
+  assert.equal(entered.bridge?.transition, "bridge.enter");
+  assert.equal(entered.bridge.scene.owner, "remix");
+  assert.deepEqual(await commit(...winner), entered);
+  const paused = await read();
+  assert.deepEqual(paused.clocks, { native: before.checkpoint.clocks.native, overlay: 0 });
+  assert.equal(paused.pending_input, null);
+  assert.equal(paused.bridge?.native_pending, "line");
+  assert.equal(paused.native?.projection, null);
+  assert.ok(paused.operations.includes("overlay.speech"));
+  assert.ok(!paused.operations.includes("play") && !paused.operations.includes("rule.install"));
+  assert.deepEqual(image().native, before.native);
+  await reject(line("look"));
+  await reject(line("take Listening Alcove"));
+  await reject({ kind: "mixed" }, "NEEDS_CLARIFICATION");
+  const raw = await args(line("generate a shortcut"));
+  const envelope = { ...raw.target, owner_id: owner, version, intent: "play", input: { kind: "line", text: "test operation" } };
+  const access = { owner_id: owner, session_id: raw.target.session_id, branch_id: raw.target.branch_id };
+  const beforeRejections = image();
+  for (const operation of [
+    { kind: "overlay.connect", connection: "remix:shortcut", from: room.id, to: "native:object-29" },
+    { kind: "overlay.connect", connection: "remix:shortcut", from: "native:object-29", to: room.id },
+    { kind: "inventory.transfer", item: "native:object-30", from: "native:object-21", to: "remix:player" },
+    { kind: "inventory.transfer", item: "remix:unregistered-item", from: "remix:player", to: "native:object-21" },
+  ]) {
+    const result = fixture.service.prepareTurn(access, envelope,
+      { ...raw.target, owner_id: owner, version, mode: "PLAY", operations: [operation], declared_effects: [], amendment: null });
+    assert.ok(!result.ok);
+    assert.equal(result.error.status, "CAPABILITY_MISSING");
+  }
+  assert.deepEqual(image(), beforeRejections);
+  await t.test("raw paused native input and additional connections fail before staging", async () => {
+    const attempts = [
+      { input: { kind: "line", text: "look" }, operation: { kind: "native.line", text: "look" } },
+      { input: { kind: "line", text: "take stone panel" }, operation: { kind: "native.line", text: "take stone panel" } },
+      { input: { kind: "character", value: "q" }, operation: { kind: "native.character", value: "q" } },
+      { input: { kind: "line", text: "create a self-loop" },
+        operation: { kind: "overlay.connect", connection: "remix:loop", from: room.id, to: room.id } },
+    ];
+    const statuses = [];
+    for (const { input, operation } of attempts) {
+      const request = await args({ kind: "play", input });
+      const target = { ...request.target, owner_id: owner, version };
+      const result = fixture.service.prepareTurn(access, { ...target, intent: "play", input },
+        { ...target, mode: "PLAY", operations: [operation], declared_effects: [], amendment: null });
+      statuses.push(result.ok ? result.value.kind : result.error.status);
+    }
+    assert.deepEqual(statuses, attempts.map(() => "CAPABILITY_MISSING"));
+    assert.deepEqual(image(), beforeRejections);
+  });
+  const inspectionBefore = image();
+  await fixture.call("inspect_session", { ...ref, query: { kind: "facts" } });
+  assert.deepEqual(image(), inspectionBefore);
+  assert.equal((await commit(await args({ kind: "overlay.speech", text: "Is anyone here?" }))).time_cost, 1);
+  const described = "A quiet bench rests against the wall.";
+  const descriptionBefore = image().checkpoint.clocks;
+  await commitFixtureEdit(fixture, (await read()).head, "request:pedestal-description", "assignment", described,
+    { kind: "assignment", entity_id: room.id, field: "world:description", value: described });
+  assert.deepEqual(image().checkpoint.clocks, descriptionBefore);
+  const inside = await read();
+  const insideSave = await saveCombined(fixture, inside.head, "request:inside-pedestal");
+  const download = take(fixture.service.authorizePrivateDownload(access, insideSave));
+  const bytes = take(fixture.service.exportPrivateSession(access, insideSave, download));
+  const key = Buffer.alloc(32, 42);
+  const archive = decodePortable(bytes, owner, key);
+  assert.ok(archive?.length);
+  const tampered = structuredClone(archive);
+  const final = tampered.at(-1)?.image.checkpoint.bridge;
+  assert.equal(final?.owner, "remix");
+  final.capsule.native_tick++;
+  const invalidPackage = encodePortable(tampered, key);
+  assert.ok(invalidPackage);
+  assert.equal(decodePortable(invalidPackage, owner, key), undefined);
+  const forgedClock = structuredClone(archive);
+  const edited = forgedClock.at(-1);
+  assert.ok(edited?.receipt?.bridge);
+  assert.equal(edited.receipt.receipt.visibility, "owner");
+  edited.image.checkpoint.clocks.overlay++;
+  edited.image.snapshot.clock.overlay_turn++;
+  edited.receipt.bridge.clocks.overlay++;
+  edited.receipt.bridge.clocks.overlay_delta++;
+  edited.receipt.receipt.time_cost++;
+  const forgedClockPackage = encodePortable(forgedClock, key);
+  assert.ok(forgedClockPackage);
+  assert.equal(decodePortable(forgedClockPackage, owner, key) === undefined, true, "An Editor assignment cannot spend overlay time.");
+  const destinationPath = mkdtempSync(join(tmpdir(), "zirp-pedestal-import-"));
+  const destination = await harness(destinationPath, true, undefined, "native-z5", Date.now, true);
+  t.after(async () => {
+    await destination.close();
+    rmSync(destinationPath, { recursive: true, force: true });
+  });
+  const upload = take(destination.service.uploadPrivateStory(owner, "combined", story));
+  assert.equal((await destination.service.importPrivateSession(owner, upload, "request:bad-pedestal", invalidPackage)).ok, false);
+  const imported = take(await destination.service.importPrivateSession(owner, upload, "request:import-pedestal", bytes));
+  const destinationRef = { version, session_id: imported.head.session_id, branch_id: imported.head.branch_id };
+  const importedContext = context.parse(await destination.call("get_turn_context", destinationRef)).context;
+  assert.deepEqual(importedContext.bridge, inside.bridge);
+  assert.notEqual(importedContext.head.generation_id, inside.head.generation_id);
+  const returnAction = { kind: "bridge.return", anchor_id };
+  const importedReturn = { version, action: returnAction, target: { ...importedContext.head, request_id: "request:imported-return" } };
+  const importedStage = prepared.parse(await destination.call("prepare_turn", importedReturn));
+  assert.equal(receipt.parse(await destination.call("commit_turn", { ...importedReturn, ...importedStage })).receipt.time_cost, 0);
+  assert.deepEqual(publishedImage(join(destinationPath, "fixture.sqlite")).native, before.native);
+
+  const leave = await args(returnAction);
+  const returnStage = await stage(leave);
+  fault = "after_commit";
+  assert.equal(outcome.parse(await fixture.call("commit_turn", { ...leave, ...returnStage })).status, "ABORTED");
+  await fixture.close();
+  fixture = await harness(directory, true, injected, "native-z5", Date.now, true);
+  const replayed = await commit(leave, returnStage);
+  assert.equal(replayed.time_cost, 0);
+  assert.equal(replayed.bridge?.transition, "bridge.return");
+  assert.equal(replayed.bridge.scene.capsule_id, entered.bridge.scene.capsule_id);
+  const returned = image();
+  assert.deepEqual(returned.native, before.native);
+  assert.deepEqual(await read().then(({ clocks }) => clocks), { native: before.checkpoint.clocks.native, overlay: 1 });
+  await reject(line("take listening alcove"));
+  await reject(returnAction);
+  const outsideSave = await saveCombined(fixture, (await read()).head, "request:outside-pedestal");
+  await commit(await args(enterAction));
+  const revisited = await read();
+  assert.equal(revisited.bridge?.room_id, room.id);
+  assert.ok(revisited.facts.some((fact) => fact.entity_id === room.id && fact.value === described));
+  await commit(await args(returnAction));
+  const reference = restore(nativePayload.parse(before.native).checkpoint, storyBytes());
+  const expected = send(reference, { kind: "line", text: "roll" });
+  const rolled = await commit(await args(line("roll")));
+  assert.equal(rolled.time_cost, 1);
+  assert.deepEqual(rolled.native_output, [expected.delta]);
+  assert.deepEqual(nativePayload.parse(image().native).checkpoint, capture(reference));
+  await t.test("signed native-side history cannot edit the dormant extension", async () => {
+    const save_id = await saveCombined(fixture, (await read()).head, "request:after-pedestal-roll");
+    const download = take(fixture.service.authorizePrivateDownload(access, save_id));
+    const bytes = take(fixture.service.exportPrivateSession(access, save_id, download));
+    const history = decodePortable(bytes, owner, key);
+    const last = history?.at(-1);
+    assert.ok(history && last?.receipt);
+    assert.equal(last.image.checkpoint.bridge?.owner, "native");
+    assert.equal(last.events.length, 0);
+    const world = last.image.snapshot.world;
+    assert.ok(world);
+    const description = world.facts.find((fact) => fact.subject === room.id && fact.field === "world:description" && fact.until === null);
+    assert.ok(description);
+    const revision = last.image.checkpoint.revision;
+    const proposal = canonicalDigest("forged-inactive-edit");
+    const event = { kind: "change" as const, mode: "PLAY" as const, revision, request: last.receipt.receipt.request_id,
+      id: "world-event:" + proposal, subject: room.id, proposal };
+    description.until = revision;
+    world.events.push(event);
+    world.facts.push({ ...description, from: revision, until: null, source: event.id,
+      value: "A forged description.", evidence: "play_committed" });
+    last.image.checkpoint.remix_state_ref = remixStateRef(last.image.snapshot.entities, world);
+    last.events.push(event);
+    last.receipt.receipt.event_ids = ["event:forged-inactive-edit"];
+    const forged = encodePortable(history, key);
+    assert.ok(forged);
+    assert.equal(decodePortable(forged, owner, key) === undefined, true, "Native-side Play cannot change the dormant room.");
+  });
+  const pending = await args(line("roll"));
+  const staleCandidate = await stage(pending);
+  for (const [save_id, ownership] of [[insideSave, "remix"], [outsideSave, "native"], [unregistered, undefined]] as const) {
+    const starting = await read();
+    const restoreArgs = { version, target: { ...starting.head, request_id: "request:pedestal-restore-" + (ownership ?? "before") }, save_id };
+    const review = await reviewRestore(fixture, restoreArgs);
+    if (ownership === "remix") {
+      const preview = await fixture.get("/fixture-restore?id=" + review.id);
+      assert.match(await preview.text(), /Native line input remains paused at the pedestal/u);
+    }
+    assert.equal(outcome.parse(await fixture.call("restore_session", restoreArgs)).status, "RESTORED");
+    const after = await read();
+    assert.notEqual(after.head.generation_id, starting.head.generation_id);
+    assert.equal(after.mode, "PLAY");
+    assert.equal(after.bridge?.owner, ownership);
+    assert.equal(after.pending_input, ownership === "remix" ? null : "line");
+    assert.equal(after.clocks?.overlay, ownership ? 1 : 0);
+    assert.deepEqual(image().native, ownership ? before.native : unplaced.native);
+    if (ownership === "remix") {
+      assert.deepEqual(after.bridge, inside.bridge);
+      assert.ok(after.facts.some((fact) => fact.entity_id === room.id && fact.value === described));
+    }
+  }
+  assert.equal(outcome.parse(await fixture.call("commit_turn", { ...pending, ...staleCandidate })).status, "STALE_REVISION");
+  assert.ok((await read()).operations.includes("bridge.author"));
+});
 
 void test("combined restore through MCP creates a fresh Play generation and retains exact historical receipts", async () => {
   const directory = mkdtempSync(join(tmpdir(), "zirp-combined-"));

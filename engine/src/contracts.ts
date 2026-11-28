@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { BridgeState } from "./turn/bridge-contracts.ts";
 
 const version = z.literal("1.0.0");
 const identifier = z.string().regex(/^[a-z][a-z0-9_-]*:[A-Za-z0-9._:-]+$/).max(256);
@@ -151,6 +152,7 @@ export const CombinedCheckpoint = z.strictObject({
   checkpoint_id: id("checkpoint"), native_state: z.strictObject({ pending_input: PendingInput, payload_ref: identifier, payload_sha256: digest }),
   remix_state_ref: identifier, policy_ref: identifier, history_ref: identifier,
   clocks: z.strictObject({ native: z.int().nonnegative(), overlay: z.int().nonnegative(), policy: z.enum(["native_running", "native_paused"]) }),
+  bridge: BridgeState.optional(),
 });
 
 export type TurnEnvelope = z.infer<typeof TurnEnvelope>;

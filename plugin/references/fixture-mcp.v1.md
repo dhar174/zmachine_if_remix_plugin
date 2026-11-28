@@ -7,7 +7,7 @@ Send `version: "1.0.0"` on every call. Read typed data in `structuredContent.res
 | `open_story_session` | Pass the exact browser `launch_handle`. Keep the returned IDs. A draft becomes active after its initial commit. |
 | `get_turn_context` | Pass `session_id` and `branch_id`. For compilation, add the owner's `source_ref` and the corresponding `request_id`. A generation created by restore exposes its saved origin in `context.restored_from`. |
 | `set_input_mode` | Pass session and branch IDs, a fresh `request_id`, and `mode` (`PLAY` or `EDITOR`). Follow the returned browser link to record a directive or change mode. |
-| `prepare_turn` | Pass `target` with the returned head fields plus your `request_id`. Use a Play action, a directive interpretation, or `{ "kind": "mixed" }` when intent needs clarification. |
+| `prepare_turn` | Pass `target` with the returned head fields plus your `request_id`. Use an advertised action, a directive interpretation, or `{ "kind": "mixed" }` when intent needs clarification. |
 | `commit_turn` | Pass the original `target`, `action`, `candidate_id`, and `diff_digest`. Omit `interpretation` from the directive action at commit. |
 | `inspect_session` | Pass session and branch IDs and `query` with `kind` set to `facts`, `rules`, `offers`, `history`, or `receipt`. An exact receipt selector adds the original `generation_id` and `request_id`. History accepts an optional limit from 1 to 10. |
 | `save_session` | Pass `target` with the active head fields and a fresh `request_id`. A `SAVED` result includes a private database-local `save_id`. |
@@ -55,6 +55,20 @@ The seeded fixture digest is `96c80b804d4400ed1cf4f9e383727c4d7a0f2925e1eac4e6bb
 At the fixture menu, `a`, `b`, and `q` are character inputs. Confirm the prompt before sending a key. For compound requests, commit and refresh each subturn before the next action. Stop on failure, ambiguity, an unexpected prompt, or a rejected or uncertain commit. Context reads consume no native time. The explicit `look` and `inventory` commands advance this fixture's native clock.
 
 Native editing, pre-opening edits, and arbitrary parser input are outside this profile. Native save, restore, undo, and restart are blocked. Use the combined tools for a saved line or character boundary.
+
+### Pedestal extension
+
+The seeded fixture advertises `extension_anchor: "anchor:fixture-pedestal"` at the verified line prompt beside the basalt pedestal in Records Vault. Reach it through the native vault door. Use a fresh request ID and the current head for each standalone action.
+
+| Action | Arguments and authority |
+| --- | --- |
+| `bridge.author` | Copy `anchor_id` from `extension_anchor` and supply the requested `label` and `description`. Enter Editor through authenticated browser control. Have the owner review and approve the exact candidate. Commit the original action. The player stays at the pedestal and the room is available for a later crossing. |
+| `bridge.enter` | Copy `anchor_id` and the approved `room_id` from `context.bridge`. Use Play after the player explicitly chooses the passage. |
+| `bridge.return` | Copy `anchor_id` from `context.bridge`. Use Play after the player explicitly chooses to return from the active extension. |
+
+Inside, `context.bridge.owner` is `remix`, `pending_input` and `native.projection` are null, and `bridge.native_pending` identifies the paused line prompt at Records Vault. Use `overlay_entities` and `facts` for the room. `overlay.speech` records the player's exact words and costs one overlay tick. Inspect and save through the usual tools. To revise the room description, use the existing browser-approved assignment to `world:description` on the exact `room_id`. Both crossings, inspection, and Editor work cost zero game time.
+
+The bridge summary on a visible receipt reports the committed owner and both clock deltas. A crossing also identifies its transition. Entry and return share the same opaque capsule ID for that visit. After a return or restore, refresh context before preparing another action. Native commands can resume when the context shows the native prompt. Cross-world item transfers and forwarding room nouns to the native parser are unsupported.
 
 ## Private import and combined transfers
 

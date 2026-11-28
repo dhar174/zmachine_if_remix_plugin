@@ -13,6 +13,7 @@ import { branchKey } from "../turn/sqlite-turns.ts";
 import type { TurnStore } from "../turn/sqlite-turns.ts";
 import { publicHead, target } from "./session-contracts.ts";
 import { restoreResult, saveResult, savedSession } from "./recovery-contracts.ts";
+import { publicBridge } from "../turn/extension-bridge.ts";
 import type { RestoreIntent, RestoreResult, SavedSession } from "./recovery-contracts.ts";
 
 type Target = z.infer<typeof target>;
@@ -134,6 +135,7 @@ export class FixtureRecovery {
     digest: string; save_id: string; current: z.infer<typeof publicHead>; saved: z.infer<typeof publicHead>;
     current_clocks: TurnImage["checkpoint"]["clocks"]; saved_clocks: TurnImage["checkpoint"]["clocks"];
     pending: TurnImage["checkpoint"]["native_state"]["pending_input"]["kind"];
+    scene?: ReturnType<typeof publicBridge>;
   }> {
     return this.atomic(() => {
       const key = this.store.restoreKey(id);
@@ -147,9 +149,11 @@ export class FixtureRecovery {
       const saved = this.source(current.value, intent.save);
       if (!saved.ok) return saved;
       if (confirmation !== undefined) this.store.approveRestore(key);
+      const bridge = saved.value.checkpoint.bridge;
       return ok({ digest, save_id: intent.save.save_id, current: publicView.parse(current.value.snapshot.head),
         saved: publicView.parse(intent.save.head), current_clocks: current.value.checkpoint.clocks,
-        saved_clocks: saved.value.checkpoint.clocks, pending: saved.value.checkpoint.native_state.pending_input.kind });
+        saved_clocks: saved.value.checkpoint.clocks, pending: saved.value.checkpoint.native_state.pending_input.kind,
+        ...(bridge ? { scene: publicBridge(bridge) } : {}) });
     });
   }
 

@@ -216,12 +216,15 @@ export function browserControl(authority: Pick<Authority, "display" | "confirm" 
         if (!id.success) return reply(404, { error: "UNAVAILABLE" });
         const reviewed = fixture.recovery.review(session.owner, id.data);
         if (!reviewed.ok) return result(reviewed);
-        const { current, saved, save_id, digest, current_clocks, saved_clocks, pending } = reviewed.value;
+        const { current, saved, save_id, digest, current_clocks, saved_clocks, pending, scene } = reviewed.value;
+        const destination = scene?.owner === "remix" ?
+          `opens the extension room ${escaped(scene.room_id)}. Native ${escaped(pending)} input remains paused at the pedestal` :
+          `resumes ${escaped(pending)} input`;
         page("Restore saved fixture",
           `<p>Restore ${escaped(save_id)} from world revision ${saved.expected_revision} and policy revision ${saved.expected_policy_revision}.</p>` +
           `<p>Current world revision ${current.expected_revision}, policy revision ${current.expected_policy_revision}.</p>` +
           `<p>Branch ${escaped(current.branch_id)}. Current generation ${escaped(current.generation_id)}. Saved generation ${escaped(saved.generation_id)}.</p>` +
-          `<p>Current native and remix clocks are ${current_clocks.native} and ${current_clocks.overlay}. The save restores them to ${saved_clocks.native} and ${saved_clocks.overlay} and resumes ${escaped(pending)} input.</p>` +
+          `<p>Current native and remix clocks are ${current_clocks.native} and ${current_clocks.overlay}. The save restores them to ${saved_clocks.native} and ${saved_clocks.overlay} and ${destination}.</p>` +
           "<p>Restore switches the whole game to a fresh generation in Play. Current Editor authority expires. Prior chat remains visible.</p>" +
           `<form method="post" action="/fixture-restore">${csrfField}${hidden("id", id.data)}${hidden("digest", digest)}<button>Approve this restore</button></form>`);
         return;

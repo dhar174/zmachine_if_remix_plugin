@@ -136,7 +136,8 @@ export function fixtureTools(service: TurnService, origin: string, browserAvaila
         }
         if (value.kind !== "prepared") return failure("VALIDATION_FAILED", "Invalid fixture preparation.");
         const { candidate_id, proposal_digest, expires_at } = value.handle;
-        const editorAction = args.action.kind === "directive" || args.action.kind === "rule.install" && args.action.mode === "EDITOR";
+        const editorAction = args.action.kind === "directive" || args.action.kind === "bridge.author" ||
+          args.action.kind === "rule.install" && args.action.mode === "EDITOR";
         return ok({ status: "PREPARED" as const, candidate_id, proposal_digest, expires_at, diff_digest: value.diff_digest,
           preview: previewOf(value.diff, editorAction),
           ...(editorAction ? { approval_url: browserUrl("/candidate", { id: candidate_id }) } : {}) });
